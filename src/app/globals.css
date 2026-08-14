@@ -1,26 +1,138 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Base surfaces — negro profundo a graphite, sin ser puro #000 */
+  --bg-void: #05060a;
+  --bg-base: #08090d;
+  --bg-surface: #0d0f16;
+  --bg-elevated: #12141d;
+  --bg-glass: rgba(13, 15, 22, 0.62);
+
+  /* Bordes sutiles */
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-default: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.2);
+
+  /* Tipografía */
+  --text-primary: #f4f6fa;
+  --text-secondary: #a3aab8;
+  --text-tertiary: #676f7e;
+  --text-disabled: #454a56;
+
+  /* Azul eléctrico controlado */
+  --accent: #3e7bfa;
+  --accent-bright: #6ea2ff;
+  --accent-dim: #1d3f8f;
+  --accent-soft: rgba(62, 123, 250, 0.12);
+  --accent-soft-strong: rgba(62, 123, 250, 0.22);
+  --accent-glow: rgba(94, 152, 255, 0.35);
+
+  /* Estados de riesgo — desaturados, no candy colors */
+  --risk-low: #34c77b;
+  --risk-low-soft: rgba(52, 199, 123, 0.12);
+  --risk-medium: #e0a640;
+  --risk-medium-soft: rgba(224, 166, 64, 0.12);
+  --risk-high: #e6495f;
+  --risk-high-soft: rgba(230, 73, 95, 0.14);
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg-void: var(--bg-void);
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-risk-low: var(--risk-low);
+  --color-risk-low-soft: var(--risk-low-soft);
+  --color-risk-medium: var(--risk-medium);
+  --color-risk-medium-soft: var(--risk-medium-soft);
+  --color-risk-high: var(--risk-high);
+  --color-risk-high-soft: var(--risk-high-soft);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border-subtle);
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: var(--accent-soft-strong);
+  color: var(--text-primary);
+}
+
+/* Grano/vignette ambiental para escenas premium, sin depender de imágenes */
+.scene-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 0%, var(--accent-soft) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 50% 100%, rgba(62, 123, 250, 0.05) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-void) 0%, var(--bg-base) 100%);
+}
+
+.scene-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 0%, transparent 75%);
+}
+
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--border-default);
+}
+
+.text-glow {
+  text-shadow: 0 0 24px var(--accent-glow);
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
 }
