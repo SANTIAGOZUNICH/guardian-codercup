@@ -7,13 +7,7 @@ import type {
   OrderSeverity,
   ScenarioResult,
 } from "@/lib/types";
-import {
-  DEFAULT_OPERATIONS_CALENDAR,
-  baselineResourceConfig,
-  effectiveDeadline,
-  evaluateScenario,
-  formatNaive,
-} from "./evaluate-scenario";
+import { baselineResourceConfig, effectiveDeadline, evaluateScenario, formatNaive } from "./evaluate-scenario";
 
 /**
  * ============================================================================
@@ -92,8 +86,8 @@ export function computeSeverity(constraints: Constraint[]): OrderSeverity | null
  */
 export function detectConstraints(
   model: OperationalModel,
-  calendar: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR,
-  startAt: string = formatNaive(new Date()),
+  calendar: OperationsCalendar,
+  startAt: string,
 ): OrderConstraints[] {
   return model.orders.map((order) => {
     const config = baselineResourceConfig(model, order);

@@ -2,119 +2,112 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Check } from "lucide-react";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
-import { NodeGraph, type GraphNode } from "./NodeGraph";
+import { NodeGraphV2 } from "./NodeGraphV2";
 import type { OperationalModel } from "@/lib/types";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
-import { buildGuardianTwinReadyMessage, buildTwinReadySummary } from "@/lib/view/constraint-view-model";
-import { cn } from "@/lib/cn";
+import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
+import { buildTwinGraph } from "@/lib/view/twin-graph-view-model";
+import {
+  buildGuardianTwinReadyMessage,
+  buildTwinReadySummary,
+  resolveTwinReadyCta,
+} from "@/lib/view/constraint-view-model";
 
-function buildGraphNodes(model: OperationalModel, orderConstraints: ReturnType<typeof detectConstraints>): GraphNode[] {
-  const distinctProcesses = new Set(model.resources.map((r) => r.process)).size;
-  const allConstraints = orderConstraints.flatMap((oc) => oc.constraints);
-  const hasMaterialConstraint = allConstraints.some((c) => c.kind === "material_shortage");
-  const hasDeadlineConstraint = allConstraints.some((c) => c.kind === "deadline_at_risk");
-  const hasCritical = orderConstraints.some((oc) => oc.severity === "critical");
-
-  return [
-    { id: "pedidos", label: "Pedidos", count: model.orders.length },
-    { id: "productos", label: "Productos", count: model.products.length },
-    {
-      id: "inventario",
-      label: "Inventario",
-      count: model.materials.length,
-      status: hasMaterialConstraint ? "danger" : "normal",
-    },
-    { id: "recursos", label: "Recursos", count: model.resources.length },
-    {
-      id: "capacidades",
-      label: "Capacidades",
-      count: distinctProcesses,
-      status: hasDeadlineConstraint ? "warning" : "normal",
-    },
-    {
-      id: "constraints",
-      label: "Constraints",
-      count: allConstraints.length,
-      status: allConstraints.length === 0 ? "normal" : hasCritical ? "danger" : "warning",
-    },
-  ];
-}
-
-const STEP_DELAY_MS = 550;
+// Duración de cada fase del storytelling (ms). Suma ~4s: deliberado, no 15s.
+const PHASE_DELAYS = [400, 650, 700, 700, 900, 700];
 
 export function ModelBuildingScreen({
   model,
-  onReady,
+  snapshotAt,
+  onViewConstraints,
+  onGoToCommandCenter,
+  /** Si viene true, arranca ya revelado (usado por "Explore Twin" desde Command Center) — no repite la animación. */
+  skipAnimation = false,
 }: {
   model: OperationalModel;
-  onReady: () => void;
+  snapshotAt: string;
+  onViewConstraints: () => void;
+  onGoToCommandCenter: () => void;
+  skipAnimation?: boolean;
 }) {
-  const orderConstraints = useMemo(() => detectConstraints(model), [model]);
-  const nodes = useMemo(() => buildGraphNodes(model, orderConstraints), [model, orderConstraints]);
+  const orderConstraints = useMemo(
+    () => detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt),
+    [model, snapshotAt],
+  );
+  const graph = useMemo(() => buildTwinGraph(model, orderConstraints), [model, orderConstraints]);
   const summary = useMemo(() => buildTwinReadySummary(orderConstraints), [orderConstraints]);
-  const [revealed, setRevealed] = useState(0);
-  const done = revealed >= nodes.length;
+
+  const [phase, setPhase] = useState(skipAnimation ? graph.totalPhases : 0);
+  const done = phase >= graph.totalPhases;
 
   useEffect(() => {
-    if (revealed >= nodes.length) return;
-    const t = setTimeout(() => setRevealed((r) => r + 1), revealed === 0 ? 300 : STEP_DELAY_MS);
+    if (phase >= graph.totalPhases) return;
+    const delay = PHASE_DELAYS[phase] ?? 500;
+    const t = setTimeout(() => setPhase((p) => p + 1), delay);
     return () => clearTimeout(t);
-  }, [revealed, nodes.length]);
+  }, [phase, graph.totalPhases]);
+
+  const hasConstraints = summary.totalConstraints > 0;
+  const cta = resolveTwinReadyCta(summary);
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-12">
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
       <div className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">
           {done ? "OPERATIONAL TWIN READY" : "BUILDING OPERATIONAL TWIN"}
         </p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-text-primary">
-          {model.company.name}
-        </h2>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-text-primary">{model.company.name}</h2>
       </div>
 
-      <NodeGraph companyName={model.company.name} nodes={nodes} revealed={revealed} />
+      <div className="relative w-full max-w-4xl">
+        <NodeGraphV2 nodes={graph.nodes} edges={graph.edges} phase={phase} />
 
-      <ul className="flex flex-wrap justify-center gap-x-8 gap-y-2">
-        {nodes.map((node, i) => (
-          <li
-            key={node.id}
-            className={cn(
-              "flex items-center gap-2 text-sm font-medium transition-colors duration-300",
-              i < revealed ? "text-text-primary" : "text-text-disabled",
-            )}
-          >
-            <span
-              className={cn(
-                "flex h-5 w-5 items-center justify-center rounded-full border transition-all duration-300",
-                i < revealed ? "border-accent bg-accent-soft text-accent-bright" : "border-border-default",
-              )}
-            >
-              {i < revealed && <Check size={12} />}
-            </span>
-            {node.label.toUpperCase()}
-          </li>
-        ))}
-      </ul>
-
-      {done && summary.totalConstraints > 0 && (
-        <p className="text-xs font-medium uppercase tracking-[0.1em] text-text-tertiary">
-          {summary.totalConstraints} constraint{summary.totalConstraints !== 1 ? "s" : ""} · {summary.affectedOrders} order
-          {summary.affectedOrders !== 1 ? "s" : ""} affected
-        </p>
-      )}
-
-      <Guardian
-        state={done ? "success" : "analyzing"}
-        size={92}
-        message={done ? buildGuardianTwinReadyMessage(model.company.name, summary) : undefined}
-      />
+        {/* Guardian integrado a la escena, no como loading icon suelto abajo. */}
+        <motion.div
+          className="pointer-events-none absolute bottom-0 right-2 sm:right-8"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Guardian
+            state={done ? "success" : "analyzing"}
+            size={done ? 100 : 84}
+            message={done ? buildGuardianTwinReadyMessage(model.company.name, summary) : undefined}
+          />
+        </motion.div>
+      </div>
 
       {done && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <Button onClick={onReady}>Continuar</Button>
+        <motion.p
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-xs font-medium uppercase tracking-[0.1em] text-text-tertiary"
+        >
+          {hasConstraints
+            ? `${summary.totalConstraints} constraint${summary.totalConstraints !== 1 ? "s" : ""} · ${summary.affectedOrders} order${summary.affectedOrders !== 1 ? "s" : ""} affected`
+            : "0 constraints"}
+        </motion.p>
+      )}
+
+      {done && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="flex flex-wrap items-center justify-center gap-3"
+        >
+          {cta.primary === "view-constraints" ? (
+            <Button onClick={onViewConstraints}>View constraints</Button>
+          ) : (
+            <Button onClick={onGoToCommandCenter}>Go to Command Center</Button>
+          )}
+          {cta.showSecondary && (
+            <Button variant="ghost" onClick={onGoToCommandCenter}>
+              Go to Command Center
+            </Button>
+          )}
         </motion.div>
       )}
     </div>

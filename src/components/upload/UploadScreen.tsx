@@ -13,6 +13,8 @@ import {
   parseRecursosFile,
 } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { formatNaive } from "@/lib/engine/evaluate-scenario";
+import { DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import type { OperationalModel } from "@/lib/types";
 
 const SLOTS = [
@@ -30,7 +32,14 @@ export function UploadScreen({
 }: {
   companyName: string;
   industry: string;
-  onModelReady: (model: OperationalModel) => void;
+  /**
+   * `snapshotAt` es el instante que el Operational Twin representa. Para el
+   * dataset demo es un valor estable (coincide con el "today" con el que se
+   * generaron los Excel demo) para que la demo sea reproducible sin importar
+   * la hora real. Para archivos propios del usuario, es el momento real de
+   * la carga. evaluateScenario/detectConstraints nunca deciden esto solos.
+   */
+  onModelReady: (model: OperationalModel, snapshotAt: string) => void;
 }) {
   const [files, setFiles] = useState<Partial<Record<SlotKey, File>>>({});
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +47,7 @@ export function UploadScreen({
 
   const allPresent = SLOTS.every((s) => files[s.key]);
 
-  async function buildFromBuffers(buffers: Record<SlotKey, ArrayBuffer>) {
+  async function buildFromBuffers(buffers: Record<SlotKey, ArrayBuffer>, snapshotAt: string) {
     setError(null);
     setBuilding(true);
     try {
@@ -54,7 +63,7 @@ export function UploadScreen({
         inventory,
         resources,
       });
-      onModelReady(model);
+      onModelReady(model, snapshotAt);
     } catch (e) {
       const message = e instanceof ExcelParseError ? e.message : "No se pudo leer alguno de los archivos.";
       setError(message);
@@ -74,7 +83,7 @@ export function UploadScreen({
         }),
       );
       const buffers = Object.fromEntries(entries) as Record<SlotKey, ArrayBuffer>;
-      await buildFromBuffers(buffers);
+      await buildFromBuffers(buffers, DEMO_SNAPSHOT_AT);
     } catch {
       setError("No se pudieron cargar los archivos de demo.");
       setBuilding(false);
@@ -87,7 +96,7 @@ export function UploadScreen({
       SLOTS.map(async (s) => [s.key, await files[s.key]!.arrayBuffer()] as const),
     );
     const buffers = Object.fromEntries(entries) as Record<SlotKey, ArrayBuffer>;
-    await buildFromBuffers(buffers);
+    await buildFromBuffers(buffers, formatNaive(new Date()));
   }
 
   return (

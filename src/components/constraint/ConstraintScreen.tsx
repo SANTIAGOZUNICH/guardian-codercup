@@ -1,6 +1,7 @@
 "use client";
 
 import { Guardian } from "@/components/guardian/Guardian";
+import { Button } from "@/components/ui/Button";
 import { ConstraintCard } from "./ConstraintCard";
 import { buildConstraintViewModel, sortBySeverity } from "@/lib/view/constraint-view-model";
 import type { OperationalModel, OrderConstraints } from "@/lib/types";
@@ -8,17 +9,20 @@ import type { OperationalModel, OrderConstraints } from "@/lib/types";
 export function ConstraintScreen({
   model,
   orderConstraints,
+  onGoToCommandCenter,
 }: {
   model: OperationalModel;
   orderConstraints: OrderConstraints[];
+  onGoToCommandCenter: () => void;
 }) {
   const affected = sortBySeverity(orderConstraints.filter((oc) => oc.constraints.length > 0));
   const headline = affected[0];
 
   if (!headline) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-16">
+      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
         <Guardian state="success" size={120} message="No detecté restricciones en los pedidos cargados." />
+        <Button onClick={onGoToCommandCenter}>Go to Command Center</Button>
       </div>
     );
   }
@@ -33,6 +37,9 @@ export function ConstraintScreen({
     <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
       <Guardian state="alert" size={104} message={vm.guardianMessage} />
       <ConstraintCard vm={vm} additionalCount={affected.length - 1} />
+      <Button variant="ghost" onClick={onGoToCommandCenter}>
+        Go to Command Center
+      </Button>
     </div>
   );
 }

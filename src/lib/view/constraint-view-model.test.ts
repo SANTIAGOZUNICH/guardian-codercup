@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { OperationalModel, OperationsCalendar, Order } from "@/lib/types";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
-import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
+import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
 import {
@@ -14,6 +14,7 @@ import {
   formatDisplayDate,
   formatQty,
   sortBySeverity,
+  resolveTwinReadyCta,
 } from "./constraint-view-model";
 
 const CALENDAR: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR;
@@ -130,6 +131,22 @@ describe("sortBySeverity", () => {
   });
 });
 
+describe("resolveTwinReadyCta — 5. el CTA principal de Twin Ready cambia según haya constraints", () => {
+  it("con constraints, el CTA principal es 'view-constraints' y hay secundario", () => {
+    expect(resolveTwinReadyCta({ totalConstraints: 2, affectedOrders: 1 })).toEqual({
+      primary: "view-constraints",
+      showSecondary: true,
+    });
+  });
+
+  it("sin constraints, el CTA principal es 'command-center' y no hay secundario", () => {
+    expect(resolveTwinReadyCta({ totalConstraints: 0, affectedOrders: 0 })).toEqual({
+      primary: "command-center",
+      showSecondary: false,
+    });
+  });
+});
+
 describe("buildConstraintViewModel — cambios independientes (casos 4 y 5 del checkpoint)", () => {
   it("resolver el stock elimina el bloque material sin tocar el bloque deadline", () => {
     const orderId = "PED-1";
@@ -215,7 +232,7 @@ describe("Constraint View Model — integración con el dataset demo real", () =
     inventory,
     resources,
   });
-  const allConstraints = detectConstraints(model, CALENDAR, FRIDAY_0800);
+  const allConstraints = detectConstraints(model, CALENDAR, DEMO_SNAPSHOT_AT);
 
   it("PED-1001 llega a la UI con 2 constraints, ambos bloques presentes", () => {
     const oc = allConstraints.find((o) => o.orderId === "PED-1001")!;

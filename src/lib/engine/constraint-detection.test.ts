@@ -4,7 +4,7 @@ import path from "node:path";
 import type { OperationalModel, OperationsCalendar, Order } from "@/lib/types";
 import { evaluateScenario, baselineResourceConfig } from "./evaluate-scenario";
 import { deriveConstraints, computeSeverity, detectConstraints } from "./constraint-detection";
-import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
+import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
 
@@ -272,7 +272,17 @@ describe("Constraint Detection — integración con el dataset demo real", () =>
     inventory,
     resources,
   });
-  const results = detectConstraints(model, CALENDAR, FRIDAY_0800);
+  const results = detectConstraints(model, CALENDAR, DEMO_SNAPSHOT_AT);
+
+  it("el dataset demo con DEMO_SNAPSHOT_AT es determinístico: correrlo de nuevo da exactamente el mismo resultado", () => {
+    const resultsAgain = detectConstraints(model, CALENDAR, DEMO_SNAPSHOT_AT);
+    expect(resultsAgain).toEqual(results);
+    // Resultado estable esperado con el dataset actual: 1 pedido afectado, 2 constraints.
+    const affected = results.filter((r) => r.constraints.length > 0);
+    expect(affected).toHaveLength(1);
+    expect(affected[0].orderId).toBe("PED-1001");
+    expect(affected[0].constraints).toHaveLength(2);
+  });
 
   it("PED-1001 (TCL) produce exactamente 2 constraints independientes, severity critical", () => {
     const tcl = results.find((r) => r.orderId === "PED-1001")!;

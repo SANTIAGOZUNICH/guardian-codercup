@@ -155,6 +155,23 @@ export function buildGuardianTwinReadyMessage(companyName: string, summary: Twin
   );
 }
 
+export interface TwinReadyCta {
+  primary: "view-constraints" | "command-center";
+  showSecondary: boolean;
+}
+
+/**
+ * Decide el CTA principal de Twin Ready: si hay constraints, hay que verlos
+ * primero (genera confianza); si no hay nada urgente, se va directo a
+ * Command Center. Extraído como función pura para no depender de montar
+ * React en los tests.
+ */
+export function resolveTwinReadyCta(summary: TwinReadySummary): TwinReadyCta {
+  return summary.totalConstraints > 0
+    ? { primary: "view-constraints", showSecondary: true }
+    : { primary: "command-center", showSecondary: false };
+}
+
 /** Más severo primero (critical > high), luego por orderId para un orden estable. */
 export function sortBySeverity(all: OrderConstraints[]): OrderConstraints[] {
   const rank: Record<string, number> = { critical: 0, high: 1 };

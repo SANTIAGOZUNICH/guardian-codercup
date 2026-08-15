@@ -266,8 +266,8 @@ export function evaluateScenario(
   model: OperationalModel,
   order: Order,
   resourceConfig: ResourceAllocation[],
-  calendar: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR,
-  startAt: string = formatNaive(new Date()),
+  calendar: OperationsCalendar,
+  startAt: string,
 ): ScenarioResult {
   const profile = model.profiles.find((p) => p.productId === order.productId);
   if (!profile || profile.steps.length === 0) {

@@ -6,7 +6,10 @@ import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { UploadScreen } from "@/components/upload/UploadScreen";
 import { ModelBuildingScreen } from "@/components/model/ModelBuildingScreen";
 import { ConstraintScreen } from "@/components/constraint/ConstraintScreen";
+import { CommandCenter } from "@/components/command-center/CommandCenter";
+import { AskGuardianPlaceholder } from "@/components/command-center/AskGuardianPlaceholder";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
+import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import type { OperationalModel } from "@/lib/types";
 
 export type CompanySession = {
@@ -14,12 +17,21 @@ export type CompanySession = {
   industry: string;
 };
 
-type Phase = "login" | "greeting" | "upload" | "building" | "constraints";
+type Phase =
+  | "login"
+  | "greeting"
+  | "upload"
+  | "building"
+  | "constraints"
+  | "command-center"
+  | "explore-twin"
+  | "ask-guardian";
 
 export function GuardianApp() {
   const [session, setSession] = useState<CompanySession | null>(null);
   const [phase, setPhase] = useState<Phase>("login");
   const [model, setModel] = useState<OperationalModel | null>(null);
+  const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
 
   function handleLogin(payload: LoginPayload) {
     setSession({ companyName: payload.companyName, industry: payload.industry });
@@ -31,12 +43,7 @@ export function GuardianApp() {
   }
 
   if (phase === "greeting") {
-    return (
-      <OnboardingScreen
-        companyName={session.companyName}
-        onContinue={() => setPhase("upload")}
-      />
-    );
+    return <OnboardingScreen companyName={session.companyName} onContinue={() => setPhase("upload")} />;
   }
 
   if (phase === "upload") {
@@ -44,20 +51,55 @@ export function GuardianApp() {
       <UploadScreen
         companyName={session.companyName}
         industry={session.industry}
-        onModelReady={(m) => {
+        onModelReady={(m, snapshot) => {
           setModel(m);
+          setSnapshotAt(snapshot);
           setPhase("building");
         }}
       />
     );
   }
 
-  if (phase === "building" && model) {
-    return <ModelBuildingScreen model={model} onReady={() => setPhase("constraints")} />;
+  if (!model || !snapshotAt) return null;
+
+  const orderConstraints = detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt);
+
+  if (phase === "building" || phase === "explore-twin") {
+    return (
+      <ModelBuildingScreen
+        model={model}
+        snapshotAt={snapshotAt}
+        skipAnimation={phase === "explore-twin"}
+        onViewConstraints={() => setPhase("constraints")}
+        onGoToCommandCenter={() => setPhase("command-center")}
+      />
+    );
   }
 
-  if (phase === "constraints" && model) {
-    return <ConstraintScreen model={model} orderConstraints={detectConstraints(model)} />;
+  if (phase === "constraints") {
+    return (
+      <ConstraintScreen
+        model={model}
+        orderConstraints={orderConstraints}
+        onGoToCommandCenter={() => setPhase("command-center")}
+      />
+    );
+  }
+
+  if (phase === "command-center") {
+    return (
+      <CommandCenter
+        model={model}
+        orderConstraints={orderConstraints}
+        onViewConstraints={() => setPhase("constraints")}
+        onExploreTwin={() => setPhase("explore-twin")}
+        onAskGuardian={() => setPhase("ask-guardian")}
+      />
+    );
+  }
+
+  if (phase === "ask-guardian") {
+    return <AskGuardianPlaceholder onBack={() => setPhase("command-center")} />;
   }
 
   return null;
