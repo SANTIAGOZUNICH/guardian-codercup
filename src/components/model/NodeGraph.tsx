@@ -2,11 +2,26 @@
 
 import { motion } from "framer-motion";
 
+export type GraphNodeStatus = "normal" | "warning" | "danger";
+
 export interface GraphNode {
   id: string;
   label: string;
   count: number;
+  status?: GraphNodeStatus;
 }
+
+const STATUS_COLOR: Record<GraphNodeStatus, string> = {
+  normal: "var(--accent-bright)",
+  warning: "var(--risk-medium)",
+  danger: "var(--risk-high)",
+};
+
+const STATUS_BORDER: Record<GraphNodeStatus, string> = {
+  normal: "var(--border-strong)",
+  warning: "var(--risk-medium)",
+  danger: "var(--risk-high)",
+};
 
 const WIDTH = 640;
 const HEIGHT = 460;
@@ -86,6 +101,7 @@ export function NodeGraph({
       {nodes.map((node, i) => {
         if (i >= revealed) return null;
         const pos = nodePosition(i, nodes.length);
+        const status = node.status ?? "normal";
         return (
           <motion.g
             key={node.id}
@@ -98,8 +114,8 @@ export function NodeGraph({
               cy={pos.y}
               r={38}
               fill="var(--bg-surface)"
-              stroke="var(--border-strong)"
-              strokeWidth={1}
+              stroke={STATUS_BORDER[status]}
+              strokeWidth={status === "normal" ? 1 : 1.5}
             />
             <text
               x={pos.x}
@@ -119,7 +135,7 @@ export function NodeGraph({
               textAnchor="middle"
               fontSize={16}
               fontWeight={700}
-              fill="var(--accent-bright)"
+              fill={STATUS_COLOR[status]}
             >
               {node.count}
             </text>

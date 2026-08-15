@@ -28,6 +28,7 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       {
         process: "Elaboración",
         batchSize: 500, // kg por batch — coincide con capacidad de Reactores
+        hoursPerBatch: 3, // ciclo típico de mezcla/calentamiento/enfriado para 500kg
         materialsPerUnit: [
           { materialCode: "MP-001", qtyPerUnit: 0.04 }, // Tensioactivo Base (kg)
           { materialCode: "MP-002", qtyPerUnit: 0.18 }, // Agua Desmineralizada (L)
@@ -57,6 +58,7 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       {
         process: "Elaboración",
         batchSize: 500,
+        hoursPerBatch: 3,
         materialsPerUnit: [
           { materialCode: "MP-005", qtyPerUnit: 0.03 }, // Emulsionante Crema (kg)
           { materialCode: "MP-006", qtyPerUnit: 0.05 }, // Aceite Vegetal Base (kg)
@@ -86,6 +88,7 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       {
         process: "Elaboración",
         batchSize: 500,
+        hoursPerBatch: 4, // formulación más delicada, ciclo más lento que shampoo/crema
         materialsPerUnit: [
           { materialCode: "MP-007", qtyPerUnit: 0.015 }, // Ácido Hialurónico (kg)
           { materialCode: "MP-009", qtyPerUnit: 0.02 }, // Extracto Botánico Regenerador (kg)
