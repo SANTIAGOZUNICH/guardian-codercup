@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { NodeGraphV2 } from "./NodeGraphV2";
-import type { OperationalModel } from "@/lib/types";
+import type { MachineUnavailableDisruption, OperationalModel } from "@/lib/types";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { buildTwinGraph } from "@/lib/view/twin-graph-view-model";
@@ -25,18 +25,24 @@ export function ModelBuildingScreen({
   onGoToCommandCenter,
   /** Si viene true, arranca ya revelado (usado por "Explore Twin" desde Command Center) — no repite la animación. */
   skipAnimation = false,
+  /** Disrupción activa de la sesión (Checkpoint 6) — Explore Twin debe conservar el mismo estado visual que dejó la Disruption Screen. */
+  activeDisruption = null,
 }: {
   model: OperationalModel;
   snapshotAt: string;
   onViewConstraints: () => void;
   onGoToCommandCenter: () => void;
   skipAnimation?: boolean;
+  activeDisruption?: MachineUnavailableDisruption | null;
 }) {
   const orderConstraints = useMemo(
     () => detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt),
     [model, snapshotAt],
   );
-  const graph = useMemo(() => buildTwinGraph(model, orderConstraints), [model, orderConstraints]);
+  const graph = useMemo(
+    () => buildTwinGraph(model, orderConstraints, activeDisruption),
+    [model, orderConstraints, activeDisruption],
+  );
   const summary = useMemo(() => buildTwinReadySummary(orderConstraints), [orderConstraints]);
 
   const [phase, setPhase] = useState(skipAnimation ? graph.totalPhases : 0);

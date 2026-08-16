@@ -92,6 +92,7 @@ export function GuardianApp() {
         model={model}
         snapshotAt={snapshotAt}
         skipAnimation={phase === "explore-twin"}
+        activeDisruption={disruption}
         onViewConstraints={() => setPhase("constraints")}
         onGoToCommandCenter={() => setPhase("command-center")}
       />

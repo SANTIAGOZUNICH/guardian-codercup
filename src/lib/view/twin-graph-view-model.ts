@@ -1,4 +1,4 @@
-import type { OperationalModel, OrderConstraints } from "@/lib/types";
+import type { MachineUnavailableDisruption, OperationalModel, OrderConstraints } from "@/lib/types";
 
 /**
  * ============================================================================
@@ -14,6 +14,12 @@ export interface GraphNodeV2 {
   id: string;
   label: string;
   count: number | null;
+  /**
+   * Segunda línea de texto opcional, solo usada por el nodo satélite de
+   * disrupción (ej. "UNAVAILABLE") — nunca por los nodos estructurales del
+   * Twin, que usan `count`.
+   */
+  sublabel?: string;
   status: GraphNodeStatus;
   shape: "circle" | "pill";
   x: number;
@@ -25,7 +31,13 @@ export interface GraphNodeV2 {
 export interface GraphEdgeV2 {
   from: string;
   to: string;
-  kind: "structural" | "flag";
+  /**
+   * "disrupted" es semánticamente distinto de "flag": una flag señala un
+   * problema DETECTADO (constraint real); "disrupted" señala una conexión
+   * hacia un recurso que dejó de estar disponible por una disrupción
+   * hipotética activa (Checkpoint 6) — nunca se mezclan.
+   */
+  kind: "structural" | "flag" | "disrupted";
   revealAt: number;
 }
 
@@ -43,7 +55,12 @@ export const PIPELINE_LABEL: Record<string, string> = {
 
 const PIPELINE_ORDER = ["Elaboración", "Envasado", "Codificado"] as const;
 
-export function buildTwinGraph(model: OperationalModel, orderConstraints: OrderConstraints[]): TwinGraph {
+export function buildTwinGraph(
+  model: OperationalModel,
+  orderConstraints: OrderConstraints[],
+  /** Disrupción activa de la sesión (Checkpoint 6) — null/undefined en el Twin original, sin cambios visuales. */
+  activeDisruption?: MachineUnavailableDisruption | null,
+): TwinGraph {
   const allConstraints = orderConstraints.flatMap((oc) => oc.constraints);
   const hasMaterialConstraint = allConstraints.some((c) => c.kind === "material_shortage");
   const hasDeadlineConstraint = allConstraints.some((c) => c.kind === "deadline_at_risk");
@@ -161,6 +178,34 @@ export function buildTwinGraph(model: OperationalModel, orderConstraints: OrderC
     }
     if (hasDeadlineConstraint) {
       edges.push({ from: "constraints", to: "processes", kind: "flag", revealAt: 5 });
+    }
+  }
+
+  // Nodo satélite de disrupción (Checkpoint 6) — solo existe si hay una
+  // disrupción activa Y el recurso que nombra realmente está en el Twin.
+  // Sin disrupción, este bloque no agrega nada: el Twin queda idéntico al
+  // que ya se devolvía antes de este checkpoint.
+  if (activeDisruption) {
+    const resource = model.resources.find((r) => r.id === activeDisruption.resourceId);
+    const flowIndex = resource ? PIPELINE_ORDER.indexOf(resource.process) : -1;
+    if (resource && flowIndex !== -1) {
+      const flowNodeId = `flow-${flowIndex}`;
+      const flowNode = nodes.find((n) => n.id === flowNodeId);
+      if (flowNode) {
+        const disruptionNodeId = `disruption-${resource.id}`;
+        nodes.push({
+          id: disruptionNodeId,
+          label: resource.name,
+          count: null,
+          sublabel: "UNAVAILABLE",
+          status: "unavailable",
+          shape: "pill",
+          x: flowNode.x,
+          y: 585,
+          revealAt: 6,
+        });
+        edges.push({ from: flowNodeId, to: disruptionNodeId, kind: "disrupted", revealAt: 6 });
+      }
     }
   }
 

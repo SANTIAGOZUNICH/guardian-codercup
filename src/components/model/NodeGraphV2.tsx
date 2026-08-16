@@ -7,14 +7,25 @@ const STATUS_COLOR: Record<GraphNodeStatus, string> = {
   normal: "var(--accent-bright)",
   warning: "var(--risk-medium)",
   danger: "var(--risk-high)",
-  unavailable: "var(--text-disabled)",
+  // Mismo tono que "danger" (ambos son "algo dejó de estar bien"), pero la opacidad
+  // reducida del grupo entero (ver `unavailable` más abajo) es lo que lo distingue
+  // visualmente de un problema DETECTADO — nunca se mezclan las dos semánticas.
+  unavailable: "var(--risk-high)",
 };
 
 const STATUS_BORDER: Record<GraphNodeStatus, string> = {
   normal: "var(--border-strong)",
   warning: "var(--risk-medium)",
   danger: "var(--risk-high)",
-  unavailable: "var(--text-disabled)",
+  unavailable: "var(--risk-high)",
+};
+
+/** Opacidad del nodo completo — "unavailable" se ve atenuado (hipótesis aplicada), nunca a plena intensidad como un problema detectado. */
+const STATUS_OPACITY: Record<GraphNodeStatus, number> = {
+  normal: 1,
+  warning: 1,
+  danger: 1,
+  unavailable: 0.55,
 };
 
 const WIDTH = 1000;
@@ -82,6 +93,11 @@ export function NodeGraphV2({
         const p1 = anchorPoint(from, to);
         const p2 = anchorPoint(to, from);
         const isFlag = edge.kind === "flag";
+        // "disrupted" queda deliberadamente MÁS tenue que una flag de constraint —
+        // una flag señala un problema real que reclama atención; una conexión
+        // disrupted representa una parte del modelo que se apagó, no una alarma.
+        const isDisrupted = edge.kind === "disrupted";
+        const edgeOpacity = isDisrupted ? 0.22 : isFlag ? 0.55 : 0.35;
         return (
           <motion.line
             key={`${edge.from}-${edge.to}-${i}`}
@@ -89,12 +105,12 @@ export function NodeGraphV2({
             y1={p1.y}
             x2={p2.x}
             y2={p2.y}
-            stroke={isFlag ? STATUS_COLOR[to.status] : "var(--accent)"}
-            strokeWidth={isFlag ? 1.5 : 1.25}
-            strokeDasharray={isFlag ? "3 4" : undefined}
-            strokeOpacity={isFlag ? 0.55 : 0.35}
+            stroke={isDisrupted ? "var(--risk-high)" : isFlag ? STATUS_COLOR[to.status] : "var(--accent)"}
+            strokeWidth={isDisrupted ? 1 : isFlag ? 1.5 : 1.25}
+            strokeDasharray={isDisrupted ? "2 5" : isFlag ? "3 4" : undefined}
+            strokeOpacity={edgeOpacity}
             initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: isFlag ? 0.55 : 0.35 }}
+            animate={{ pathLength: 1, opacity: edgeOpacity }}
             transition={{ duration: 0.5, ease: "easeOut" }}
           />
         );
@@ -103,11 +119,13 @@ export function NodeGraphV2({
       {/* Nodos */}
       {nodes.map((node) => {
         if (phase < node.revealAt) return null;
+        const isUnavailable = node.status === "unavailable";
+        const fill = isUnavailable ? "var(--bg-base)" : "var(--bg-surface)";
         return (
           <motion.g
             key={node.id}
             initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
+            animate={{ opacity: STATUS_OPACITY[node.status], scale: 1 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
             {node.shape === "circle" ? (
@@ -115,7 +133,7 @@ export function NodeGraphV2({
                 cx={node.x}
                 cy={node.y}
                 r={CIRCLE_R}
-                fill="var(--bg-surface)"
+                fill={fill}
                 stroke={STATUS_BORDER[node.status]}
                 strokeWidth={node.status === "normal" ? 1 : 1.75}
               />
@@ -126,7 +144,7 @@ export function NodeGraphV2({
                 width={PILL_W}
                 height={PILL_H}
                 rx={PILL_H / 2}
-                fill="var(--bg-surface)"
+                fill={fill}
                 stroke={STATUS_BORDER[node.status]}
                 strokeWidth={node.status === "normal" ? 1 : 1.75}
               />
@@ -153,6 +171,32 @@ export function NodeGraphV2({
                 fill={STATUS_COLOR[node.status]}
               >
                 {node.count}
+              </text>
+            )}
+            {node.sublabel && (
+              <text
+                x={node.x}
+                y={node.shape === "circle" ? node.y + 15 : node.y + 16}
+                textAnchor="middle"
+                fontSize={10}
+                fontWeight={700}
+                letterSpacing={0.5}
+                fill={STATUS_COLOR[node.status]}
+                style={{ textTransform: "uppercase" }}
+              >
+                {node.sublabel}
+              </text>
+            )}
+            {isUnavailable && (
+              <text
+                x={node.x + (node.shape === "circle" ? CIRCLE_R * 0.6 : PILL_W / 2 - 16)}
+                y={node.shape === "circle" ? node.y - CIRCLE_R * 0.5 : node.y - PILL_H / 2 + 15}
+                textAnchor="middle"
+                fontSize={12}
+                fontWeight={700}
+                fill="var(--risk-high)"
+              >
+                ×
               </text>
             )}
           </motion.g>
