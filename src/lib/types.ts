@@ -305,20 +305,33 @@ export interface ScenarioConfig {
   id: string;
   label: string;
   resourceConfig: ResourceAllocation[];
-  priorityStrategy: "as-is" | "prioritize-goal";
 }
 
 /**
- * Impacto sobre pedidos existentes — deliberadamente NO incluye horas de
- * atraso precisas: eso requeriría scheduling temporal real que este motor
- * no implementa. Solo afirmamos lo que podemos calcular con certeza: qué
- * pedidos existentes comparten los mismos recursos que este escenario usa.
+ * Contexto sobre pedidos existentes — deliberadamente NO es una afirmación
+ * de impacto. Este motor no tiene scheduling temporal real, así que solo
+ * podemos decir con certeza qué pedidos existentes usan los mismos procesos
+ * que este escenario — nunca "a cuántos afecta" ni "cuánto se atrasan".
+ * Es constante entre todos los escenarios de un mismo Goal (todos requieren
+ * los mismos procesos del profile del producto) — por eso NUNCA participa
+ * del ranking, solo se muestra como contexto informativo.
  */
 export interface ContentionInfo {
   sharedProcesses: ResourceProcess[];
-  conflictingOrderIds: string[];
-  conflictingHighPriorityCount: number;
+  orderIds: string[];
 }
+
+/**
+ * Clasificación determinística de un escenario evaluado — reemplaza
+ * cualquier lógica dispersa tipo `if (!materials && deadline...)` en JSX.
+ * - fully_viable: materialsFeasible && capacityFeasible && deadlineMet.
+ * - conditionally_viable: llegaría a tiempo (capacityFeasible && deadlineMet)
+ *   pero está bloqueado por materiales — "funcionaría SI se resuelve el faltante".
+ * - deadline_missed: es físicamente ejecutable (capacityFeasible) pero no
+ *   llega a tiempo (con o sin problema de materiales adicional).
+ * - infeasible: ni siquiera es físicamente ejecutable (capacityFeasible=false).
+ */
+export type PlanStatus = "fully_viable" | "conditionally_viable" | "deadline_missed" | "infeasible";
 
 export interface EvaluatedScenario {
   config: ScenarioConfig;
@@ -326,11 +339,24 @@ export interface EvaluatedScenario {
   contention: ContentionInfo;
   /** Suma de unitsUsed de máquina por encima de 1 por proceso — un proxy honesto de "más recursos adicionales". */
   extraResourcesUsed: number;
+  status: PlanStatus;
+}
+
+/**
+ * Qué tipo de resultado obtuvo el Goal en conjunto — determina qué pantalla
+ * mostrar (Recommended Plans / Best Conditional Plan / No Plan Meets Deadline
+ * / Infeasible). `candidates` ya viene ordenado, listo para mostrar tal cual.
+ */
+export type GoalOutcomeKind = "fully_viable" | "conditionally_viable" | "deadline_missed" | "infeasible";
+
+export interface GoalOutcome {
+  kind: GoalOutcomeKind;
+  candidates: EvaluatedScenario[];
 }
 
 export interface GoalSimulationResult {
   goal: Goal;
-  /** Config actual (usar todo lo disponible, as-is) evaluada contra el goal — referencia antes de generar alternativas. */
+  /** Config actual (usar todo lo disponible) evaluada contra el goal — referencia antes de generar alternativas. */
   baseline: EvaluatedScenario;
   /** Todas las configuraciones generadas y evaluadas, sin ordenar todavía. */
   scenarios: EvaluatedScenario[];
@@ -338,6 +364,7 @@ export interface GoalSimulationResult {
   ranked: EvaluatedScenario[];
   /** true si algún escenario generado cumple materialsFeasible (constante entre escenarios del mismo goal). */
   materialsFeasible: boolean;
+  outcome: GoalOutcome;
 }
 
 export interface OrderConstraints {

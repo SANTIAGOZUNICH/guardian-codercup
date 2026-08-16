@@ -2,14 +2,17 @@ import type {
   ContentionInfo,
   EvaluatedScenario,
   Goal,
+  GoalOutcome,
   GoalSimulationResult,
   OperationalModel,
   OperationsCalendar,
   Order,
+  PlanStatus,
   Resource,
   ResourceAllocation,
   ResourceProcess,
   ScenarioConfig,
+  ScenarioResult,
 } from "@/lib/types";
 import { baselineResourceConfig, evaluateScenario } from "./evaluate-scenario";
 
@@ -21,26 +24,29 @@ import { baselineResourceConfig, evaluateScenario } from "./evaluate-scenario";
  *
  * Decisiones de diseño explícitas:
  * - `people` NO es una dimensión combinatoria: no existe ningún dato que
- *   relacione personal con throughput (ver Checkpoint 1, Corrección 1). El
- *   personal se fija a su disponibilidad completa en TODAS las
- *   configuraciones — es constante, no una variable que rankear.
- * - `materialsFeasible` SÍ se incluye en el comparador (como pre-condición,
- *   justo después de `capacityFeasible`) por corrección general — pero en
- *   la práctica es idéntico en todos los escenarios de un mismo Goal
- *   (depende solo de producto+cantidad, nunca de la configuración de
- *   máquinas), así que hoy nunca es el criterio que realmente desempata
- *   entre dos escenarios. También se expone una vez a nivel del Goal
- *   (`GoalSimulationResult.materialsFeasible`) para no tener que leerlo de
- *   un escenario arbitrario.
- * - Por la misma razón de construcción (solo generamos asignaciones válidas,
- *   nunca sobre-asignadas), `capacityFeasible` también resulta true en la
- *   práctica para todos los escenarios generados con el dataset actual. Se
- *   mantiene igualmente como primer criterio del comparador por
- *   corrección general (si el dataset cambia y algún proceso queda sin
- *   ninguna configuración válida, sí puede diferir).
- * - No hay scheduling temporal real entre pedidos. El impacto sobre pedidos
- *   existentes se limita a qué pedidos comparten el mismo PROCESO que este
- *   escenario usa — nunca afirmamos horas de atraso que no calculamos.
+ *   relacione personal con throughput (Checkpoint 1, Corrección 1). Fijo a
+ *   disponibilidad completa en todas las configuraciones.
+ * - `priorityStrategy` fue ELIMINADA de la combinatoria (revisión post-
+ *   Checkpoint 5): la implementación anterior no modificaba ningún resultado
+ *   físico de evaluateScenario — solo cambiaba qué pedidos existentes se
+ *   contaban como "en conflicto", una precisión falsa (parecía que "priorizar
+ *   el goal" reducía el impacto real, cuando en realidad no existe scheduling
+ *   temporal detrás que lo demuestre). Sin scheduling real, esa estrategia no
+ *   aporta una variable física — se retira en vez de simularla falsamente.
+ *   Esto reduce el espacio de escenarios a la mitad (12 -> 6 con el dataset
+ *   demo) — menos escenarios, todos físicamente reales, es preferible a más
+ *   escenarios donde la mitad solo difiere por una etiqueta.
+ * - `materialsFeasible` y `capacityFeasible` son constantes entre todos los
+ *   escenarios de un mismo Goal (dependen del producto/cantidad y de que la
+ *   asignación sea válida, nunca de qué máquina específica se elige) — por
+ *   eso NUNCA son las que realmente desempatan el ranking, pero se
+ *   mantienen como gates por corrección general del comparador.
+ * - `ContentionInfo` es puro contexto ("N pedidos existentes usan estos
+ *   procesos"), nunca una afirmación de impacto — no hay scheduling
+ *   temporal real que pruebe cuántos pedidos se atrasarían ni cuánto. Por
+ *   eso tampoco participa del ranking (además de ser, por construcción,
+ *   constante entre escenarios de un mismo Goal: todos requieren los mismos
+ *   procesos del profile del producto).
  */
 
 const MAX_SCENARIOS = 50;
@@ -103,11 +109,11 @@ function machineLabel(model: OperationalModel, combo: ResourceAllocation[]): str
     .join(" + ");
 }
 
-const PRIORITY_STRATEGIES: ScenarioConfig["priorityStrategy"][] = ["as-is", "prioritize-goal"];
-
 /**
  * Genera todas las configuraciones físicamente válidas para cumplir `goal`,
- * acotadas por topes duros (MAX_SCENARIOS) y de-duplicadas.
+ * acotadas por topes duros (MAX_SCENARIOS) y de-duplicadas. Solo varía
+ * máquinas — ver nota de arquitectura sobre por qué `priorityStrategy` no
+ * es una dimensión de V1.
  */
 export function generateScenarioConfigs(model: OperationalModel, goal: Goal): ScenarioConfig[] {
   const profile = model.profiles.find((p) => p.productId === goal.productId);
@@ -134,31 +140,30 @@ export function generateScenarioConfigs(model: OperationalModel, goal: Goal): Sc
   const configs: ScenarioConfig[] = [];
 
   for (const machineCombo of combos) {
-    for (const priorityStrategy of PRIORITY_STRATEGIES) {
-      const resourceConfig = [...machineCombo, ...personnel];
-      const signature =
-        [...resourceConfig].sort((a, b) => a.resourceId.localeCompare(b.resourceId)).map((a) => `${a.resourceId}:${a.unitsUsed}`).join(",") +
-        `|${priorityStrategy}`;
-      if (seen.has(signature)) continue;
-      seen.add(signature);
+    const resourceConfig = [...machineCombo, ...personnel];
+    const signature = [...resourceConfig]
+      .sort((a, b) => a.resourceId.localeCompare(b.resourceId))
+      .map((a) => `${a.resourceId}:${a.unitsUsed}`)
+      .join(",");
+    if (seen.has(signature)) continue;
+    seen.add(signature);
 
-      configs.push({
-        id: `scenario-${configs.length + 1}`,
-        label: `${machineLabel(model, machineCombo)} · ${priorityStrategy === "as-is" ? "as-is" : "prioritize goal"}`,
-        resourceConfig,
-        priorityStrategy,
-      });
-      if (configs.length >= MAX_SCENARIOS) return configs;
-    }
+    configs.push({
+      id: `scenario-${configs.length + 1}`,
+      label: machineLabel(model, machineCombo),
+      resourceConfig,
+    });
+    if (configs.length >= MAX_SCENARIOS) return configs;
   }
   return configs;
 }
 
 /**
- * Qué pedidos EXISTENTES comparten proceso con este escenario. Deliberadamente
- * no afirma horas de atraso — no hay scheduling temporal real detrás.
+ * Qué pedidos EXISTENTES usan alguno de los mismos procesos que este
+ * escenario — puro contexto, nunca una afirmación de impacto (ver nota de
+ * arquitectura). Constante entre escenarios del mismo Goal.
  */
-export function computeContention(model: OperationalModel, config: ScenarioConfig, goal: Goal): ContentionInfo {
+export function computeContention(model: OperationalModel, config: ScenarioConfig): ContentionInfo {
   const usedProcesses = new Set(
     config.resourceConfig
       .filter((a) => a.unitsUsed > 0)
@@ -167,20 +172,14 @@ export function computeContention(model: OperationalModel, config: ScenarioConfi
       .map((r) => r.process),
   );
 
-  const conflicting = model.orders.filter((o) => {
+  const sharing = model.orders.filter((o) => {
     const profile = model.profiles.find((p) => p.productId === o.productId);
     return !!profile && profile.steps.some((s) => usedProcesses.has(s.process));
   });
 
-  const relevant =
-    config.priorityStrategy === "prioritize-goal" ? conflicting.filter((o) => o.priority === "alta") : conflicting;
-
-  void goal; // el goal hipotético en sí no está en model.orders, no puede auto-conflictuar
-
   return {
     sharedProcesses: Array.from(usedProcesses),
-    conflictingOrderIds: relevant.map((o) => o.id),
-    conflictingHighPriorityCount: conflicting.filter((o) => o.priority === "alta").length,
+    orderIds: sharing.map((o) => o.id),
   };
 }
 
@@ -196,12 +195,28 @@ export function computeExtraResourcesUsed(model: OperationalModel, config: Scena
 }
 
 /**
- * Comparador lexicográfico: capacityFeasible > materialsFeasible >
- * deadlineMet > contención > recursos adicionales > utilización del
- * bottleneck. Ver nota de arquitectura al inicio del archivo sobre por qué
- * materialsFeasible rara vez decide nada en la práctica (es constante
- * entre escenarios de un mismo Goal) pero se mantiene por corrección
- * general del comparador.
+ * Clasificación determinística de un escenario ya evaluado. Ver el
+ * comentario de `PlanStatus` en types.ts para la semántica exacta de cada
+ * estado — esta es la ÚNICA función que decide la clasificación; ninguna
+ * pantalla debe reimplementar este `if` en JSX.
+ */
+export function classifyPlan(result: ScenarioResult): PlanStatus {
+  if (!result.capacityFeasible) return "infeasible";
+  if (result.materialsFeasible && result.deadlineMet) return "fully_viable";
+  if (!result.materialsFeasible && result.deadlineMet) return "conditionally_viable";
+  return "deadline_missed";
+}
+
+function completionTimeMs(s: EvaluatedScenario): number {
+  return s.result.completionAt ? new Date(s.result.completionAt).getTime() : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Comparador lexicográfico usando SOLO variables que el motor realmente
+ * calcula físicamente: capacityFeasible > materialsFeasible > deadlineMet >
+ * completionAt (antes es mejor) > recursos adicionales > utilización del
+ * bottleneck. La contención con pedidos existentes NO participa — ver nota
+ * de arquitectura arriba.
  */
 export function rankScenarios(scenarios: EvaluatedScenario[]): EvaluatedScenario[] {
   return [...scenarios].sort((a, b) => {
@@ -209,8 +224,8 @@ export function rankScenarios(scenarios: EvaluatedScenario[]): EvaluatedScenario
     if (a.result.materialsFeasible !== b.result.materialsFeasible) return a.result.materialsFeasible ? -1 : 1;
     if (a.result.deadlineMet !== b.result.deadlineMet) return a.result.deadlineMet ? -1 : 1;
 
-    const contentionDiff = a.contention.conflictingOrderIds.length - b.contention.conflictingOrderIds.length;
-    if (contentionDiff !== 0) return contentionDiff;
+    const timeDiff = completionTimeMs(a) - completionTimeMs(b);
+    if (timeDiff !== 0) return timeDiff;
 
     const extraDiff = a.extraResourcesUsed - b.extraResourcesUsed;
     if (extraDiff !== 0) return extraDiff;
@@ -225,7 +240,8 @@ export function rankScenarios(scenarios: EvaluatedScenario[]): EvaluatedScenario
 
 /**
  * Primer criterio del comparador donde `a` y `b` difieren, como oración en
- * español. Alimenta "Why this plan?" — nunca inventa un motivo.
+ * español. Alimenta "Why this plan?" — nunca inventa un motivo, y nunca usa
+ * contención (no es un criterio de ranking).
  */
 export function explainDominance(a: EvaluatedScenario, b: EvaluatedScenario, labelA: string, labelB: string): string {
   if (a.result.capacityFeasible !== b.result.capacityFeasible) {
@@ -240,40 +256,54 @@ export function explainDominance(a: EvaluatedScenario, b: EvaluatedScenario, lab
     const [winner, loser] = a.result.deadlineMet ? [labelA, labelB] : [labelB, labelA];
     return `${winner} cumple el deadline mientras que ${loser} finaliza después de la fecha objetivo.`;
   }
-  const ac = a.contention.conflictingOrderIds.length;
-  const bc = b.contention.conflictingOrderIds.length;
-  if (ac !== bc) {
-    const [winner, wCount, lCount] = ac < bc ? [labelA, ac, bc] : [labelB, bc, ac];
-    return `Ambos cumplen la fecha, pero ${winner} genera contención con menos pedidos existentes (${wCount} vs ${lCount}).`;
+  const at = completionTimeMs(a);
+  const bt = completionTimeMs(b);
+  if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) {
+    const [winner, loser] = at < bt ? [labelA, labelB] : [labelB, labelA];
+    return `Ambos cumplen la fecha, pero ${winner} termina antes que ${loser}.`;
   }
   if (a.extraResourcesUsed !== b.extraResourcesUsed) {
-    const [winner, loser] =
-      a.extraResourcesUsed < b.extraResourcesUsed ? [labelA, labelB] : [labelB, labelA];
-    return `Ambos cumplen la fecha con la misma contención, pero ${winner} usa menos recursos adicionales que ${loser}.`;
+    const [winner, loser] = a.extraResourcesUsed < b.extraResourcesUsed ? [labelA, labelB] : [labelB, labelA];
+    return `Ambos completan al mismo tiempo, pero ${winner} usa menos recursos adicionales que ${loser}.`;
   }
   const au = a.result.bottleneck.utilization;
   const bu = b.result.bottleneck.utilization;
   if (Number.isFinite(au) && Number.isFinite(bu) && au !== bu) {
     const [winner, loser] = au < bu ? [labelA, labelB] : [labelB, labelA];
-    return `Son equivalentes en deadline, contención y recursos, pero ${winner} deja menor utilización en su cuello de botella que ${loser}.`;
+    return `Son equivalentes en deadline y recursos, pero ${winner} deja menor utilización en su cuello de botella que ${loser}.`;
   }
   return `${labelA} y ${labelB} son equivalentes en todos los criterios evaluados.`;
 }
 
-/** true si NINGÚN escenario generado cumple el deadline — Guardian no debe fingir una solución. */
-export function hasNoDeadlineSolution(result: GoalSimulationResult): boolean {
-  return !result.ranked.some((s) => s.result.deadlineMet);
-}
+/**
+ * Decide qué tipo de resultado obtuvo el Goal en conjunto — determina qué
+ * pantalla mostrar. Orden de evaluación (del más al menos severo):
+ * 1. infeasible: NINGÚN escenario es siquiera físicamente ejecutable.
+ * 2. fully_viable: existe al menos un escenario que cumple todo — Guardian
+ *    puede recomendar, tal como pediste, NUNCA si esto no se cumple.
+ * 3. conditionally_viable: ninguno cumple todo, pero alguno llegaría a
+ *    tiempo si se resolviera el bloqueo de materiales.
+ * 4. deadline_missed: los materiales no son el problema (o no alcanza para
+ *    salvarlo), pero ningún escenario llega a tiempo — se muestra el de
+ *    finalización más temprana, nunca fingiendo que "cumple".
+ */
+export function resolveGoalOutcome(scenarios: EvaluatedScenario[]): GoalOutcome {
+  const capacityFeasibleOnes = scenarios.filter((s) => s.result.capacityFeasible);
+  if (capacityFeasibleOnes.length === 0) {
+    return { kind: "infeasible", candidates: rankScenarios(scenarios) };
+  }
 
-/** El escenario con la fecha de finalización más temprana entre TODOS los generados (aunque ninguno cumpla el deadline). */
-export function closestFeasibleAlternative(result: GoalSimulationResult): EvaluatedScenario | null {
-  const withCompletion = result.scenarios.filter((s) => s.result.completionAt !== null);
-  if (withCompletion.length === 0) return null;
-  return withCompletion.reduce((earliest, s) =>
-    new Date(s.result.completionAt as string).getTime() < new Date(earliest.result.completionAt as string).getTime()
-      ? s
-      : earliest,
-  );
+  const fullyViable = capacityFeasibleOnes.filter((s) => s.status === "fully_viable");
+  if (fullyViable.length > 0) {
+    return { kind: "fully_viable", candidates: rankScenarios(fullyViable) };
+  }
+
+  const deadlineCapable = capacityFeasibleOnes.filter((s) => s.result.deadlineMet);
+  if (deadlineCapable.length > 0) {
+    return { kind: "conditionally_viable", candidates: rankScenarios(deadlineCapable) };
+  }
+
+  return { kind: "deadline_missed", candidates: rankScenarios(capacityFeasibleOnes) };
 }
 
 export function simulateGoal(
@@ -285,12 +315,16 @@ export function simulateGoal(
   const hypotheticalOrder = buildHypotheticalOrder(goal);
   const configs = generateScenarioConfigs(model, goal);
 
-  const evaluate = (config: ScenarioConfig): EvaluatedScenario => ({
-    config,
-    result: evaluateScenario(model, hypotheticalOrder, config.resourceConfig, calendar, snapshotAt),
-    contention: computeContention(model, config, goal),
-    extraResourcesUsed: computeExtraResourcesUsed(model, config),
-  });
+  const evaluate = (config: ScenarioConfig): EvaluatedScenario => {
+    const result = evaluateScenario(model, hypotheticalOrder, config.resourceConfig, calendar, snapshotAt);
+    return {
+      config,
+      result,
+      contention: computeContention(model, config),
+      extraResourcesUsed: computeExtraResourcesUsed(model, config),
+      status: classifyPlan(result),
+    };
+  };
 
   const scenarios = configs.map(evaluate);
 
@@ -298,12 +332,12 @@ export function simulateGoal(
     id: "baseline",
     label: "Current configuration",
     resourceConfig: baselineResourceConfig(model, hypotheticalOrder),
-    priorityStrategy: "as-is",
   };
   const baseline = evaluate(baselineConfig);
 
   const ranked = rankScenarios(scenarios);
   const materialsFeasible = scenarios[0]?.result.materialsFeasible ?? baseline.result.materialsFeasible;
+  const outcome = resolveGoalOutcome(scenarios);
 
-  return { goal, baseline, scenarios, ranked, materialsFeasible };
+  return { goal, baseline, scenarios, ranked, materialsFeasible, outcome };
 }

@@ -141,9 +141,14 @@ export function GuardianApp() {
       <RecommendedPlansScreen
         result={result}
         onChoosePlan={(scenario: EvaluatedScenario) => {
+          // Índice dentro de outcome.candidates — el mismo conjunto y orden que ve el usuario en pantalla,
+          // no result.ranked completo (que incluye escenarios fuera del outcome mostrado).
+          const index = result.outcome.candidates.indexOf(scenario);
+          const rankLabel = index === 0 ? "A" : index === 1 ? "B" : "C";
+          const prefix = result.outcome.kind === "fully_viable" ? "Recommended" : "Best Conditional";
           setLastSimulation({
             goalSummary: `${goal.quantity.toLocaleString("es-AR")} ${goal.productName}`,
-            chosenPlanLabel: `Plan ${result.ranked.indexOf(scenario) === 0 ? "A" : result.ranked.indexOf(scenario) === 1 ? "B" : "C"}`,
+            chosenPlanLabel: `${prefix} Plan ${rankLabel}`,
             completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "—",
           });
           setPhase("command-center");

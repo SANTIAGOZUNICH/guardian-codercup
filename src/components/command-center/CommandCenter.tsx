@@ -157,7 +157,7 @@ export function CommandCenter({
               <p className="mt-1 text-sm text-text-primary">{lastSimulation.goalSummary}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-medium text-accent-bright">Recommended {lastSimulation.chosenPlanLabel}</p>
+              <p className="text-sm font-medium text-accent-bright">{lastSimulation.chosenPlanLabel}</p>
               <p className="text-xs text-text-tertiary">Expected completion: {lastSimulation.completionLabel}</p>
             </div>
           </div>

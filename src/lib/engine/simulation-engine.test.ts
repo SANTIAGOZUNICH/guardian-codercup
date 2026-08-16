@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { EvaluatedScenario, Goal, OperationalModel, OperationsCalendar } from "@/lib/types";
+import type { EvaluatedScenario, Goal, OperationalModel, OperationsCalendar, ScenarioResult } from "@/lib/types";
 import {
   generateScenarioConfigs,
   simulateGoal,
   rankScenarios,
-  hasNoDeadlineSolution,
-  closestFeasibleAlternative,
+  classifyPlan,
+  resolveGoalOutcome,
 } from "./simulation-engine";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
@@ -18,10 +18,8 @@ const CALENDAR: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR;
 const SNAPSHOT = "2026-08-14T08:00:00";
 
 /**
- * Fixture con exactamente el mismo patrón heterogéneo que el dataset real:
- * Elaboración = 1 recurso con 2 unidades; Envasado = 2 máquinas distintas
- * (para probar "Llenadora 1 / Llenadora 2 / ambas"). Dos pedidos existentes
- * comparten esos procesos (uno de prioridad alta) para probar contención.
+ * Mismo patrón heterogéneo que el dataset real: Elaboración = 1 recurso con
+ * 2 unidades; Envasado = 2 máquinas distintas ("Llenadora 1 / 2 / ambas").
  */
 function buildFixtureModel(): OperationalModel {
   return {
@@ -64,7 +62,7 @@ function buildGoal(overrides: Partial<Goal> = {}): Goal {
   };
 }
 
-describe("generateScenarioConfigs — Scenario Generator", () => {
+describe("generateScenarioConfigs — sin priorityStrategy", () => {
   const model = buildFixtureModel();
   const goal = buildGoal();
   const configs = generateScenarioConfigs(model, goal);
@@ -72,19 +70,16 @@ describe("generateScenarioConfigs — Scenario Generator", () => {
   it("1. no genera recursos inexistentes", () => {
     const knownIds = new Set(model.resources.map((r) => r.id));
     for (const config of configs) {
-      for (const alloc of config.resourceConfig) {
-        expect(knownIds.has(alloc.resourceId)).toBe(true);
-      }
+      for (const alloc of config.resourceConfig) expect(knownIds.has(alloc.resourceId)).toBe(true);
     }
   });
 
-  it("2. número de escenarios reproducible: 2 (Elaboración) × 3 (Envasado: L1/L2/ambas) × 2 (priority) = 12", () => {
-    expect(configs).toHaveLength(12);
-    const again = generateScenarioConfigs(model, goal);
-    expect(again).toEqual(configs);
+  it("2. reproducible: 2 (Elaboración) × 3 (Envasado: L1/L2/ambas) = 6 — la mitad de antes, sin la dimensión de prioridad", () => {
+    expect(configs).toHaveLength(6);
+    expect(generateScenarioConfigs(model, goal)).toEqual(configs);
   });
 
-  it("3. nunca excede quantityAvailable de ningún recurso", () => {
+  it("3. nunca excede quantityAvailable", () => {
     for (const config of configs) {
       for (const alloc of config.resourceConfig) {
         const resource = model.resources.find((r) => r.id === alloc.resourceId)!;
@@ -93,33 +88,121 @@ describe("generateScenarioConfigs — Scenario Generator", () => {
     }
   });
 
-  it("4. baseline incluido en el resultado de simulateGoal", () => {
+  it("4. baseline incluido en simulateGoal", () => {
     const result = simulateGoal(model, goal, CALENDAR, SNAPSHOT);
     expect(result.baseline).toBeDefined();
-    expect(result.baseline.result.capacityFeasible).toBe(true); // usa todo lo disponible, siempre válido
+    expect(result.baseline.result.capacityFeasible).toBe(true);
   });
 
-  it("5. configuraciones duplicadas eliminadas (12 firmas distintas, ninguna repetida)", () => {
-    const signatures = configs.map(
-      (c) =>
-        [...c.resourceConfig].sort((a, b) => a.resourceId.localeCompare(b.resourceId)).map((a) => `${a.resourceId}:${a.unitsUsed}`).join(",") +
-        `|${c.priorityStrategy}`,
+  it("5. configuraciones duplicadas eliminadas", () => {
+    const signatures = configs.map((c) =>
+      [...c.resourceConfig].sort((a, b) => a.resourceId.localeCompare(b.resourceId)).map((a) => `${a.resourceId}:${a.unitsUsed}`).join(","),
     );
     expect(new Set(signatures).size).toBe(signatures.length);
   });
 });
 
-describe("rankScenarios — Ranking", () => {
+describe("classifyPlan — Plan Status (item 5)", () => {
+  function result(overrides: Partial<ScenarioResult>): ScenarioResult {
+    return {
+      orderId: "X",
+      materialsFeasible: true,
+      capacityFeasible: true,
+      deadlineMet: true,
+      feasible: true,
+      totalHoursNeeded: 10,
+      completionAt: "2026-08-20T10:00:00.000",
+      steps: [],
+      bottleneck: { process: "Elaboración", hours: 10, utilization: 0.5, blocked: false },
+      materialShortages: [],
+      capacityIssues: [],
+      ...overrides,
+    };
+  }
+
+  it("1. materials ok + capacity ok + deadline ok -> fully_viable", () => {
+    expect(classifyPlan(result({}))).toBe("fully_viable");
+  });
+
+  it("2. deadline met + material shortage -> conditionally_viable (nunca fully_viable)", () => {
+    expect(classifyPlan(result({ materialsFeasible: false, feasible: false }))).toBe("conditionally_viable");
+  });
+
+  it("3. materials ok + deadline missed -> deadline_missed", () => {
+    expect(classifyPlan(result({ deadlineMet: false }))).toBe("deadline_missed");
+  });
+
+  it("4. material shortage + deadline missed -> deadline_missed (no se confunde con conditionally_viable)", () => {
+    expect(classifyPlan(result({ materialsFeasible: false, deadlineMet: false, feasible: false }))).toBe("deadline_missed");
+  });
+
+  it("capacityFeasible false -> infeasible, sin importar el resto", () => {
+    expect(classifyPlan(result({ capacityFeasible: false, deadlineMet: false, completionAt: null }))).toBe("infeasible");
+  });
+});
+
+describe("resolveGoalOutcome — nunca recomendar un plan que no sea fully viable", () => {
+  function scenario(status: EvaluatedScenario["status"], overrides: Partial<ScenarioResult> = {}, id: string = status): EvaluatedScenario {
+    return {
+      config: { id, label: id, resourceConfig: [] },
+      result: {
+        orderId: "X",
+        materialsFeasible: status !== "conditionally_viable" && status !== "deadline_missed",
+        capacityFeasible: status !== "infeasible",
+        deadlineMet: status === "fully_viable" || status === "conditionally_viable",
+        feasible: status === "fully_viable",
+        totalHoursNeeded: 10,
+        completionAt: status === "infeasible" ? null : "2026-08-20T10:00:00.000",
+        steps: [],
+        bottleneck: { process: "Elaboración", hours: 10, utilization: 0.5, blocked: status === "infeasible" },
+        materialShortages: [],
+        capacityIssues: [],
+        ...overrides,
+      },
+      contention: { sharedProcesses: [], orderIds: [] },
+      extraResourcesUsed: 0,
+      status,
+    };
+  }
+
+  it("5. ningún escenario fully viable -> outcome nunca es fully_viable", () => {
+    const scenarios = [scenario("conditionally_viable"), scenario("deadline_missed", {}, "dm2")];
+    const outcome = resolveGoalOutcome(scenarios);
+    expect(outcome.kind).not.toBe("fully_viable");
+    expect(outcome.kind).toBe("conditionally_viable"); // hay al menos uno que llegaría a tiempo si se resuelve el material
+  });
+
+  it("6. al menos uno fully viable -> solo esos compiten, ninguno conditionally_viable se cuela", () => {
+    const fv = scenario("fully_viable");
+    const cv = scenario("conditionally_viable", {}, "cv2");
+    const outcome = resolveGoalOutcome([fv, cv]);
+    expect(outcome.kind).toBe("fully_viable");
+    expect(outcome.candidates.every((s) => s.status === "fully_viable")).toBe(true);
+    expect(outcome.candidates.some((s) => s.config.id === "cv2")).toBe(false);
+  });
+
+  it("caso D: ningún escenario capacityFeasible -> infeasible, sin recomendación", () => {
+    const outcome = resolveGoalOutcome([scenario("infeasible")]);
+    expect(outcome.kind).toBe("infeasible");
+  });
+
+  it("caso C: materiales ok pero nadie llega a tiempo -> deadline_missed", () => {
+    const outcome = resolveGoalOutcome([scenario("deadline_missed")]);
+    expect(outcome.kind).toBe("deadline_missed");
+  });
+});
+
+describe("rankScenarios — sin contención como criterio (item 7)", () => {
   const model = buildFixtureModel();
   const goal = buildGoal();
-  const baseConfigs = generateScenarioConfigs(model, goal);
+  const baseConfig = generateScenarioConfigs(model, goal)[0];
 
-  function scenario(overrides: Partial<EvaluatedScenario["result"]> & { contention?: Partial<EvaluatedScenario["contention"]>; extra?: number; id?: string }): EvaluatedScenario {
-    const config = { ...baseConfigs[0], id: overrides.id ?? baseConfigs[0].id };
+  function scenario(overrides: Partial<ScenarioResult> & { id?: string; contentionCount?: number; extra?: number }): EvaluatedScenario {
+    const config = { ...baseConfig, id: overrides.id ?? baseConfig.id };
     return {
       config,
       result: {
-        orderId: "HYPOTHETICAL-GOAL",
+        orderId: "X",
         materialsFeasible: true,
         capacityFeasible: true,
         deadlineMet: true,
@@ -132,56 +215,48 @@ describe("rankScenarios — Ranking", () => {
         capacityIssues: [],
         ...overrides,
       },
-      contention: { sharedProcesses: [], conflictingOrderIds: [], conflictingHighPriorityCount: 0, ...overrides.contention },
+      contention: {
+        sharedProcesses: [],
+        orderIds: Array.from({ length: overrides.contentionCount ?? 0 }, (_, i) => `O-${i}`),
+      },
       extraResourcesUsed: overrides.extra ?? 0,
+      status: "fully_viable",
     };
   }
 
-  it("1. deadline met gana a missed", () => {
+  it("7. dos escenarios idénticos salvo la cantidad de pedidos en contención -> el ranking NO los distingue por eso (empatan y se resuelve por config.id)", () => {
+    const menosContencion = scenario({ id: "b-menos", contentionCount: 1 });
+    const masContencion = scenario({ id: "a-mas", contentionCount: 40 });
+    // Sin ninguna otra diferencia real, el desempate final es alfabético por id — "a-mas" antes que "b-menos" —
+    // exactamente lo opuesto de lo que un ranking basado en contención habría hecho (habría puesto "b-menos" primero).
+    const ranked = rankScenarios([menosContencion, masContencion]);
+    expect(ranked[0].config.id).toBe("a-mas");
+  });
+
+  it("deadline met gana a missed", () => {
     const met = scenario({ id: "met", deadlineMet: true });
-    const missed = scenario({ id: "missed", deadlineMet: false });
+    const missed = scenario({ id: "missed", deadlineMet: false, completionAt: "2026-12-31T10:00:00.000" });
     expect(rankScenarios([missed, met])[0].config.id).toBe("met");
   });
 
-  it("2. materials feasible gana a shortage (a igualdad de deadline y capacidad)", () => {
-    const ok = scenario({ id: "ok", materialsFeasible: true });
-    const shortage = scenario({ id: "shortage", materialsFeasible: false, feasible: false });
-    expect(rankScenarios([shortage, ok])[0].config.id).toBe("ok");
+  it("completación más temprana gana en empate", () => {
+    const antes = scenario({ id: "antes", completionAt: "2026-08-20T10:00:00.000" });
+    const despues = scenario({ id: "despues", completionAt: "2026-08-22T10:00:00.000" });
+    expect(rankScenarios([despues, antes])[0].config.id).toBe("antes");
   });
 
-  it("3. menos resource contention gana en empate", () => {
-    const menos = scenario({ id: "menos", contention: { conflictingOrderIds: ["A"] } });
-    const mas = scenario({ id: "mas", contention: { conflictingOrderIds: ["A", "B", "C"] } });
-    expect(rankScenarios([mas, menos])[0].config.id).toBe("menos");
-  });
-
-  it("4. menos recursos adicionales gana en empate", () => {
+  it("menos recursos adicionales gana en empate de tiempo", () => {
     const eficiente = scenario({ id: "eficiente", extra: 0 });
     const costoso = scenario({ id: "costoso", extra: 2 });
     expect(rankScenarios([costoso, eficiente])[0].config.id).toBe("eficiente");
   });
 
-  it("5. ranking determinístico: misma entrada -> mismo orden", () => {
-    const model2 = buildFixtureModel();
-    const result1 = simulateGoal(model2, goal, CALENDAR, SNAPSHOT);
+  it("8. determinístico: misma entrada -> mismo resultado y clasificación", () => {
+    const result1 = simulateGoal(buildFixtureModel(), goal, CALENDAR, SNAPSHOT);
     const result2 = simulateGoal(buildFixtureModel(), goal, CALENDAR, SNAPSHOT);
     expect(result1.ranked.map((s) => s.config.id)).toEqual(result2.ranked.map((s) => s.config.id));
-  });
-});
-
-describe("caso sin solución (25)", () => {
-  it("ningún escenario cumple un deadline imposible -> hasNoDeadlineSolution true, con alternativa más cercana", () => {
-    const model = buildFixtureModel();
-    // Cantidad enorme + deadline el mismo día del snapshot -> imposible con cualquier configuración.
-    const goal = buildGoal({ quantity: 5_000_000, deadline: "2026-08-14" });
-    const result = simulateGoal(model, goal, CALENDAR, SNAPSHOT);
-
-    expect(hasNoDeadlineSolution(result)).toBe(true);
-    const closest = closestFeasibleAlternative(result);
-    expect(closest).not.toBeNull();
-    expect(closest!.result.completionAt).not.toBeNull();
-    // Ningún escenario en el ranking debe presentarse como si cumpliera el deadline.
-    expect(result.ranked.every((s) => !s.result.deadlineMet)).toBe(true);
+    expect(result1.ranked.map((s) => s.status)).toEqual(result2.ranked.map((s) => s.status));
+    expect(result1.outcome.kind).toBe(result2.outcome.kind);
   });
 });
 
@@ -205,7 +280,7 @@ describe("simulateGoal — integración con el dataset demo real", () => {
     resources,
   });
 
-  it('"Necesito producir 30.000 shampoos para TCL antes del viernes." produce 12 escenarios reales', () => {
+  it('"Necesito producir 30.000 shampoos para TCL antes del viernes." -> 6 escenarios, conditionally_viable (bloqueado por MP-003)', () => {
     const parsed = parseGoalText("Necesito producir 30.000 shampoos para TCL antes del viernes.", {
       model,
       snapshotAt: DEMO_SNAPSHOT_AT,
@@ -215,9 +290,11 @@ describe("simulateGoal — integración con el dataset demo real", () => {
     if (!parsed.ok) return;
 
     const result = simulateGoal(model, parsed.goal, CALENDAR, DEMO_SNAPSHOT_AT);
-    // Elaboración (2 opciones) × Envasado L1/L2/ambas (3 opciones) × Codificado (1 opción) × 2 prioridades = 12
-    expect(result.scenarios).toHaveLength(12);
-    expect(result.ranked).toHaveLength(12);
-    expect(result.materialsFeasible).toBe(false); // 30.000 excede largamente el stock de MP-003 disponible
+    // Elaboración (2 opciones) × Envasado L1/L2/ambas (3 opciones) — sin la dimensión de prioridad ya retirada.
+    expect(result.scenarios).toHaveLength(6);
+    expect(result.materialsFeasible).toBe(false); // 30.000 excede el stock de MP-003
+    expect(result.outcome.kind).toBe("conditionally_viable"); // ninguno fully viable, pero algunos llegan a tiempo
+    expect(result.outcome.candidates.every((s) => s.status === "conditionally_viable")).toBe(true);
+    expect(result.outcome.candidates.length).toBeGreaterThan(0);
   });
 });

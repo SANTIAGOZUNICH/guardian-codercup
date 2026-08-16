@@ -4,13 +4,15 @@ import { useState } from "react";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { PlanCard } from "./PlanCard";
+import { BaselineCard } from "./BaselineCard";
 import { WhyThisPlanModal } from "./WhyThisPlanModal";
 import {
   buildPlanCardView,
   buildWhyThisPlanView,
-  buildNoSolutionView,
-  buildGoalGuardianMessage,
-  goalIsUnsolved,
+  buildBaselineView,
+  buildOutcomeHeadline,
+  buildOutcomeGuardianMessage,
+  buildContextNote,
   resolveGoalDeadlineLabel,
 } from "@/lib/view/simulation-view-model";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
@@ -26,17 +28,18 @@ export function RecommendedPlansScreen({
   onBack: () => void;
 }) {
   const [showWhy, setShowWhy] = useState(false);
-  const unsolved = goalIsUnsolved(result);
+  const { kind, candidates } = result.outcome;
   const deadlineLabel = resolveGoalDeadlineLabel(result.goal, DEFAULT_OPERATIONS_CALENDAR);
-  const topPlans = result.ranked.slice(0, 3);
+  const topCandidates = candidates.slice(0, 3);
   const whyView = buildWhyThisPlanView(result, DEFAULT_OPERATIONS_CALENDAR);
-  const noSolutionView = unsolved ? buildNoSolutionView(result) : null;
+  const baselineView = buildBaselineView(result.baseline);
+  const contextNote = buildContextNote(result.scenarios);
 
   return (
     <div className="flex flex-1 flex-col items-center gap-8 px-6 py-14">
       <div className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">
-          {unsolved ? "No Plan Meets the Current Deadline" : "Recommended Plans"}
+          {buildOutcomeHeadline(kind)}
         </p>
         <p className="mt-2 max-w-md text-sm text-text-secondary">
           {result.scenarios.length} scenarios evaluated for {result.goal.quantity.toLocaleString("es-AR")}{" "}
@@ -45,38 +48,33 @@ export function RecommendedPlansScreen({
         </p>
       </div>
 
-      <Guardian
-        state={unsolved ? "alert" : "success"}
-        size={72}
-        message={unsolved ? noSolutionView?.guardianMessage : buildGoalGuardianMessage(result.goal)}
-      />
+      <Guardian state={kind === "fully_viable" ? "success" : "alert"} size={72} message={buildOutcomeGuardianMessage(result)} />
 
-      {unsolved && noSolutionView?.closestCompletionLabel && (
-        <div className="w-full max-w-md rounded-[var(--radius-md)] border border-risk-medium/30 bg-risk-medium-soft px-5 py-4 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-risk-medium">
-            Closest feasible alternative
-          </p>
-          <p className="mt-1 text-sm font-medium text-text-primary">
-            Earliest completion: {noSolutionView.closestCompletionLabel}
-          </p>
+      <BaselineCard view={baselineView} />
+
+      {contextNote && <p className="max-w-md text-center text-[11px] text-text-disabled">{contextNote}</p>}
+
+      {topCandidates.length > 0 ? (
+        <div className="grid w-full max-w-4xl grid-cols-1 gap-5 md:grid-cols-3">
+          {topCandidates.map((scenario, index) => {
+            const view = buildPlanCardView(scenario, index, deadlineLabel, kind);
+            return (
+              <div key={scenario.config.id} className={index === 0 && view.badgeLabel ? "md:col-span-3" : ""}>
+                <PlanCard
+                  view={view}
+                  onWhyThisPlan={index === 0 && whyView ? () => setShowWhy(true) : undefined}
+                  whyThisPlanLabel={whyView?.ctaLabel}
+                  onChoose={() => onChoosePlan(scenario)}
+                />
+              </div>
+            );
+          })}
         </div>
+      ) : (
+        <p className="text-sm text-text-tertiary">
+          No hay ninguna configuración de recursos disponible para este producto en el Twin actual.
+        </p>
       )}
-
-      <div className="grid w-full max-w-4xl grid-cols-1 gap-5 md:grid-cols-3">
-        {topPlans.map((scenario, index) => {
-          const view = buildPlanCardView(scenario, index, deadlineLabel);
-          const finalView = unsolved ? { ...view, recommended: false } : view;
-          return (
-            <div key={scenario.config.id} className={!unsolved && index === 0 ? "md:col-span-3" : ""}>
-              <PlanCard
-                view={finalView}
-                onWhyThisPlan={!unsolved && index === 0 ? () => setShowWhy(true) : undefined}
-                onChoose={() => onChoosePlan(scenario)}
-              />
-            </div>
-          );
-        })}
-      </div>
 
       <Button variant="ghost" onClick={onBack}>
         Back to Command Center

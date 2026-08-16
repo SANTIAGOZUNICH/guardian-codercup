@@ -21,11 +21,8 @@ export function WhyThisPlanModal({ view, onClose }: { view: WhyThisPlanView; onC
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         className="glass-panel w-full max-w-lg rounded-[var(--radius-lg)] p-7"
       >
-        <p className="text-lg font-semibold tracking-tight text-text-primary">Why This Plan?</p>
-        <p className="mt-1 text-xs text-text-tertiary">
-          Guardian evaluated {view.evaluatedCount} operational scenarios. Recommendation generated from the
-          constraints of your operational model.
-        </p>
+        <p className="text-lg font-semibold tracking-tight text-text-primary">{view.headline}</p>
+        <p className="mt-1 text-xs text-text-tertiary">{view.narrativeIntro}</p>
 
         <div className="mt-6 grid grid-cols-2 gap-4">
           <div>
@@ -62,9 +59,17 @@ export function WhyThisPlanModal({ view, onClose }: { view: WhyThisPlanView; onC
           )}
         </div>
 
-        <div className="mt-6">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Bottleneck</p>
-          <p className="mt-1 text-sm text-text-primary">{view.bottleneckProcess}</p>
+        <div className="mt-6 flex gap-8">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Bottleneck</p>
+            <p className="mt-1 text-sm text-text-primary">{view.bottleneckProcess}</p>
+          </div>
+          {view.materialBlockerLabel && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-risk-high">Material blocker</p>
+              <p className="mt-1 text-sm text-text-primary">{view.materialBlockerLabel}</p>
+            </div>
+          )}
         </div>
 
         <div className="mt-6 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border-subtle pt-4">

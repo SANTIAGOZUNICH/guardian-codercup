@@ -8,11 +8,14 @@ import { parseGoalText } from "@/lib/engine/goal-parser";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import {
   buildSimulatingSummary,
+  buildBaselineView,
   buildPlanCardView,
   buildWhyThisPlanView,
-  goalIsUnsolved,
+  buildOutcomeHeadline,
+  buildOutcomeGuardianMessage,
+  buildContextNote,
+  resolveGoalDeadlineLabel,
 } from "./simulation-view-model";
-import { formatDisplayDate } from "./constraint-view-model";
 
 function loadDemoFile(name: string): ArrayBuffer {
   const filePath = path.resolve(process.cwd(), "public/demo", name);
@@ -20,7 +23,7 @@ function loadDemoFile(name: string): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-describe("Simulation view model — goal real de la demo", () => {
+describe("Simulation view model — goal real de la demo (30.000 shampoos para TCL antes del viernes)", () => {
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
@@ -40,33 +43,75 @@ describe("Simulation view model — goal real de la demo", () => {
   if (!parsed.ok) throw new Error("goal debería parsear ok");
   const result = simulateGoal(model, parsed.goal, DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT);
 
-  it("buildSimulatingSummary: números reales, nunca hardcodeados", () => {
+  it("buildSimulatingSummary: números reales, nunca hardcodeados (6 escenarios sin priorityStrategy)", () => {
     const summary = buildSimulatingSummary(result);
-    expect(summary.evaluated).toBe(12);
-    expect(summary.meetDeadline).toBeGreaterThan(0); // con deadline "el viernes" (2026-08-21) debería haber alternativas viables
-    expect(summary.meetDeadline).toBeLessThanOrEqual(summary.evaluated);
+    expect(summary.evaluated).toBe(6);
+    expect(summary.evaluated).toBe(result.scenarios.length);
   });
 
-  it("goalIsUnsolved: false porque existe al menos un plan que llega a tiempo", () => {
-    expect(goalIsUnsolved(result)).toBe(false);
+  it("el goal real demo clasifica como conditionally_viable — MP-003 bloquea materiales en todas las configs", () => {
+    expect(result.outcome.kind).toBe("conditionally_viable");
+    expect(result.outcome.candidates.length).toBeGreaterThan(0);
+    expect(result.outcome.candidates.every((s) => s.status === "conditionally_viable")).toBe(true);
   });
 
-  it("buildPlanCardView del plan recomendado (A) trae datos reales, no placeholders", () => {
-    const deadlineLabel = formatDisplayDate(`${result.goal.deadline}T00:00:00.000`);
-    const card = buildPlanCardView(result.ranked[0], 0, deadlineLabel);
+  it("buildOutcomeHeadline: nunca dice 'Recommended Plans' cuando el outcome es conditionally_viable", () => {
+    const headline = buildOutcomeHeadline(result.outcome.kind);
+    expect(headline).toBe("No Fully Viable Plan Found");
+    expect(headline).not.toBe("Recommended Plans");
+  });
+
+  it("buildOutcomeGuardianMessage: menciona el bloqueo de materiales, no un genérico de éxito", () => {
+    const message = buildOutcomeGuardianMessage(result);
+    expect(message.length).toBeGreaterThan(0);
+    expect(message).not.toMatch(/cumple el objetivo completo/);
+  });
+
+  it("buildBaselineView: refleja el faltante real de materiales en la config actual", () => {
+    const baseline = buildBaselineView(result.baseline);
+    expect(baseline.materialsAvailable).toBe(result.baseline.result.materialsFeasible);
+    expect(baseline.capacityFeasible).toBe(result.baseline.result.capacityFeasible);
+    expect(baseline.deadlineMet).toBe(result.baseline.result.deadlineMet);
+    if (!baseline.materialsAvailable) {
+      expect(baseline.materialBlockerLabel).not.toBeNull();
+    }
+  });
+
+  it("buildPlanCardView del mejor candidato: badgeLabel es 'Best Conditional Plan', nunca 'Recommended', cuando el outcome no es fully_viable", () => {
+    const deadlineLabel = resolveGoalDeadlineLabel(result.goal, DEFAULT_OPERATIONS_CALENDAR);
+    const top = result.outcome.candidates[0];
+    const card = buildPlanCardView(top, 0, deadlineLabel, result.outcome.kind);
     expect(card.rankLabel).toBe("A");
-    expect(card.recommended).toBe(true);
-    expect(card.completionLabel).not.toBe("Cannot be estimated"); // el mejor plan sí completa
+    expect(card.badgeLabel).toBe("Best Conditional Plan");
+    expect(card.badgeLabel).not.toBe("Recommended");
+    expect(card.status).toBe("conditionally_viable");
     expect(card.materialsAvailable).toBe(false); // el faltante de MP-003 es real e independiente de la config elegida
+    expect(card.materialBlockerLabel).not.toBeNull();
     expect(card.resourcesLabel.length).toBeGreaterThan(0);
   });
 
-  it("buildWhyThisPlanView refleja los conteos reales del resultado", () => {
+  it("buildPlanCardView: solo el primer candidato (index 0) trae badgeLabel; los siguientes no", () => {
+    const deadlineLabel = resolveGoalDeadlineLabel(result.goal, DEFAULT_OPERATIONS_CALENDAR);
+    if (result.outcome.candidates.length < 2) return;
+    const second = buildPlanCardView(result.outcome.candidates[1], 1, deadlineLabel, result.outcome.kind);
+    expect(second.badgeLabel).toBeNull();
+  });
+
+  it("buildContextNote: nunca afirma impacto sobre pedidos específicos, solo comparte proceso", () => {
+    const note = buildContextNote(result.scenarios);
+    if (note) {
+      expect(note).toMatch(/use[ns]? one or more of the same production processes/);
+      expect(note).not.toMatch(/delay|affect|impact/i);
+    }
+  });
+
+  it("buildWhyThisPlanView: ctaLabel/headline usan 'configuration' (no 'plan') cuando el outcome es conditionally_viable", () => {
     const view = buildWhyThisPlanView(result, DEFAULT_OPERATIONS_CALENDAR);
     expect(view).not.toBeNull();
     if (!view) return;
-    expect(view.evaluatedCount).toBe(12);
-    expect(view.reasons.length).toBeGreaterThan(0);
-    expect(view.reasons.some((r) => r.includes("Meets deadline") || r.includes("deadline"))).toBe(true);
+    expect(view.ctaLabel).toBe("Why this configuration?");
+    expect(view.headline).toBe("Why This Configuration?");
+    expect(view.evaluatedCount).toBe(6);
+    expect(view.materialBlockerLabel).not.toBeNull();
   });
 });

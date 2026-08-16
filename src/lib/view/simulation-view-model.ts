@@ -1,23 +1,27 @@
-import type { EvaluatedScenario, Goal, GoalSimulationResult, OperationsCalendar } from "@/lib/types";
-import { explainDominance, closestFeasibleAlternative, hasNoDeadlineSolution } from "@/lib/engine/simulation-engine";
+import type {
+  EvaluatedScenario,
+  Goal,
+  GoalOutcomeKind,
+  GoalSimulationResult,
+  OperationsCalendar,
+  PlanStatus,
+} from "@/lib/types";
+import { explainDominance } from "@/lib/engine/simulation-engine";
 import { effectiveDeadline, formatNaive } from "@/lib/engine/evaluate-scenario";
 import { formatDisplayDate, formatQty } from "./constraint-view-model";
 
 /**
- * Deadline EFECTIVO del goal (fin de turno del día resuelto, o del último
- * día hábil anterior si cae en fin de semana) — nunca medianoche silenciosa.
- * Mismo criterio que ya usa Constraint Detection (Checkpoint 3).
+ * ============================================================================
+ * Simulation View Model — traduce GoalSimulationResult a algo que la UI
+ * pueda pintar sin recalcular ni un solo número. Toda la lógica de "qué
+ * pantalla mostrar" vive en `resolveGoalOutcome()` (engine) — acá solo se
+ * formatea lo que esa decisión ya tomó.
+ * ============================================================================
  */
+
 export function resolveGoalDeadlineLabel(goal: Goal, calendar: OperationsCalendar): string {
   return formatDisplayDate(formatNaive(effectiveDeadline(goal.deadline, calendar)));
 }
-
-/**
- * ============================================================================
- * Simulation View Model — traduce GoalSimulationResult a algo que la UI
- * pueda pintar sin recalcular ni un solo número.
- * ============================================================================
- */
 
 export interface SimulatingSummary {
   evaluated: number;
@@ -33,42 +37,78 @@ export function buildSimulatingSummary(result: GoalSimulationResult): Simulating
   };
 }
 
-export interface PlanCardView {
-  rankLabel: string; // "A" | "B" | "C"
-  recommended: boolean;
-  deadlineMet: boolean;
-  completionLabel: string;
-  deadlineLabel: string;
-  materialsAvailable: boolean;
-  resourcesLabel: string;
-  bottleneckProcess: string;
-  bottleneckHoursLabel: string;
-  contentionLabel: string | null;
-  tradeOffLabel: string;
-}
-
 function formatHours(hours: number): string {
   if (!Number.isFinite(hours)) return "sin capacidad asignada";
   return `${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 }).format(hours)} h`;
 }
 
-export function buildPlanCardView(scenario: EvaluatedScenario, index: number, deadlineLabel: string): PlanCardView {
-  const rankLabel = String.fromCharCode(65 + index); // 0->A, 1->B, 2->C
-  const contentionCount = scenario.contention.conflictingOrderIds.length;
+function materialBlockerLabel(scenario: EvaluatedScenario): string | null {
+  if (scenario.result.materialShortages.length === 0) return null;
+  return scenario.result.materialShortages
+    .map((m) => `${m.materialCode} · Missing ${formatQty(m.missing, m.unit)}`)
+    .join(", ");
+}
+
+export interface BaselineView {
+  materialsAvailable: boolean;
+  capacityFeasible: boolean;
+  deadlineMet: boolean;
+  completionLabel: string;
+  bottleneckProcess: string;
+  bottleneckHoursLabel: string;
+  materialBlockerLabel: string | null;
+}
+
+export function buildBaselineView(baseline: EvaluatedScenario): BaselineView {
   return {
-    rankLabel,
-    recommended: index === 0,
-    deadlineMet: scenario.result.deadlineMet,
+    materialsAvailable: baseline.result.materialsFeasible,
+    capacityFeasible: baseline.result.capacityFeasible,
+    deadlineMet: baseline.result.deadlineMet,
+    completionLabel: baseline.result.completionAt ? formatDisplayDate(baseline.result.completionAt) : "Cannot be estimated",
+    bottleneckProcess: baseline.result.bottleneck.process,
+    bottleneckHoursLabel: formatHours(baseline.result.bottleneck.hours),
+    materialBlockerLabel: materialBlockerLabel(baseline),
+  };
+}
+
+export interface PlanCardView {
+  rankLabel: string; // "A" | "B" | "C"
+  badgeLabel: string | null; // "Recommended" | "Best Conditional Plan" | "Earliest Completion" | null
+  status: PlanStatus;
+  completionLabel: string;
+  deadlineLabel: string;
+  materialsAvailable: boolean;
+  materialBlockerLabel: string | null;
+  resourcesLabel: string;
+  bottleneckProcess: string;
+  bottleneckHoursLabel: string;
+  tradeOffLabel: string;
+}
+
+const BADGE_BY_KIND: Record<GoalOutcomeKind, string | null> = {
+  fully_viable: "Recommended",
+  conditionally_viable: "Best Conditional Plan",
+  deadline_missed: "Earliest Completion",
+  infeasible: null,
+};
+
+export function buildPlanCardView(
+  scenario: EvaluatedScenario,
+  index: number,
+  deadlineLabel: string,
+  outcomeKind: GoalOutcomeKind,
+): PlanCardView {
+  return {
+    rankLabel: String.fromCharCode(65 + index),
+    badgeLabel: index === 0 ? BADGE_BY_KIND[outcomeKind] : null,
+    status: scenario.status,
     completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "Cannot be estimated",
     deadlineLabel,
     materialsAvailable: scenario.result.materialsFeasible,
+    materialBlockerLabel: materialBlockerLabel(scenario),
     resourcesLabel: scenario.config.label,
     bottleneckProcess: scenario.result.bottleneck.process,
     bottleneckHoursLabel: formatHours(scenario.result.bottleneck.hours),
-    contentionLabel:
-      contentionCount > 0
-        ? `${contentionCount} existing order${contentionCount !== 1 ? "s" : ""} share${contentionCount === 1 ? "s" : ""} ${scenario.contention.sharedProcesses.join("/")} resources`
-        : null,
     tradeOffLabel:
       scenario.extraResourcesUsed > 0
         ? `Uses ${scenario.extraResourcesUsed} extra resource unit${scenario.extraResourcesUsed !== 1 ? "s" : ""} beyond the minimum.`
@@ -76,7 +116,53 @@ export function buildPlanCardView(scenario: EvaluatedScenario, index: number, de
   };
 }
 
+/**
+ * "N pedidos existentes usan estos procesos" — puro contexto, calculado UNA
+ * VEZ (es constante entre escenarios del mismo Goal), nunca una afirmación
+ * de impacto por plan. Ver nota de arquitectura en simulation-engine.ts.
+ */
+export function buildContextNote(scenarios: EvaluatedScenario[]): string | null {
+  const withContention = scenarios.find((s) => s.contention.orderIds.length > 0);
+  if (!withContention) return null;
+  const n = withContention.contention.orderIds.length;
+  const processes = withContention.contention.sharedProcesses.join("/");
+  return `${n} existing order${n !== 1 ? "s" : ""} use one or more of the same production processes (${processes}).`;
+}
+
+const HEADLINE_BY_KIND: Record<GoalOutcomeKind, string> = {
+  fully_viable: "Recommended Plans",
+  conditionally_viable: "No Fully Viable Plan Found",
+  deadline_missed: "No Plan Meets the Current Deadline",
+  infeasible: "No Feasible Configuration Found",
+};
+
+export function buildOutcomeHeadline(kind: GoalOutcomeKind): string {
+  return HEADLINE_BY_KIND[kind];
+}
+
+export function buildOutcomeGuardianMessage(result: GoalSimulationResult): string {
+  const { kind, candidates } = result.outcome;
+  const goal = result.goal;
+  switch (kind) {
+    case "fully_viable":
+      return `Encontré una configuración que cumple el objetivo completo: materiales, capacidad y el deadline para ${goal.quantity.toLocaleString("es-AR")} ${goal.productName}.`;
+    case "conditionally_viable": {
+      const blocker = candidates[0] ? materialBlockerLabel(candidates[0]) : null;
+      return blocker
+        ? `${blocker.split(" · ")[0]} bloquea todas las configuraciones actuales, pero encontré alternativas que llegarían a tiempo si se resuelve el faltante.`
+        : "Un faltante de material bloquea todas las configuraciones actuales, pero encontré alternativas que llegarían a tiempo si se resuelve.";
+    }
+    case "deadline_missed":
+      return "Con las restricciones actuales no encontré una configuración capaz de completar este objetivo antes del deadline.";
+    case "infeasible":
+      return "No encontré ninguna configuración físicamente posible con los recursos actuales para este objetivo.";
+  }
+}
+
 export interface WhyThisPlanView {
+  ctaLabel: string; // "Why this plan?" | "Why this configuration?"
+  headline: string; // "Why This Plan?" | "Why This Configuration?"
+  narrativeIntro: string;
   goalSummary: string;
   clientLabel: string | null;
   deadlineLabel: string;
@@ -84,33 +170,39 @@ export interface WhyThisPlanView {
   feasibleCount: number;
   meetDeadlineCount: number;
   recommendedLabel: string;
-  /** Hechos cortos en inglés (veredictos de sistema), consistentes con el resto de la pantalla. */
   reasons: string[];
-  /**
-   * Narración en español de por qué domina al runner-up — es prosa
-   * explicativa de Guardian, no un hecho de sistema, por eso queda separada
-   * de `reasons` en vez de mezclar idiomas dentro de la misma oración.
-   */
   dominanceNote: string | null;
   bottleneckProcess: string;
+  materialBlockerLabel: string | null;
 }
 
+const NARRATIVE_BY_KIND: Record<GoalOutcomeKind, string> = {
+  fully_viable: "Guardian recommends this configuration because it meets every constraint of your operational model.",
+  conditionally_viable: "This is the strongest configuration if the material constraint is resolved.",
+  deadline_missed: "No available configuration meets the requested deadline. This is the earliest achievable completion.",
+  infeasible: "No configuration is physically executable with the resources currently available for this goal.",
+};
+
 export function buildWhyThisPlanView(result: GoalSimulationResult, calendar: OperationsCalendar): WhyThisPlanView | null {
-  const recommended = result.ranked[0];
-  if (!recommended) return null;
-  const runnerUp = result.ranked[1];
+  const { kind, candidates } = result.outcome;
+  const top = candidates[0];
+  if (!top) return null;
+  const runnerUp = candidates[1];
   const summary = buildSimulatingSummary(result);
 
   const reasons: string[] = [];
-  if (recommended.result.deadlineMet) reasons.push("Meets deadline");
-  if (recommended.result.materialsFeasible) reasons.push("Materials available");
+  if (top.result.deadlineMet) reasons.push("Meets deadline");
+  if (top.result.materialsFeasible) reasons.push("Materials available");
   reasons.push(
-    recommended.extraResourcesUsed === 0 ? "Uses existing resources without extras" : "Uses minimal additional resources",
+    top.extraResourcesUsed === 0 ? "Uses existing resources without extras" : "Uses minimal additional resources",
   );
 
-  const dominanceNote = runnerUp ? explainDominance(recommended, runnerUp, "Este plan", "la siguiente alternativa") : null;
+  const dominanceNote = runnerUp ? explainDominance(top, runnerUp, "Esta configuración", "la siguiente alternativa") : null;
 
   return {
+    ctaLabel: kind === "conditionally_viable" ? "Why this configuration?" : "Why this plan?",
+    headline: kind === "conditionally_viable" ? "Why This Configuration?" : "Why This Plan?",
+    narrativeIntro: NARRATIVE_BY_KIND[kind],
     goalSummary: `${formatQty(result.goal.quantity, "")} ${result.goal.productName}`.replace(/\s+/g, " ").trim(),
     clientLabel: result.goal.client ?? null,
     deadlineLabel: resolveGoalDeadlineLabel(result.goal, calendar),
@@ -120,26 +212,9 @@ export function buildWhyThisPlanView(result: GoalSimulationResult, calendar: Ope
     recommendedLabel: "A",
     reasons,
     dominanceNote,
-    bottleneckProcess: recommended.result.bottleneck.process,
+    bottleneckProcess: top.result.bottleneck.process,
+    materialBlockerLabel: materialBlockerLabel(top),
   };
-}
-
-export interface NoSolutionView {
-  guardianMessage: string;
-  closestCompletionLabel: string | null;
-}
-
-export function buildNoSolutionView(result: GoalSimulationResult): NoSolutionView {
-  const closest = closestFeasibleAlternative(result);
-  return {
-    guardianMessage:
-      "Con las restricciones actuales no encontré una configuración capaz de completar este objetivo antes del deadline.",
-    closestCompletionLabel: closest?.result.completionAt ? formatDisplayDate(closest.result.completionAt) : null,
-  };
-}
-
-export function goalIsUnsolved(result: GoalSimulationResult): boolean {
-  return hasNoDeadlineSolution(result);
 }
 
 export function buildGoalGuardianMessage(goal: Goal): string {
@@ -148,4 +223,3 @@ export function buildGoalGuardianMessage(goal: Goal): string {
     " ",
   );
 }
-

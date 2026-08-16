@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, X, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { PlanCardView } from "@/lib/view/simulation-view-model";
 
@@ -19,19 +19,23 @@ function Fact({ label, value, ok }: { label: string; value: string; ok?: boolean
 export function PlanCard({
   view,
   onWhyThisPlan,
+  whyThisPlanLabel = "Why this plan?",
   onChoose,
 }: {
   view: PlanCardView;
   onWhyThisPlan?: () => void;
+  whyThisPlanLabel?: string;
   onChoose: () => void;
 }) {
-  if (!view.recommended) {
+  const featured = view.badgeLabel !== null;
+
+  if (!featured) {
     // Compact — sin llenar de métricas.
     return (
       <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-border-subtle bg-white/[0.015] p-5">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-text-primary">Plan {view.rankLabel}</span>
-          {view.deadlineMet ? (
+          {view.status === "fully_viable" || view.status === "conditionally_viable" ? (
             <Check size={14} className="text-risk-low" />
           ) : (
             <X size={14} className="text-risk-high" />
@@ -51,20 +55,30 @@ export function PlanCard({
     );
   }
 
+  const accentBorder = view.status === "fully_viable" ? "border-accent/40" : "border-risk-medium/40";
+  const accentGlow =
+    view.status === "fully_viable" ? "shadow-[0_0_60px_-16px_var(--accent-glow)]" : "shadow-[0_0_60px_-20px_rgba(224,166,64,0.35)]";
+  const accentBg =
+    view.status === "fully_viable"
+      ? "bg-[linear-gradient(160deg,var(--accent-soft),transparent_55%)]"
+      : "bg-[linear-gradient(160deg,var(--risk-medium-soft),transparent_55%)]";
+
   return (
-    <div
-      className={cn(
-        "rounded-[var(--radius-lg)] border-2 border-accent/40 bg-[linear-gradient(160deg,var(--accent-soft),transparent_55%)] p-7",
-        "shadow-[0_0_60px_-16px_var(--accent-glow)]",
-      )}
-    >
+    <div className={cn("rounded-[var(--radius-lg)] border-2 p-7", accentBorder, accentGlow, accentBg)}>
       <div className="mb-6 flex items-center justify-between">
         <p className="text-lg font-semibold tracking-tight text-text-primary">
-          Plan {view.rankLabel} <span className="text-accent-bright">— Recommended</span>
+          Plan {view.rankLabel}{" "}
+          <span className={view.status === "fully_viable" ? "text-accent-bright" : "text-risk-medium"}>
+            — {view.badgeLabel}
+          </span>
         </p>
-        {view.deadlineMet ? (
+        {view.status === "fully_viable" ? (
           <span className="flex items-center gap-1 rounded-full border border-risk-low/40 bg-risk-low-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-low">
             <Check size={11} /> Deadline met
+          </span>
+        ) : view.status === "conditionally_viable" ? (
+          <span className="flex items-center gap-1 rounded-full border border-risk-medium/40 bg-risk-medium-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-medium">
+            <AlertTriangle size={11} /> Materials blocked
           </span>
         ) : (
           <span className="flex items-center gap-1 rounded-full border border-risk-high/40 bg-risk-high-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-high">
@@ -81,13 +95,22 @@ export function PlanCard({
         <Fact label="Bottleneck" value={`${view.bottleneckProcess} · ${view.bottleneckHoursLabel}`} />
       </div>
 
-      {view.contentionLabel && (
-        <p className="mt-5 text-xs text-text-tertiary">Existing-order contention: {view.contentionLabel}</p>
+      {view.materialBlockerLabel && (
+        <div className="mt-5 rounded-[var(--radius-sm)] border border-risk-high/25 bg-risk-high-soft px-4 py-2.5">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-risk-high">Material blocker</span>
+          <p className="text-sm text-text-primary">{view.materialBlockerLabel}</p>
+        </div>
       )}
-      <p className="mt-2 text-xs text-text-tertiary">Trade-off: {view.tradeOffLabel}</p>
+      <p className="mt-3 text-xs text-text-tertiary">Trade-off: {view.tradeOffLabel}</p>
 
       <div className="mt-6 flex gap-3">
-        <button onClick={onChoose} className="flex-1 rounded-[var(--radius-md)] bg-accent py-3 text-sm font-medium text-white transition-opacity hover:opacity-90">
+        <button
+          onClick={onChoose}
+          className={cn(
+            "flex-1 rounded-[var(--radius-md)] py-3 text-sm font-medium text-white transition-opacity hover:opacity-90",
+            view.status === "fully_viable" ? "bg-accent" : "bg-risk-medium",
+          )}
+        >
           Choose this plan
         </button>
         {onWhyThisPlan && (
@@ -95,7 +118,7 @@ export function PlanCard({
             onClick={onWhyThisPlan}
             className="rounded-[var(--radius-md)] border border-border-default px-5 py-3 text-sm font-medium text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary"
           >
-            Why this plan?
+            {whyThisPlanLabel}
           </button>
         )}
       </div>
