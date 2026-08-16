@@ -15,6 +15,7 @@ import {
   buildOutcomeGuardianMessage,
   buildContextNote,
   resolveGoalDeadlineLabel,
+  resolveChosenPlanPrefix,
 } from "./simulation-view-model";
 
 function loadDemoFile(name: string): ArrayBuffer {
@@ -113,5 +114,14 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para T
     expect(view.headline).toBe("Why This Configuration?");
     expect(view.evaluatedCount).toBe(6);
     expect(view.materialBlockerLabel).not.toBeNull();
+  });
+});
+
+describe("resolveChosenPlanPrefix — Command Center 'Last Simulation' nunca dice 'Best Conditional' para un outcome que no lo es", () => {
+  it("coincide con el badge real que ve el usuario en el plan card destacado", () => {
+    expect(resolveChosenPlanPrefix("fully_viable")).toBe("Recommended");
+    expect(resolveChosenPlanPrefix("conditionally_viable")).toBe("Best Conditional");
+    expect(resolveChosenPlanPrefix("deadline_missed")).toBe("Earliest Completion");
+    expect(resolveChosenPlanPrefix("infeasible")).toBe("Selected");
   });
 });

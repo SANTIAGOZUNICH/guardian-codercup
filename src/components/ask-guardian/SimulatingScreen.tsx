@@ -28,11 +28,16 @@ export function SimulatingScreen({
   model,
   goal,
   snapshotAt,
+  mode = "simulation",
+  disruptionLabel,
   onDone,
 }: {
   model: OperationalModel;
   goal: Goal;
   snapshotAt: string;
+  /** "resimulation" reutiliza esta misma pantalla tras una Operational Disruption — nunca una animación distinta. */
+  mode?: "simulation" | "resimulation";
+  disruptionLabel?: string;
   onDone: (result: GoalSimulationResult) => void;
 }) {
   const result = useMemo(
@@ -53,8 +58,9 @@ export function SimulatingScreen({
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
       <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">
-        Simulating Possible Futures
+        {mode === "resimulation" ? "Re-Simulating Possible Futures" : "Simulating Possible Futures"}
       </p>
+      {disruptionLabel && <p className="-mt-4 text-xs text-risk-medium">{disruptionLabel}</p>}
 
       <Guardian state="simulating" size={110} />
 

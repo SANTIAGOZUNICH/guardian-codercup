@@ -35,7 +35,7 @@ export interface TwinGraph {
   totalPhases: number;
 }
 
-const PIPELINE_LABEL: Record<string, string> = {
+export const PIPELINE_LABEL: Record<string, string> = {
   Elaboración: "Elaboration",
   Envasado: "Filling",
   Codificado: "Coding",

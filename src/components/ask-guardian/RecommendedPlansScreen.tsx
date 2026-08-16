@@ -15,15 +15,28 @@ import {
   buildContextNote,
   resolveGoalDeadlineLabel,
 } from "@/lib/view/simulation-view-model";
+import { buildOperationalImpactView } from "@/lib/view/disruption-view-model";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
-import type { EvaluatedScenario, GoalSimulationResult } from "@/lib/types";
+import type { EvaluatedScenario, GoalSimulationResult, MachineUnavailableDisruption, OperationalModel } from "@/lib/types";
+
+/** Todo lo que RecommendedPlansScreen necesita para mostrar el bloque Before/After — agrupado en un solo prop opcional. */
+export interface RecommendedPlansDisruptionContext {
+  model: OperationalModel;
+  disruptedModel: OperationalModel;
+  disruption: MachineUnavailableDisruption;
+  resourceName: string;
+  beforeResult: GoalSimulationResult;
+}
 
 export function RecommendedPlansScreen({
   result,
+  disruptionContext = null,
   onChoosePlan,
   onBack,
 }: {
   result: GoalSimulationResult;
+  /** Presente solo cuando este resultado viene de una Re-Simulation (Checkpoint 6) — null en la simulación normal. */
+  disruptionContext?: RecommendedPlansDisruptionContext | null;
   onChoosePlan: (scenario: EvaluatedScenario) => void;
   onBack: () => void;
 }) {
@@ -31,9 +44,20 @@ export function RecommendedPlansScreen({
   const { kind, candidates } = result.outcome;
   const deadlineLabel = resolveGoalDeadlineLabel(result.goal, DEFAULT_OPERATIONS_CALENDAR);
   const topCandidates = candidates.slice(0, 3);
-  const whyView = buildWhyThisPlanView(result, DEFAULT_OPERATIONS_CALENDAR);
+  const disruptionLabel = disruptionContext ? `${disruptionContext.resourceName} unavailable` : null;
+  const whyView = buildWhyThisPlanView(result, DEFAULT_OPERATIONS_CALENDAR, disruptionLabel);
   const baselineView = buildBaselineView(result.baseline);
   const contextNote = buildContextNote(result.scenarios);
+  const impactView = disruptionContext
+    ? buildOperationalImpactView(
+        disruptionContext.model,
+        disruptionContext.disruptedModel,
+        disruptionContext.disruption,
+        disruptionContext.resourceName,
+        disruptionContext.beforeResult,
+        result,
+      )
+    : null;
 
   return (
     <div className="flex flex-1 flex-col items-center gap-8 px-6 py-14">
@@ -46,9 +70,50 @@ export function RecommendedPlansScreen({
           {result.goal.productName}
           {result.goal.client ? ` · ${result.goal.client}` : ""}
         </p>
+        {disruptionLabel && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-risk-medium/30 bg-risk-medium-soft px-3 py-1 text-[11px] font-medium text-risk-medium">
+            Active disruption — {disruptionLabel}
+          </p>
+        )}
       </div>
 
-      <Guardian state={kind === "fully_viable" ? "success" : "alert"} size={72} message={buildOutcomeGuardianMessage(result)} />
+      <Guardian
+        state={kind === "fully_viable" ? "success" : "alert"}
+        size={72}
+        message={buildOutcomeGuardianMessage(result, disruptionContext?.resourceName ?? null)}
+      />
+
+      {impactView && (
+        <div className="w-full max-w-2xl rounded-[var(--radius-md)] border border-border-subtle bg-white/[0.015] px-6 py-5">
+          <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+            Operational Impact
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-[0.06em] text-text-tertiary">
+                  <th className="pb-2 font-medium" />
+                  <th className="pb-2 font-medium">Before</th>
+                  <th className="pb-2 font-medium">After</th>
+                </tr>
+              </thead>
+              <tbody>
+                {impactView.rows.map((row) => (
+                  <tr key={row.label} className="border-t border-border-subtle">
+                    <td className="py-2 pr-4 text-text-secondary">{row.label}</td>
+                    <td className="py-2 pr-4 text-text-tertiary">{row.before}</td>
+                    <td className="py-2 font-medium text-text-primary">{row.after}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-4 text-xs leading-relaxed text-text-secondary">
+            <span className="font-semibold text-text-tertiary">Guardian — </span>
+            {impactView.narrative}
+          </p>
+        </div>
+      )}
 
       <BaselineCard view={baselineView} />
 

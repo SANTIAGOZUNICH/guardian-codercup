@@ -23,6 +23,11 @@ export function WhyThisPlanModal({ view, onClose }: { view: WhyThisPlanView; onC
       >
         <p className="text-lg font-semibold tracking-tight text-text-primary">{view.headline}</p>
         <p className="mt-1 text-xs text-text-tertiary">{view.narrativeIntro}</p>
+        {view.disruptionLabel && (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-risk-medium/30 bg-risk-medium-soft px-3 py-1 text-[11px] font-medium text-risk-medium">
+            Active disruption — {view.disruptionLabel}
+          </p>
+        )}
 
         <div className="mt-6 grid grid-cols-2 gap-4">
           <div>

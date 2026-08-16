@@ -6,8 +6,10 @@ import { ArrowUp, ArrowLeft } from "lucide-react";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { parseGoalText } from "@/lib/engine/goal-parser";
+import { isDisruptionIntent, parseDisruptionText, type DisruptionCandidate } from "@/lib/engine/disruption-parser";
+import { buildResourceSelectionMessage, formatDisruptionCandidateLabel } from "@/lib/view/disruption-view-model";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
-import type { Goal, OperationalModel } from "@/lib/types";
+import type { Goal, MachineUnavailableDisruption, OperationalModel } from "@/lib/types";
 
 const CHIPS = ["Can we deliver earlier?", "Simulate a production goal", "Check available capacity"];
 
@@ -24,32 +26,74 @@ function errorMessage(kind: "unknown_product" | "missing_quantity" | "missing_de
   }
 }
 
+function disruptionErrorMessage(kind: "unknown_resource_type"): string {
+  switch (kind) {
+    case "unknown_resource_type":
+      return 'No encontré esa máquina en el Operational Twin. Probá nombrando el tipo de recurso, por ejemplo "llenadora".';
+  }
+}
+
 export function AskGuardianScreen({
   model,
   companyName,
   snapshotAt,
+  activeGoal,
   onGoalReady,
+  onDisruptionReady,
   onBack,
 }: {
   model: OperationalModel;
   companyName: string;
   snapshotAt: string;
+  /** Goal ya simulado en esta sesión, si lo hay — habilita interpretar preguntas de disrupción sobre ese objetivo. */
+  activeGoal: Goal | null;
   onGoalReady: (goal: Goal) => void;
+  onDisruptionReady: (disruption: MachineUnavailableDisruption, resourceName: string) => void;
   onBack: () => void;
 }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [selection, setSelection] = useState<{ candidates: DisruptionCandidate[]; unitsUnavailable: number } | null>(null);
 
   function handleSubmit() {
     if (!text.trim()) return;
+
+    if (isDisruptionIntent(text)) {
+      if (!activeGoal) {
+        setError("Necesito un objetivo activo antes de simular una disrupción. Contame primero qué querés producir.");
+        return;
+      }
+      const result = parseDisruptionText(text, { model });
+      if (!result.ok) {
+        setError(disruptionErrorMessage(result.error.kind));
+        return;
+      }
+      setError(null);
+      if (result.status === "needs_selection") {
+        setSelection({ candidates: result.candidates, unitsUnavailable: result.unitsUnavailable });
+        return;
+      }
+      onDisruptionReady(result.disruption, result.resourceName);
+      return;
+    }
+
     const result = parseGoalText(text, { model, snapshotAt, calendar: DEFAULT_OPERATIONS_CALENDAR });
     if (!result.ok) {
       setError(errorMessage(result.error.kind, companyName));
       return;
     }
     setError(null);
+    setSelection(null);
     onGoalReady(result.goal);
+  }
+
+  function chooseCandidate(candidate: DisruptionCandidate) {
+    if (!selection) return;
+    onDisruptionReady(
+      { type: "machine_unavailable", resourceId: candidate.resourceId, unitsUnavailable: selection.unitsUnavailable },
+      candidate.name,
+    );
   }
 
   return (
@@ -61,8 +105,31 @@ export function AskGuardianScreen({
         <p className="mt-2 text-sm text-text-secondary">Describe an operational goal or hypothetical scenario.</p>
       </div>
 
-      <Guardian state={focused || text ? "listening" : "idle"} size={100} />
+      <Guardian
+        state={selection ? "alert" : focused || text ? "listening" : "idle"}
+        size={100}
+        message={selection ? buildResourceSelectionMessage(selection.candidates) : undefined}
+      />
 
+      {selection ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex flex-wrap justify-center gap-4"
+        >
+          {selection.candidates.map((candidate) => (
+            <button
+              key={candidate.resourceId}
+              onClick={() => chooseCandidate(candidate)}
+              className="glass-panel flex min-w-[160px] flex-col items-center gap-1 rounded-[var(--radius-lg)] p-6 transition-colors hover:border-border-strong"
+            >
+              <p className="text-sm font-semibold text-text-primary">{candidate.name}</p>
+              <p className="text-xs text-text-tertiary">{formatDisruptionCandidateLabel(candidate)}</p>
+            </button>
+          ))}
+        </motion.div>
+      ) : (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -114,6 +181,7 @@ export function AskGuardianScreen({
           ))}
         </div>
       </motion.div>
+      )}
 
       <Button variant="ghost" onClick={onBack} className="gap-2">
         <ArrowLeft size={15} />

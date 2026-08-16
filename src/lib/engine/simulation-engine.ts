@@ -68,9 +68,15 @@ export function buildHypotheticalOrder(goal: Goal): Order {
  * - Varios recursos heterogéneos (ej. dos llenadoras distintas) -> todos
  *   los subconjuntos no vacíos, cada uno a su capacidad completa. Nunca se
  *   inventa una combinación que no exista físicamente.
+ *
+ * Máquinas con `quantityAvailable === 0` (ej. tras applyDisruption —
+ * Checkpoint 6) se excluyen ACÁ, antes de generar ninguna opción — nunca se
+ * genera un escenario que "use" un recurso unavailable para después
+ * descartarlo. El scenario generator consulta directamente la disponibilidad
+ * real del Twin que recibe (original o disrupted), sin lógica adicional.
  */
 function machineOptionsForProcess(model: OperationalModel, process: ResourceProcess): ResourceAllocation[][] {
-  const machines = model.resources.filter((r) => r.process === process && r.type === "Máquina");
+  const machines = model.resources.filter((r) => r.process === process && r.type === "Máquina" && r.quantityAvailable > 0);
   if (machines.length === 0) return [];
 
   if (machines.length === 1) {
@@ -260,7 +266,13 @@ export function explainDominance(a: EvaluatedScenario, b: EvaluatedScenario, lab
   const bt = completionTimeMs(b);
   if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) {
     const [winner, loser] = at < bt ? [labelA, labelB] : [labelB, labelA];
-    return `Ambos cumplen la fecha, pero ${winner} termina antes que ${loser}.`;
+    // Llegamos acá porque a.result.deadlineMet === b.result.deadlineMet — pero eso puede ser
+    // "ambos true" O "ambos false" (ej. Checkpoint 6: una disrupción deja a TODOS los escenarios
+    // sin cumplir el deadline). Afirmar "ambos cumplen la fecha" cuando ninguno cumple sería
+    // exactamente el tipo de dato fabricado que este proyecto nunca permite.
+    return a.result.deadlineMet
+      ? `Ambos cumplen la fecha, pero ${winner} termina antes que ${loser}.`
+      : `Ninguno cumple la fecha, pero ${winner} termina antes que ${loser}.`;
   }
   if (a.extraResourcesUsed !== b.extraResourcesUsed) {
     const [winner, loser] = a.extraResourcesUsed < b.extraResourcesUsed ? [labelA, labelB] : [labelB, labelA];

@@ -151,8 +151,13 @@ export function CommandCenter({
         {lastSimulation && (
           <div className="mt-6 flex items-center justify-between rounded-[var(--radius-md)] border border-border-subtle bg-white/[0.015] px-5 py-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+              <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
                 Last Simulation
+                {lastSimulation.disruptionLabel && (
+                  <span className="rounded-full border border-risk-medium/30 bg-risk-medium-soft px-2 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-risk-medium">
+                    ⚠ {lastSimulation.disruptionLabel}
+                  </span>
+                )}
               </p>
               <p className="mt-1 text-sm text-text-primary">{lastSimulation.goalSummary}</p>
             </div>

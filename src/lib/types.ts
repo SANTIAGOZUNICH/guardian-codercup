@@ -382,4 +382,30 @@ export interface LastSimulation {
   goalSummary: string;
   chosenPlanLabel: string;
   completionLabel: string;
+  /** Etiqueta corta de la disrupción activa (ej. "Llenadora 2 unavailable"), o null si no hay ninguna. */
+  disruptionLabel: string | null;
 }
+
+/**
+ * ============================================================================
+ * OPERATIONAL DISRUPTION — Machine Unavailable (Checkpoint 6)
+ * ============================================================================
+ * Único tipo de disrupción soportado en V1. Deliberadamente mínimo: no es
+ * una arquitectura genérica de "events" — si en el futuro se agregan otros
+ * tipos (material delay, absenteeism, etc.), se define cada uno como su
+ * propio tipo cuando exista, no se generaliza de antemano sin necesidad real.
+ *
+ * `effectiveAt` queda declarado para no cerrar la puerta a una futura V2 con
+ * disponibilidad parcial en el tiempo, pero en V1 NUNCA se completa ni se
+ * usa: la disrupción aplica a todo el horizonte simulado (Option A — ver
+ * reporte de Checkpoint 6). No hay scheduling temporal parcial dentro de un
+ * escenario.
+ */
+export interface MachineUnavailableDisruption {
+  type: "machine_unavailable";
+  resourceId: string;
+  unitsUnavailable: number;
+  effectiveAt?: string;
+}
+
+export type Disruption = MachineUnavailableDisruption;

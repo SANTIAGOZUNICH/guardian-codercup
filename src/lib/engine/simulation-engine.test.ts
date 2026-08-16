@@ -8,11 +8,13 @@ import {
   rankScenarios,
   classifyPlan,
   resolveGoalOutcome,
+  explainDominance,
 } from "./simulation-engine";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
 import { parseGoalText } from "./goal-parser";
+import { applyDisruption } from "./disruption";
 
 const CALENDAR: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR;
 const SNAPSHOT = "2026-08-14T08:00:00";
@@ -99,6 +101,45 @@ describe("generateScenarioConfigs — sin priorityStrategy", () => {
       [...c.resourceConfig].sort((a, b) => a.resourceId.localeCompare(b.resourceId)).map((a) => `${a.resourceId}:${a.unitsUsed}`).join(","),
     );
     expect(new Set(signatures).size).toBe(signatures.length);
+  });
+});
+
+describe("generateScenarioConfigs — respeta un Twin disrupted (items 11/19)", () => {
+  const model = buildFixtureModel();
+  const goal = buildGoal();
+  const disruptedModel = applyDisruption(model, { type: "machine_unavailable", resourceId: "llenadora-2", unitsUnavailable: 1 });
+
+  it("1. el recurso unavailable nunca aparece en ninguna config generada", () => {
+    const configs = generateScenarioConfigs(disruptedModel, goal);
+    for (const config of configs) {
+      expect(config.resourceConfig.some((a) => a.resourceId === "llenadora-2")).toBe(false);
+    }
+  });
+
+  it("2. scenario count cambia correctamente: 6 -> 2 (2 Elaboración × 1 Envasado, ya no 3)", () => {
+    expect(generateScenarioConfigs(model, goal)).toHaveLength(6);
+    expect(generateScenarioConfigs(disruptedModel, goal)).toHaveLength(2);
+  });
+
+  it("3. una disrupción no-op (unitsUnavailable: 0) produce el mismo resultado que sin disrupción", () => {
+    const noop = applyDisruption(model, { type: "machine_unavailable", resourceId: "llenadora-2", unitsUnavailable: 0 });
+    expect(generateScenarioConfigs(noop, goal)).toEqual(generateScenarioConfigs(model, goal));
+  });
+
+  it("4. la máquina removida reduce el throughput -> más horas en Envasado para la config restante", () => {
+    const before = simulateGoal(model, goal, CALENDAR, SNAPSHOT);
+    const after = simulateGoal(disruptedModel, goal, CALENDAR, SNAPSHOT);
+    const envasadoBefore = before.baseline.result.steps.find((s) => s.process === "Envasado")!;
+    const envasadoAfter = after.baseline.result.steps.find((s) => s.process === "Envasado")!;
+    expect(envasadoAfter.hours).toBeGreaterThan(envasadoBefore.hours);
+  });
+
+  it("5. el bottleneck puede cambiar de proceso cuando la disrupción lo justifica", () => {
+    const before = simulateGoal(model, goal, CALENDAR, SNAPSHOT);
+    const after = simulateGoal(disruptedModel, goal, CALENDAR, SNAPSHOT);
+    // No afirmamos CUÁL de los dos gana en cada caso (depende del dataset) — solo que el
+    // motor recalcula el bottleneck real de la nueva configuración, no reutiliza el viejo.
+    expect(after.baseline.result.bottleneck.hours).toBeGreaterThanOrEqual(before.baseline.result.bottleneck.hours);
   });
 });
 
@@ -257,6 +298,50 @@ describe("rankScenarios — sin contención como criterio (item 7)", () => {
     expect(result1.ranked.map((s) => s.config.id)).toEqual(result2.ranked.map((s) => s.config.id));
     expect(result1.ranked.map((s) => s.status)).toEqual(result2.ranked.map((s) => s.status));
     expect(result1.outcome.kind).toBe(result2.outcome.kind);
+  });
+});
+
+describe("explainDominance — nunca afirma un hecho falso sobre el deadline (bug encontrado en Checkpoint 6)", () => {
+  const model = buildFixtureModel();
+  const goal = buildGoal();
+  const baseConfig = generateScenarioConfigs(model, goal)[0];
+
+  function scenario(overrides: Partial<ScenarioResult> & { id?: string }): EvaluatedScenario {
+    const config = { ...baseConfig, id: overrides.id ?? baseConfig.id };
+    return {
+      config,
+      result: {
+        orderId: "X",
+        materialsFeasible: true,
+        capacityFeasible: true,
+        deadlineMet: true,
+        feasible: true,
+        totalHoursNeeded: 10,
+        completionAt: "2026-08-20T10:00:00.000",
+        steps: [],
+        bottleneck: { process: "Elaboración", hours: 10, utilization: 0.5, blocked: false },
+        materialShortages: [],
+        capacityIssues: [],
+        ...overrides,
+      },
+      contention: { sharedProcesses: [], orderIds: [] },
+      extraResourcesUsed: 0,
+      status: "fully_viable",
+    };
+  }
+
+  it("ambos cumplen el deadline -> 'Ambos cumplen la fecha'", () => {
+    const a = scenario({ id: "a", deadlineMet: true, completionAt: "2026-08-20T10:00:00.000" });
+    const b = scenario({ id: "b", deadlineMet: true, completionAt: "2026-08-22T10:00:00.000" });
+    expect(explainDominance(a, b, "Plan A", "Plan B")).toBe("Ambos cumplen la fecha, pero Plan A termina antes que Plan B.");
+  });
+
+  it("ninguno cumple el deadline (ej. tras una disrupción) -> 'Ninguno cumple la fecha', nunca 'Ambos cumplen'", () => {
+    const a = scenario({ id: "a", deadlineMet: false, completionAt: "2026-08-24T11:18:00.000" });
+    const b = scenario({ id: "b", deadlineMet: false, completionAt: "2026-08-27T08:18:00.000" });
+    const note = explainDominance(a, b, "Plan A", "Plan B");
+    expect(note).toBe("Ninguno cumple la fecha, pero Plan A termina antes que Plan B.");
+    expect(note).not.toMatch(/Ambos cumplen la fecha/);
   });
 });
 

@@ -92,6 +92,20 @@ const BADGE_BY_KIND: Record<GoalOutcomeKind, string | null> = {
   infeasible: null,
 };
 
+/**
+ * Prefijo para "Last Simulation" en Command Center (ej. "Earliest Completion Plan A").
+ * Deriva del mismo BADGE_BY_KIND que ya usa el card destacado — antes de esto,
+ * GuardianApp tenía su propio `kind === "fully_viable" ? "Recommended" : "Best
+ * Conditional"` hardcodeado, que decía "Best Conditional" incluso para un
+ * outcome deadline_missed (encontrado durante la verificación de Checkpoint 6
+ * con Machine Unavailable). Una sola fuente de verdad evita que ambos textos
+ * se desincronicen de nuevo.
+ */
+export function resolveChosenPlanPrefix(kind: GoalOutcomeKind): string {
+  const badge = BADGE_BY_KIND[kind];
+  return badge ? badge.replace(/\s+Plan$/, "") : "Selected";
+}
+
 export function buildPlanCardView(
   scenario: EvaluatedScenario,
   index: number,
@@ -140,7 +154,14 @@ export function buildOutcomeHeadline(kind: GoalOutcomeKind): string {
   return HEADLINE_BY_KIND[kind];
 }
 
-export function buildOutcomeGuardianMessage(result: GoalSimulationResult): string {
+/**
+ * `disruptionResourceName` solo cambia el mensaje del caso "infeasible": si
+ * la razón de que no exista NINGUNA configuración ejecutable es una
+ * Operational Disruption activa (Checkpoint 6), Guardian lo dice
+ * explícitamente en vez de un genérico "no encontré nada" — sin eso, el
+ * usuario no sabría si el problema es la disrupción o el Twin original.
+ */
+export function buildOutcomeGuardianMessage(result: GoalSimulationResult, disruptionResourceName?: string | null): string {
   const { kind, candidates } = result.outcome;
   const goal = result.goal;
   switch (kind) {
@@ -155,7 +176,9 @@ export function buildOutcomeGuardianMessage(result: GoalSimulationResult): strin
     case "deadline_missed":
       return "Con las restricciones actuales no encontré una configuración capaz de completar este objetivo antes del deadline.";
     case "infeasible":
-      return "No encontré ninguna configuración físicamente posible con los recursos actuales para este objetivo.";
+      return disruptionResourceName
+        ? `Con ${disruptionResourceName} fuera de servicio y las restricciones actuales, no encontré una configuración ejecutable para este objetivo.`
+        : "No encontré ninguna configuración físicamente posible con los recursos actuales para este objetivo.";
   }
 }
 
@@ -174,6 +197,8 @@ export interface WhyThisPlanView {
   dominanceNote: string | null;
   bottleneckProcess: string;
   materialBlockerLabel: string | null;
+  /** "Llenadora 2 unavailable" si hay una Operational Disruption activa (Checkpoint 6), null si no. */
+  disruptionLabel: string | null;
 }
 
 const NARRATIVE_BY_KIND: Record<GoalOutcomeKind, string> = {
@@ -183,7 +208,11 @@ const NARRATIVE_BY_KIND: Record<GoalOutcomeKind, string> = {
   infeasible: "No configuration is physically executable with the resources currently available for this goal.",
 };
 
-export function buildWhyThisPlanView(result: GoalSimulationResult, calendar: OperationsCalendar): WhyThisPlanView | null {
+export function buildWhyThisPlanView(
+  result: GoalSimulationResult,
+  calendar: OperationsCalendar,
+  disruptionLabel: string | null = null,
+): WhyThisPlanView | null {
   const { kind, candidates } = result.outcome;
   const top = candidates[0];
   if (!top) return null;
@@ -214,6 +243,7 @@ export function buildWhyThisPlanView(result: GoalSimulationResult, calendar: Ope
     dominanceNote,
     bottleneckProcess: top.result.bottleneck.process,
     materialBlockerLabel: materialBlockerLabel(top),
+    disruptionLabel,
   };
 }
 
