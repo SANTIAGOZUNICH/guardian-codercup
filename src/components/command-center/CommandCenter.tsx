@@ -5,7 +5,7 @@ import { ArrowRight, Compass } from "lucide-react";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import type { OperationalModel, OrderConstraints } from "@/lib/types";
+import type { LastSimulation, OperationalModel, OrderConstraints } from "@/lib/types";
 import {
   buildActiveConstraintSummary,
   buildOperationalHealth,
@@ -28,12 +28,14 @@ const STATUS_DOT = {
 export function CommandCenter({
   model,
   orderConstraints,
+  lastSimulation,
   onViewConstraints,
   onExploreTwin,
   onAskGuardian,
 }: {
   model: OperationalModel;
   orderConstraints: OrderConstraints[];
+  lastSimulation: LastSimulation | null;
   onViewConstraints: () => void;
   onExploreTwin: () => void;
   onAskGuardian: () => void;
@@ -145,6 +147,21 @@ export function CommandCenter({
             Ask Guardian <ArrowRight size={15} />
           </span>
         </motion.button>
+
+        {lastSimulation && (
+          <div className="mt-6 flex items-center justify-between rounded-[var(--radius-md)] border border-border-subtle bg-white/[0.015] px-5 py-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                Last Simulation
+              </p>
+              <p className="mt-1 text-sm text-text-primary">{lastSimulation.goalSummary}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-medium text-accent-bright">Recommended {lastSimulation.chosenPlanLabel}</p>
+              <p className="text-xs text-text-tertiary">Expected completion: {lastSimulation.completionLabel}</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

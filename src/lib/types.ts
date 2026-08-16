@@ -258,9 +258,101 @@ export type Constraint = MaterialShortageConstraint | DeadlineAtRiskConstraint;
  */
 export type OrderSeverity = "critical" | "high";
 
+/**
+ * ============================================================================
+ * ASK GUARDIAN — Goal Parser
+ * ============================================================================
+ */
+
+export interface Goal {
+  intent: "production_goal";
+  productId: string;
+  productName: string;
+  quantity: number;
+  client?: string;
+  /** ISO date (YYYY-MM-DD), ya resuelto contra snapshotAt — nunca contra la hora real del server. */
+  deadline: string;
+  /** Texto original tal como lo escribió el usuario, para trazabilidad ("User goal"). */
+  rawText: string;
+}
+
+export type GoalParseError =
+  | { kind: "unknown_product"; rawText: string }
+  | { kind: "missing_quantity"; rawText: string }
+  | { kind: "missing_deadline"; rawText: string };
+
+export type GoalParseResult = { ok: true; goal: Goal } | { ok: false; error: GoalParseError };
+
+/**
+ * Contrato común para cualquier intérprete de lenguaje natural → Goal.
+ * El parser determinístico lo implementa hoy; un NLU con LLM podría
+ * implementarlo mañana como capa adicional (fallback o primario) sin que
+ * el resto del Simulation Engine se entere de la diferencia.
+ */
+export interface GoalParser {
+  parse(text: string, ctx: { model: OperationalModel; snapshotAt: string; calendar: OperationsCalendar }): GoalParseResult;
+}
+
+/**
+ * ============================================================================
+ * SIMULATION ENGINE — genera y rankea configuraciones para un Goal
+ * ============================================================================
+ * Cada escenario se evalúa con la MISMA evaluateScenario() que usa
+ * Constraint Detection — cero lógica de cálculo duplicada.
+ */
+
+export interface ScenarioConfig {
+  id: string;
+  label: string;
+  resourceConfig: ResourceAllocation[];
+  priorityStrategy: "as-is" | "prioritize-goal";
+}
+
+/**
+ * Impacto sobre pedidos existentes — deliberadamente NO incluye horas de
+ * atraso precisas: eso requeriría scheduling temporal real que este motor
+ * no implementa. Solo afirmamos lo que podemos calcular con certeza: qué
+ * pedidos existentes comparten los mismos recursos que este escenario usa.
+ */
+export interface ContentionInfo {
+  sharedProcesses: ResourceProcess[];
+  conflictingOrderIds: string[];
+  conflictingHighPriorityCount: number;
+}
+
+export interface EvaluatedScenario {
+  config: ScenarioConfig;
+  result: ScenarioResult;
+  contention: ContentionInfo;
+  /** Suma de unitsUsed de máquina por encima de 1 por proceso — un proxy honesto de "más recursos adicionales". */
+  extraResourcesUsed: number;
+}
+
+export interface GoalSimulationResult {
+  goal: Goal;
+  /** Config actual (usar todo lo disponible, as-is) evaluada contra el goal — referencia antes de generar alternativas. */
+  baseline: EvaluatedScenario;
+  /** Todas las configuraciones generadas y evaluadas, sin ordenar todavía. */
+  scenarios: EvaluatedScenario[];
+  /** scenarios, ordenado por rankScenarios(). */
+  ranked: EvaluatedScenario[];
+  /** true si algún escenario generado cumple materialsFeasible (constante entre escenarios del mismo goal). */
+  materialsFeasible: boolean;
+}
+
 export interface OrderConstraints {
   orderId: string;
   scenario: ScenarioResult;
   constraints: Constraint[];
   severity: OrderSeverity | null;
+}
+
+/**
+ * Solo estado de sesión (no hay persistencia real) — lo que Command Center
+ * muestra en su card "Last Simulation" después de elegir un plan.
+ */
+export interface LastSimulation {
+  goalSummary: string;
+  chosenPlanLabel: string;
+  completionLabel: string;
 }

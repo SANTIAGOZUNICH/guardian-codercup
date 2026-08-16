@@ -10,7 +10,8 @@ export type GuardianState =
   | "analyzing"
   | "success"
   | "alert"
-  | "simulating";
+  | "simulating"
+  | "listening";
 
 const STATE_COLOR: Record<GuardianState, string> = {
   idle: "var(--accent)",
@@ -18,6 +19,7 @@ const STATE_COLOR: Record<GuardianState, string> = {
   hello: "var(--accent-bright)",
   analyzing: "var(--accent-bright)",
   simulating: "var(--accent-bright)",
+  listening: "var(--accent-bright)",
   success: "var(--risk-low)",
   alert: "var(--risk-high)",
 };
@@ -28,6 +30,7 @@ const STATE_RING_SPEED: Record<GuardianState, number> = {
   hello: 5,
   analyzing: 2.2,
   simulating: 1.6,
+  listening: 7,
   success: 6,
   alert: 1.1,
 };
