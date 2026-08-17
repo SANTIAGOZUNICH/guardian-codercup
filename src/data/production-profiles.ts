@@ -117,3 +117,22 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
 export function getProductionProfile(productId: string): ProductionProfile | undefined {
   return PRODUCTION_PROFILES.find((p) => p.productId === productId);
 }
+
+/**
+ * Catálogo mínimo de productos conocidos — el único lugar donde texto libre
+ * ("shampoo", "un gel para...") puede resolverse a un productId REAL con
+ * ProductionProfile. Guided Setup (Checkpoint 7) lo usa para nunca inventar
+ * un profile por similitud: si el texto no matchea ningún keyword acá, el
+ * producto queda honestamente "sin profile", nunca asignado al más parecido.
+ */
+export interface KnownProductCatalogEntry {
+  productId: string;
+  name: string;
+  keyword: string;
+}
+
+export const PRODUCT_CATALOG: KnownProductCatalogEntry[] = [
+  { productId: "shampoo-premium", name: "Shampoo Premium", keyword: "shampoo" },
+  { productId: "crema-hidratante", name: "Crema Hidratante", keyword: "crema" },
+  { productId: "serum-regenerador", name: "Serum Regenerador", keyword: "serum" },
+];

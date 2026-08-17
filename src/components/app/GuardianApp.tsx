@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { LoginScreen, type LoginPayload } from "@/components/login/LoginScreen";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
+import { EntryChoiceScreen } from "@/components/upload/EntryChoiceScreen";
 import { UploadScreen } from "@/components/upload/UploadScreen";
+import { GuidedSetupScreen } from "@/components/guided-setup/GuidedSetupScreen";
 import { ModelBuildingScreen } from "@/components/model/ModelBuildingScreen";
 import { ConstraintScreen } from "@/components/constraint/ConstraintScreen";
 import { CommandCenter } from "@/components/command-center/CommandCenter";
@@ -14,6 +16,8 @@ import { RecommendedPlansScreen } from "@/components/ask-guardian/RecommendedPla
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import { applyDisruption } from "@/lib/engine/disruption";
+import { buildOperationalModel, type RawModelInput } from "@/lib/model/buildOperationalModel";
+import { formatNaive } from "@/lib/engine/evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { formatDisplayDate } from "@/lib/view/constraint-view-model";
 import { resolveChosenPlanPrefix } from "@/lib/view/simulation-view-model";
@@ -24,6 +28,7 @@ import type {
   LastSimulation,
   MachineUnavailableDisruption,
   OperationalModel,
+  TwinCompleteness,
 } from "@/lib/types";
 
 export type CompanySession = {
@@ -34,7 +39,9 @@ export type CompanySession = {
 type Phase =
   | "login"
   | "greeting"
+  | "entry-choice"
   | "upload"
+  | "guided-setup"
   | "building"
   | "constraints"
   | "command-center"
@@ -49,6 +56,8 @@ export function GuardianApp() {
   const [phase, setPhase] = useState<Phase>("login");
   const [model, setModel] = useState<OperationalModel | null>(null);
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
+  /** Solo presente cuando el Twin vino de Guided Setup (Checkpoint 7) — null en el path de Excel. */
+  const [twinCompleteness, setTwinCompleteness] = useState<TwinCompleteness | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   /** Disrupción activa (Checkpoint 6) — un único machine_unavailable a la vez, aplicada sobre `goal`. */
   const [disruption, setDisruption] = useState<MachineUnavailableDisruption | null>(null);
@@ -65,7 +74,17 @@ export function GuardianApp() {
   }
 
   if (phase === "greeting") {
-    return <OnboardingScreen companyName={session.companyName} onContinue={() => setPhase("upload")} />;
+    return <OnboardingScreen companyName={session.companyName} onContinue={() => setPhase("entry-choice")} />;
+  }
+
+  if (phase === "entry-choice") {
+    return (
+      <EntryChoiceScreen
+        companyName={session.companyName}
+        onChooseUpload={() => setPhase("upload")}
+        onChooseGuidedSetup={() => setPhase("guided-setup")}
+      />
+    );
   }
 
   if (phase === "upload") {
@@ -76,6 +95,24 @@ export function GuardianApp() {
         onModelReady={(m, snapshot) => {
           setModel(m);
           setSnapshotAt(snapshot);
+          setTwinCompleteness(null);
+          setPhase("building");
+        }}
+      />
+    );
+  }
+
+  if (phase === "guided-setup") {
+    return (
+      <GuidedSetupScreen
+        companyName={session.companyName}
+        industry={session.industry}
+        onBack={() => setPhase("entry-choice")}
+        onComplete={(input: RawModelInput, completeness: TwinCompleteness) => {
+          const m = buildOperationalModel(input);
+          setModel(m);
+          setSnapshotAt(formatNaive(new Date()));
+          setTwinCompleteness(completeness);
           setPhase("building");
         }}
       />
@@ -93,6 +130,7 @@ export function GuardianApp() {
         snapshotAt={snapshotAt}
         skipAnimation={phase === "explore-twin"}
         activeDisruption={disruption}
+        twinCompleteness={twinCompleteness}
         onViewConstraints={() => setPhase("constraints")}
         onGoToCommandCenter={() => setPhase("command-center")}
       />

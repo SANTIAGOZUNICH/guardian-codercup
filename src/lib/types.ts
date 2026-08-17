@@ -131,7 +131,41 @@ export interface OperationsCalendar {
   workingDays: number[];
 }
 
-export type DataProvenance = "company_data" | "reference_profile" | "calculated";
+export type DataProvenance = "company_data" | "reference_profile" | "calculated" | "user_provided";
+
+/**
+ * ============================================================================
+ * TWIN COMPLETENESS — Guided Setup (Checkpoint 7)
+ * ============================================================================
+ * Metadata paralela al OperationalModel (nunca dentro de él, mismo patrón que
+ * `snapshotAt` en GuardianApp) que registra honestamente qué se sabe y qué no
+ * se sabe todavía. Nunca un porcentaje inventado de "completitud" — solo
+ * hechos: cuántas cosas se conocen y cuáles faltan, nombradas explícitamente.
+ *
+ * `known.capacities` es la cantidad de recursos con capacidad CONOCIDA — puede
+ * ser menor que `known.resources` (un recurso puede existir sin que se sepa
+ * su capacidad). Ese recurso igual entra al Twin con `capacity: 0` (el motor
+ * necesita un número), pero su nombre queda en `missing.resourceCapacities`
+ * para que la UI nunca confunda "desconocido" con "la capacidad real es cero".
+ */
+export interface TwinCompleteness {
+  known: {
+    processes: number;
+    resources: number;
+    capacities: number;
+    products: number;
+  };
+  missing: {
+    /** Nombres de recursos cuya capacidad el usuario no supo indicar. */
+    resourceCapacities: string[];
+    /** true si el usuario eligió "No lo tengo ahora" en la pregunta de inventario — nunca stock=0 real. */
+    missingInventory: boolean;
+    /** Texto tal como lo describió el usuario para un proceso que no mapea a ningún ResourceProcess soportado. */
+    unsupportedProcesses: string[];
+    /** Nombres de producto que el usuario mencionó sin que exista un ProductionProfile de referencia para ellos. */
+    productsWithoutProfile: string[];
+  };
+}
 
 /**
  * ============================================================================

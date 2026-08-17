@@ -5,10 +5,12 @@ import { motion } from "framer-motion";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { NodeGraphV2 } from "./NodeGraphV2";
-import type { MachineUnavailableDisruption, OperationalModel } from "@/lib/types";
+import { MissingDataModal } from "@/components/guided-setup/TwinCompletenessSummary";
+import type { MachineUnavailableDisruption, OperationalModel, TwinCompleteness } from "@/lib/types";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { buildTwinGraph } from "@/lib/view/twin-graph-view-model";
+import { buildMissingDataLabel, totalMissingCount } from "@/lib/view/guided-setup-view-model";
 import {
   buildGuardianTwinReadyMessage,
   buildTwinReadySummary,
@@ -27,6 +29,11 @@ export function ModelBuildingScreen({
   skipAnimation = false,
   /** Disrupción activa de la sesión (Checkpoint 6) — Explore Twin debe conservar el mismo estado visual que dejó la Disruption Screen. */
   activeDisruption = null,
+  /**
+   * Solo presente cuando el Twin vino de Guided Setup (Checkpoint 7). Ausente
+   * (undefined) en el path de Excel — el render queda idéntico al de siempre.
+   */
+  twinCompleteness = null,
 }: {
   model: OperationalModel;
   snapshotAt: string;
@@ -34,7 +41,10 @@ export function ModelBuildingScreen({
   onGoToCommandCenter: () => void;
   skipAnimation?: boolean;
   activeDisruption?: MachineUnavailableDisruption | null;
+  twinCompleteness?: TwinCompleteness | null;
 }) {
+  const [showMissingData, setShowMissingData] = useState(false);
+  const missingCount = twinCompleteness ? totalMissingCount(twinCompleteness) : 0;
   const orderConstraints = useMemo(
     () => detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt),
     [model, snapshotAt],
@@ -115,6 +125,23 @@ export function ModelBuildingScreen({
             </Button>
           )}
         </motion.div>
+      )}
+
+      {done && twinCompleteness && missingCount > 0 && (
+        <motion.button
+          type="button"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          onClick={() => setShowMissingData(true)}
+          className="rounded-full border border-border-default bg-white/[0.02] px-4 py-1.5 text-xs font-medium text-text-tertiary transition-colors hover:border-border-strong hover:text-text-secondary"
+        >
+          {buildMissingDataLabel(twinCompleteness)} · Review missing data
+        </motion.button>
+      )}
+
+      {showMissingData && twinCompleteness && (
+        <MissingDataModal completeness={twinCompleteness} onClose={() => setShowMissingData(false)} />
       )}
     </div>
   );
