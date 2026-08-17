@@ -39,6 +39,21 @@
   --radius-md: 14px;
   --radius-lg: 20px;
   --radius-xl: 28px;
+
+  /* Shell — sidebar/topbar (Checkpoint 9A) */
+  --bg-sidebar: rgba(8, 9, 13, 0.7);
+  --bg-sidebar-active: rgba(62, 123, 250, 0.1);
+
+  /* Elevación — sombra + no solo borde, para que las cards premium se separen del fondo */
+  --shadow-elevation-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  --shadow-elevation-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 48px -20px rgba(0, 0, 0, 0.75);
+
+  /* Motion — Checkpoint 9A. Un solo lugar para toda duración/curva, nunca valores sueltos por componente. */
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+  --duration-ambient: 3200ms;
 }
 
 @theme inline {
@@ -46,6 +61,8 @@
   --color-bg-base: var(--bg-base);
   --color-bg-surface: var(--bg-surface);
   --color-bg-elevated: var(--bg-elevated);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-bg-sidebar-active: var(--bg-sidebar-active);
 
   --color-border-subtle: var(--border-subtle);
   --color-border-default: var(--border-default);

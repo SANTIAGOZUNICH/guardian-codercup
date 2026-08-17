@@ -9,6 +9,7 @@ import { GuidedSetupScreen } from "@/components/guided-setup/GuidedSetupScreen";
 import { ModelBuildingScreen } from "@/components/model/ModelBuildingScreen";
 import { ConstraintScreen } from "@/components/constraint/ConstraintScreen";
 import { CommandCenter } from "@/components/command-center/CommandCenter";
+import { AppShell, type AppShellNavItem } from "@/components/shell/AppShell";
 import { AskGuardianScreen } from "@/components/ask-guardian/AskGuardianScreen";
 import { SimulatingScreen } from "@/components/ask-guardian/SimulatingScreen";
 import { DisruptionScreen } from "@/components/ask-guardian/DisruptionScreen";
@@ -148,15 +149,31 @@ export function GuardianApp() {
   }
 
   if (phase === "command-center") {
+    const totalConstraints = orderConstraints.reduce((sum, oc) => sum + oc.constraints.length, 0);
+    function handleNavigate(item: AppShellNavItem) {
+      if (item === "command-center") return;
+      if (item === "ask-guardian") return setPhase("ask-guardian");
+      if (item === "operational-twin") return setPhase("explore-twin");
+      if (item === "constraints") return setPhase("constraints");
+      if (item === "simulations") return setPhase("plans");
+    }
     return (
-      <CommandCenter
-        model={model}
-        orderConstraints={orderConstraints}
-        lastSimulation={lastSimulation}
-        onViewConstraints={() => setPhase("constraints")}
-        onExploreTwin={() => setPhase("explore-twin")}
-        onAskGuardian={() => setPhase("ask-guardian")}
-      />
+      <AppShell
+        companyName={session.companyName}
+        activeItem="command-center"
+        showConstraints={totalConstraints > 0}
+        showSimulations={lastSimulation !== null}
+        onNavigate={handleNavigate}
+      >
+        <CommandCenter
+          model={model}
+          orderConstraints={orderConstraints}
+          lastSimulation={lastSimulation}
+          onViewConstraints={() => setPhase("constraints")}
+          onExploreTwin={() => setPhase("explore-twin")}
+          onAskGuardian={() => setPhase("ask-guardian")}
+        />
+      </AppShell>
     );
   }
 

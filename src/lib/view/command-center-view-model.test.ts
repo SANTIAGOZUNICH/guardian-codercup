@@ -6,7 +6,8 @@ import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
 import { buildTwinGraph } from "./twin-graph-view-model";
-import { buildOperationalHealth, buildActiveConstraintSummary, buildTwinPreview } from "./command-center-view-model";
+import { buildOperationalHealth, buildActiveConstraintSummary, buildTwinPreview, selectHeroMetrics } from "./command-center-view-model";
+import type { OperationalModel } from "@/lib/types";
 
 function loadDemoFile(name: string): ArrayBuffer {
   const filePath = path.resolve(process.cwd(), "public/demo", name);
@@ -55,6 +56,15 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
     });
   });
 
+  it("selectHeroMetrics — Twin enriquecido: Orders/Resources/Processes/Constraints, en ese orden, con datos reales", () => {
+    expect(selectHeroMetrics(model, orderConstraints)).toEqual([
+      { label: "Orders", value: 40, tone: "normal" },
+      { label: "Resources", value: 7, tone: "normal" },
+      { label: "Processes", value: 3, tone: "normal" },
+      { label: "Constraints", value: 2, tone: "danger" },
+    ]);
+  });
+
   it("Twin preview refleja el status real de cada capa (Understanding en danger por el material constraint)", () => {
     const graph = buildTwinGraph(model, orderConstraints);
     const preview = buildTwinPreview(graph);
@@ -80,5 +90,49 @@ describe("Command Center view model — 4. sin constraints -> empty state correc
 
     const health = buildOperationalHealth(emptyModel, []);
     expect(health).toEqual({ totalOrders: 0, affectedOrders: 0, totalConstraints: 0, totalProcesses: 0 });
+  });
+});
+
+describe("selectHeroMetrics — Twin simple (Guided Setup, sin pedidos)", () => {
+  function buildSimpleTwinModel(): OperationalModel {
+    return {
+      company: { name: "Metalúrgica Atlas", industry: "Metalúrgica" },
+      orders: [],
+      products: [
+        { id: "pieza-cortada", name: "Pieza cortada", unit: "unidades" },
+        { id: "pieza-soldada", name: "Pieza soldada", unit: "unidades" },
+      ],
+      materials: [],
+      inventory: [],
+      resources: [
+        { id: "r1", name: "Cortadora CNC", type: "Máquina", process: "Elaboración", quantityAvailable: 1, capacity: 0, capacityUnit: "" },
+        { id: "r2", name: "Soldadora 1", type: "Máquina", process: "Envasado", quantityAvailable: 1, capacity: 0, capacityUnit: "" },
+        { id: "r3", name: "Soldadora 2", type: "Máquina", process: "Envasado", quantityAvailable: 1, capacity: 0, capacityUnit: "" },
+        { id: "r4", name: "Cabina de pintura", type: "Máquina", process: "Codificado", quantityAvailable: 1, capacity: 0, capacityUnit: "" },
+      ],
+      profiles: [],
+    };
+  }
+
+  it("muestra Processes/Resources/Products cuando no hay pedidos — nunca Orders/Constraints en cero", () => {
+    const model = buildSimpleTwinModel();
+    expect(selectHeroMetrics(model, [])).toEqual([
+      { label: "Processes", value: 3, tone: "normal" },
+      { label: "Resources", value: 4, tone: "normal" },
+      { label: "Products", value: 2, tone: "normal" },
+    ]);
+  });
+
+  it("un Twin completamente vacío no devuelve ninguna métrica inventada", () => {
+    const model: OperationalModel = {
+      company: { name: "Empresa Nueva", industry: "" },
+      orders: [],
+      products: [],
+      materials: [],
+      inventory: [],
+      resources: [],
+      profiles: [],
+    };
+    expect(selectHeroMetrics(model, [])).toEqual([]);
   });
 });

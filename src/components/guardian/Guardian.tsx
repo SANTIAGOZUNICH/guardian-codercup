@@ -1,7 +1,9 @@
 "use client";
 
+import { useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/cn";
+import { useMotionSafe } from "@/lib/useMotionSafe";
 
 export type GuardianState =
   | "idle"
@@ -43,15 +45,24 @@ interface GuardianProps {
 }
 
 /**
- * Guardian — presencia visual premium (fallback 2D/CSS, sin dependencia de
- * WebGL/3D) construida con capas de glow + anillos animados vía CSS/Framer
- * Motion. El core cambia de color y velocidad de rotación según el estado,
- * para que la calidad percibida no dependa de un render 3D en tiempo real.
+ * ============================================================================
+ * Guardian — chassis pseudo-3D (Checkpoint 9A)
+ * ============================================================================
+ * Silueta de "device/robot" (badge/shield oscuro con dos ojos de luz),
+ * construida 100% en SVG — sin WebGL/3D real, sin dependencias nuevas. El
+ * chassis (material) es constante entre estados; solo la luz (ojos, arcos
+ * orbitales, rim light) cambia de color/velocidad según `STATE_COLOR` /
+ * `STATE_RING_SPEED`, exactamente como en la versión anterior — la API
+ * pública (`state`/`size`/`message`/`className`) no cambió, así que ningún
+ * caller necesita tocarse.
  */
 export function Guardian({ state, size = 132, message, className }: GuardianProps) {
   const color = STATE_COLOR[state];
   const ringSpeed = STATE_RING_SPEED[state];
   const isAlert = state === "alert";
+  const isActive = state === "analyzing" || state === "simulating";
+  const motionSafe = useMotionSafe();
+  const uid = useId().replace(/[:]/g, "");
 
   return (
     <div className={cn("flex flex-col items-center gap-6", className)}>
@@ -62,65 +73,121 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
       >
-        {/* Glow ambiental */}
+        {/* Glow ambiental — luz que el chassis proyecta al espacio que lo rodea */}
         <motion.div
-          className="absolute inset-[-40%] rounded-full blur-2xl"
-          style={{ background: color, opacity: 0.28 }}
-          animate={isAlert ? { opacity: [0.2, 0.45, 0.2] } : { opacity: [0.2, 0.32, 0.2] }}
-          transition={{ duration: isAlert ? 1 : 3, repeat: Infinity, ease: "easeInOut" }}
-        />
-
-        {/* Anillo orbital externo */}
-        <motion.div
-          className="absolute inset-0 rounded-full border"
-          style={{ borderColor: color, opacity: 0.35 }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: ringSpeed, repeat: Infinity, ease: "linear" }}
-        >
-          <span
-            className="absolute -top-[3px] left-1/2 h-[6px] w-[6px] -translate-x-1/2 rounded-full"
-            style={{ background: color, boxShadow: `0 0 12px 2px ${color}` }}
-          />
-        </motion.div>
-
-        {/* Anillo interno, sentido opuesto */}
-        <motion.div
-          className="absolute inset-[14%] rounded-full border border-dashed"
-          style={{ borderColor: color, opacity: 0.25 }}
-          animate={{ rotate: -360 }}
-          transition={{ duration: ringSpeed * 1.6, repeat: Infinity, ease: "linear" }}
-        />
-
-        {/* Core */}
-        <motion.div
-          className="absolute inset-[30%] rounded-full"
-          style={{
-            background: `radial-gradient(circle at 32% 28%, white 0%, ${color} 38%, rgba(0,0,0,0.4) 100%)`,
-            boxShadow: `0 0 40px -4px ${color}`,
-          }}
+          className="absolute inset-[-45%] rounded-full blur-2xl"
+          style={{ background: color, opacity: 0.26 }}
           animate={
-            state === "idle"
-              ? { scale: [1, 1.05, 1] }
+            !motionSafe
+              ? { opacity: 0.28 }
               : isAlert
-                ? { scale: [1, 1.12, 1] }
-                : { scale: [1, 1.08, 1] }
+                ? { opacity: [0.18, 0.42, 0.18] }
+                : { opacity: [0.18, 0.3, 0.18] }
           }
-          transition={{
-            duration: isAlert ? 0.9 : state === "analyzing" || state === "simulating" ? 1.4 : 2.6,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
+          transition={{ duration: isAlert ? 1 : 3, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
         />
 
-        {/* Partículas de análisis */}
-        {(state === "analyzing" || state === "simulating") && (
-          <motion.div
-            className="absolute inset-[-10%] rounded-full border border-dotted"
-            style={{ borderColor: color, opacity: 0.4 }}
-            animate={{ rotate: 360, scale: [1, 1.04, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: "linear" }}
-          />
-        )}
+        {/* Flotación ambiental muy lenta — todo el ensamble (chassis + ojos + arcos) se mueve como una sola pieza */}
+        <motion.div
+          className="absolute inset-0"
+          animate={!motionSafe ? { y: 0 } : { y: [0, -5, 0] }}
+          transition={{ duration: 5.5, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
+        >
+          <svg viewBox="0 0 200 200" className="h-full w-full" role="img" aria-label={`Guardian — ${state}`}>
+            <defs>
+              <linearGradient id={`chassis-${uid}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#171a24" />
+                <stop offset="55%" stopColor="#0e1017" />
+                <stop offset="100%" stopColor="#05060a" />
+              </linearGradient>
+              <radialGradient id={`highlight-${uid}`} cx="35%" cy="22%" r="55%">
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.16" />
+                <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id={`eye-${uid}`} cx="35%" cy="30%" r="65%">
+                <stop offset="0%" stopColor="#ffffff" />
+                <stop offset="45%" stopColor={color} />
+                <stop offset="100%" stopColor={color} stopOpacity="0" />
+              </radialGradient>
+              <clipPath id={`chassis-clip-${uid}`}>
+                <path d={CHASSIS_PATH} />
+              </clipPath>
+            </defs>
+
+            {/* Arcos orbitales — parciales (no anillos completos): sensores, no un "círculo mágico" */}
+            <motion.circle
+              cx={100}
+              cy={100}
+              r={94}
+              fill="none"
+              stroke={color}
+              strokeWidth={1.4}
+              strokeOpacity={0.4}
+              strokeDasharray="70 520"
+              strokeLinecap="round"
+              animate={!motionSafe ? { rotate: 20 } : { rotate: 380 }}
+              transition={{ duration: ringSpeed, repeat: motionSafe ? Infinity : 0, ease: "linear" }}
+              style={{ transformOrigin: "100px 100px" }}
+            />
+            <motion.circle
+              cx={100}
+              cy={100}
+              r={87}
+              fill="none"
+              stroke={color}
+              strokeWidth={1}
+              strokeOpacity={0.22}
+              strokeDasharray="40 480"
+              strokeLinecap="round"
+              animate={!motionSafe ? { rotate: -15 } : { rotate: -360 }}
+              transition={{ duration: ringSpeed * 1.7, repeat: motionSafe ? Infinity : 0, ease: "linear" }}
+              style={{ transformOrigin: "100px 100px" }}
+            />
+
+            {/* Chassis — material oscuro constante, nunca cambia con el estado */}
+            <path d={CHASSIS_PATH} fill={`url(#chassis-${uid})`} stroke={color} strokeOpacity={0.32} strokeWidth={1.25} />
+            <path d={CHASSIS_PATH} fill={`url(#highlight-${uid})`} clipPath={`url(#chassis-clip-${uid})`} />
+
+            {/* Partículas de análisis — mismo lenguaje que la versión anterior, ahora orbitando el chassis */}
+            {isActive && (
+              <motion.circle
+                cx={100}
+                cy={100}
+                r={104}
+                fill="none"
+                stroke={color}
+                strokeWidth={1}
+                strokeOpacity={0.3}
+                strokeDasharray="2 7"
+                animate={!motionSafe ? {} : { rotate: 360 }}
+                transition={{ duration: 1.8, repeat: motionSafe ? Infinity : 0, ease: "linear" }}
+                style={{ transformOrigin: "100px 100px" }}
+              />
+            )}
+
+            {/* Ojos — el único punto de luz "vivo" del chassis */}
+            <motion.g
+              animate={
+                !motionSafe
+                  ? { opacity: 1 }
+                  : isAlert
+                    ? { opacity: [0.75, 1, 0.75] }
+                    : { opacity: [0.8, 1, 0.8] }
+              }
+              transition={{
+                duration: isAlert ? 0.9 : isActive ? 1.3 : 2.8,
+                repeat: motionSafe ? Infinity : 0,
+                ease: "easeInOut",
+              }}
+            >
+              <circle cx={78} cy={96} r={7.5} fill={`url(#eye-${uid})`} />
+              <circle cx={122} cy={96} r={7.5} fill={`url(#eye-${uid})`} />
+            </motion.g>
+
+            {/* Luz de mentón — pequeño acento en el vértice inferior del chassis */}
+            <rect x={96} y={166} width={8} height={8} fill={color} opacity={0.65} transform="rotate(45 100 170)" rx={1.5} />
+          </svg>
+        </motion.div>
       </motion.div>
 
       <AnimatePresence mode="wait">
@@ -144,3 +211,11 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
     </div>
   );
 }
+
+/**
+ * Silueta "badge/shield" — hombros redondeados, se angosta hacia un vértice
+ * inferior. Referencia conceptual aprobada: un dispositivo/robot reconocible,
+ * no un círculo genérico de IA. viewBox fijo 200×200.
+ */
+const CHASSIS_PATH =
+  "M 62 48 C 78 34, 122 34, 138 48 C 152 60, 164 74, 162 88 C 158 118, 132 148, 100 172 C 68 148, 42 118, 38 88 C 36 74, 48 60, 62 48 Z";

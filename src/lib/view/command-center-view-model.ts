@@ -63,6 +63,46 @@ export function buildActiveConstraintSummary(
   };
 }
 
+export interface HeroMetric {
+  label: string;
+  value: number;
+  tone: "normal" | "warning" | "danger";
+}
+
+/**
+ * ============================================================================
+ * Adaptive Command Center — selección de métricas hero (Checkpoint 9A)
+ * ============================================================================
+ * Nunca un grid fijo de 4 casilleros: un Twin enriquecido (con pedidos
+ * cargados) muestra Orders/Resources/Processes/Constraints; un Twin simple
+ * (Guided Setup sin pedidos) muestra solo Processes/Resources/Products —
+ * nunca "0 Orders" ni "0 Constraints" para llenar espacio. Cada entrada
+ * cuenta algo que ya existe en `model`; esta función no calcula nada nuevo,
+ * solo decide qué subconjunto de lo real mostrar.
+ */
+export function selectHeroMetrics(model: OperationalModel, all: OrderConstraints[]): HeroMetric[] {
+  const health = buildOperationalHealth(model, all);
+
+  if (model.orders.length > 0) {
+    const metrics: HeroMetric[] = [
+      { label: "Orders", value: health.totalOrders, tone: "normal" },
+      { label: "Resources", value: model.resources.length, tone: "normal" },
+      { label: "Processes", value: health.totalProcesses, tone: "normal" },
+    ];
+    if (health.totalConstraints > 0) {
+      metrics.push({ label: "Constraints", value: health.totalConstraints, tone: "danger" });
+    }
+    return metrics;
+  }
+
+  // Twin simple (Guided Setup sin pedidos cargados) — solo lo que realmente existe.
+  const metrics: HeroMetric[] = [];
+  if (health.totalProcesses > 0) metrics.push({ label: "Processes", value: health.totalProcesses, tone: "normal" });
+  if (model.resources.length > 0) metrics.push({ label: "Resources", value: model.resources.length, tone: "normal" });
+  if (model.products.length > 0) metrics.push({ label: "Products", value: model.products.length, tone: "normal" });
+  return metrics;
+}
+
 export interface TwinPreviewLayer {
   label: string;
   count: number;
