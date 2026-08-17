@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { OperationalModel, OperationsCalendar, Order, ResourceAllocation } from "@/lib/types";
-import { evaluateScenario, baselineResourceConfig, projectCompletionDate, effectiveDeadline } from "./evaluate-scenario";
+import { evaluateScenario, baselineResourceConfig, projectCompletionDate, effectiveDeadline, canEvaluateMaterials } from "./evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
@@ -113,7 +113,7 @@ describe("evaluateScenario — caso 1: completamente viable", () => {
 
     // Elaboración: 1000u * 0.1kg = 100kg -> ceil(100/500)=1 batch; 2 reactores -> 1 ronda * 2h = 2h
     // Envasado: throughput = min(1000,1000)*1 = 1000 u/h -> 1000/1000 = 1h
-    expect(result.materialsFeasible).toBe(true);
+    expect(result.materialsFeasible).toBe("pass");
     expect(result.capacityFeasible).toBe(true);
     expect(result.feasible).toBe(true);
     expect(result.totalHoursNeeded).toBeCloseTo(3, 5);
@@ -130,12 +130,83 @@ describe("evaluateScenario — caso 2: material shortage", () => {
     const order = buildOrder({ quantity: 1000 });
     const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
 
-    expect(result.materialsFeasible).toBe(false);
+    expect(result.materialsFeasible).toBe("fail");
     expect(result.feasible).toBe(false);
     expect(result.materialShortages).toEqual([
       { materialCode: "MP-X", required: 100, available: 50, missing: 50, unit: "kg" },
     ]);
     expect(result.capacityFeasible).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Material Feasibility tri-state (Checkpoint 9B.1) — casos A-E, J obligatorios.
+// ---------------------------------------------------------------------------
+describe("Material Feasibility tri-state — casos obligatorios (Checkpoint 9B.1)", () => {
+  const noBomProfile = [
+    {
+      productId: "producto-x",
+      steps: [
+        { process: "Elaboración" as const, batchSize: 500, hoursPerBatch: 2, materialsPerUnit: [] },
+        { process: "Envasado" as const, ratePerHour: 1000, materialsPerUnit: [] },
+      ],
+    },
+  ];
+
+  it("CASO A — BOM✓ Inventory✓ stock suficiente -> pass", () => {
+    const model = buildFixtureModel(); // BOM real (MP-X) + inventory con 1000kg, necesita 100kg
+    const order = buildOrder({ quantity: 1000 });
+    expect(canEvaluateMaterials(model, order)).toBe(true);
+    const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
+    expect(result.materialsFeasible).toBe("pass");
+  });
+
+  it("CASO B — BOM✓ Inventory✓ stock insuficiente -> fail", () => {
+    const model = buildFixtureModel({ inventory: [{ materialCode: "MP-X", stock: 50, unit: "kg" }] }); // necesita 100kg
+    const order = buildOrder({ quantity: 1000 });
+    expect(canEvaluateMaterials(model, order)).toBe(true);
+    const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
+    expect(result.materialsFeasible).toBe("fail");
+  });
+
+  it("CASO C — BOM✕ Inventory✕ -> not_evaluated (nunca pass, nunca fail)", () => {
+    const model = buildFixtureModel({ profiles: noBomProfile, inventory: [] });
+    const order = buildOrder({ quantity: 1000 });
+    expect(canEvaluateMaterials(model, order)).toBe(false);
+    const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
+    expect(result.materialsFeasible).toBe("not_evaluated");
+    expect(result.materialShortages).toEqual([]); // nunca inventa un faltante
+  });
+
+  it("CASO D — BOM✕ Inventory✓ -> not_evaluated (no hay nada que comparar contra el inventario)", () => {
+    const model = buildFixtureModel({ profiles: noBomProfile }); // inventory queda el default (MP-X, 1000kg) — irrelevante, no hay BOM
+    const order = buildOrder({ quantity: 1000 });
+    expect(canEvaluateMaterials(model, order)).toBe(false);
+    const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
+    expect(result.materialsFeasible).toBe("not_evaluated");
+  });
+
+  it("CASO E — BOM✓ Inventory✕ -> not_evaluated (hay fórmula pero nunca se conectó inventario)", () => {
+    const model = buildFixtureModel({ inventory: [] }); // BOM real (MP-X) del fixture default, pero sin inventario
+    const order = buildOrder({ quantity: 1000 });
+    expect(canEvaluateMaterials(model, order)).toBe(false);
+    const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
+    expect(result.materialsFeasible).toBe("not_evaluated");
+    expect(result.materialShortages).toEqual([]); // ausencia de inventario nunca se lee como "stock = 0" en un shortage inventado
+  });
+
+  it("CASO J — inventory conectado con stock EXPLÍCITO en 0 -> se evalúa de verdad y puede dar fail (0 real ≠ inventario no conectado)", () => {
+    const model = buildFixtureModel({ inventory: [{ materialCode: "MP-X", stock: 0, unit: "kg" }] });
+    const order = buildOrder({ quantity: 1000 });
+    expect(canEvaluateMaterials(model, order)).toBe(true); // inventory SÍ está conectado (length > 0), solo que el stock real es 0
+    const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
+    expect(result.materialsFeasible).toBe("fail");
+    expect(result.materialShortages).toEqual([{ materialCode: "MP-X", required: 100, available: 0, missing: 100, unit: "kg" }]);
+  });
+
+  it("canEvaluateMaterials es independiente de evaluateScenario — se puede consultar sin correr el motor completo", () => {
+    expect(canEvaluateMaterials(buildFixtureModel(), buildOrder())).toBe(true);
+    expect(canEvaluateMaterials(buildFixtureModel({ inventory: [] }), buildOrder())).toBe(false);
   });
 });
 
@@ -149,7 +220,7 @@ describe("evaluateScenario — caso 3: capacidad insuficiente (sin deadline de p
     ];
     const result = evaluateScenario(model, order, configSinEnvasado, CALENDAR, FRIDAY_0800);
 
-    expect(result.materialsFeasible).toBe(true);
+    expect(result.materialsFeasible).toBe("pass");
     expect(result.capacityFeasible).toBe(false);
     expect(result.feasible).toBe(false);
     expect(result.completionAt).toBeNull();
@@ -168,7 +239,7 @@ describe("evaluateScenario — caso 4: deadline missed pero operacionalmente fea
     const order = buildOrder({ quantity: 100000, deliveryDate: "2026-08-16" }); // domingo, a 2 días de FRIDAY_0800
     const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
 
-    expect(result.materialsFeasible).toBe(true);
+    expect(result.materialsFeasible).toBe("pass");
     expect(result.capacityFeasible).toBe(true);
     expect(result.feasible).toBe(true); // operacionalmente realizable
     expect(result.deadlineMet).toBe(false); // pero no llega ni cerca a tiempo
@@ -500,7 +571,7 @@ describe("evaluateScenario — integración con el dataset demo real", () => {
     const config = baselineResourceConfig(model, order);
     const result = evaluateScenario(model, order, config, CALENDAR, FRIDAY_0800);
 
-    expect(result.materialsFeasible).toBe(false); // MP-003 ya sabemos que falta
+    expect(result.materialsFeasible).toBe("fail"); // MP-003 ya sabemos que falta
     expect(result.materialShortages.some((s) => s.materialCode === "MP-003")).toBe(true);
     expect(result.capacityFeasible).toBe(true); // con todos los recursos disponibles, la capacidad alcanza
     expect(result.feasible).toBe(false); // por el material, no por capacidad

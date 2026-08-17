@@ -61,7 +61,14 @@ export interface BaselineView {
 
 export function buildBaselineView(baseline: EvaluatedScenario): BaselineView {
   return {
-    materialsAvailable: baseline.result.materialsFeasible,
+    // Checkpoint 9B.1: `materialsAvailable` sigue siendo boolean acá para no
+    // tocar la UI existente todavía (BaselineCard.tsx) — colapsa "fail" y
+    // "not_evaluated" en el mismo `false`, nunca en `true` salvo "pass"
+    // confirmado. La distinción visual entre "fail" y "not_evaluated" queda
+    // para el checkpoint de Command Center/Ask Guardian (9B.6/9B.7); hoy es
+    // inalcanzable en la práctica porque todo profile de Genus declara BOM +
+    // inventario completos.
+    materialsAvailable: baseline.result.materialsFeasible === "pass",
     capacityFeasible: baseline.result.capacityFeasible,
     deadlineMet: baseline.result.deadlineMet,
     completionLabel: baseline.result.completionAt ? formatDisplayDate(baseline.result.completionAt) : "Cannot be estimated",
@@ -87,6 +94,11 @@ export interface PlanCardView {
 
 const BADGE_BY_KIND: Record<GoalOutcomeKind, string | null> = {
   fully_viable: "Recommended",
+  // Checkpoint 9B.1: distinto de "Recommended" a propósito — nunca sugiere
+  // que los materiales fueron confirmados. Hoy inalcanzable en la práctica
+  // (todo profile de Genus declara BOM+inventario completos); se activa
+  // cuando 9B.2 permita productos sin materiales conectados.
+  operationally_viable: "Operationally Viable",
   conditionally_viable: "Best Conditional Plan",
   deadline_missed: "Earliest Completion",
   infeasible: null,
@@ -118,7 +130,8 @@ export function buildPlanCardView(
     status: scenario.status,
     completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "Cannot be estimated",
     deadlineLabel,
-    materialsAvailable: scenario.result.materialsFeasible,
+    // Ver comentario en buildBaselineView — mismo colapso deliberado a boolean.
+    materialsAvailable: scenario.result.materialsFeasible === "pass",
     materialBlockerLabel: materialBlockerLabel(scenario),
     resourcesLabel: scenario.config.label,
     bottleneckProcess: scenario.result.bottleneck.process,
@@ -145,6 +158,7 @@ export function buildContextNote(scenarios: EvaluatedScenario[]): string | null 
 
 const HEADLINE_BY_KIND: Record<GoalOutcomeKind, string> = {
   fully_viable: "Recommended Plans",
+  operationally_viable: "Operationally Viable — Materials Not Evaluated",
   conditionally_viable: "No Fully Viable Plan Found",
   deadline_missed: "No Plan Meets the Current Deadline",
   infeasible: "No Feasible Configuration Found",
@@ -167,6 +181,8 @@ export function buildOutcomeGuardianMessage(result: GoalSimulationResult, disrup
   switch (kind) {
     case "fully_viable":
       return `Encontré una configuración que cumple el objetivo completo: materiales, capacidad y el deadline para ${goal.quantity.toLocaleString("es-AR")} ${goal.productName}.`;
+    case "operationally_viable":
+      return `Encontré una configuración que cumple capacidad y deadline para ${goal.quantity.toLocaleString("es-AR")} ${goal.productName}, pero todavía no tengo información de materiales para confirmar disponibilidad.`;
     case "conditionally_viable": {
       const blocker = candidates[0] ? materialBlockerLabel(candidates[0]) : null;
       return blocker
@@ -203,6 +219,8 @@ export interface WhyThisPlanView {
 
 const NARRATIVE_BY_KIND: Record<GoalOutcomeKind, string> = {
   fully_viable: "Guardian recommends this configuration because it meets every constraint of your operational model.",
+  operationally_viable:
+    "This configuration meets capacity and deadline requirements, but material availability has not been evaluated yet.",
   conditionally_viable: "This is the strongest configuration if the material constraint is resolved.",
   deadline_missed: "No available configuration meets the requested deadline. This is the earliest achievable completion.",
   infeasible: "No configuration is physically executable with the resources currently available for this goal.",
@@ -221,7 +239,7 @@ export function buildWhyThisPlanView(
 
   const reasons: string[] = [];
   if (top.result.deadlineMet) reasons.push("Meets deadline");
-  if (top.result.materialsFeasible) reasons.push("Materials available");
+  if (top.result.materialsFeasible === "pass") reasons.push("Materials available");
   reasons.push(
     top.extraResourcesUsed === 0 ? "Uses existing resources without extras" : "Uses minimal additional resources",
   );

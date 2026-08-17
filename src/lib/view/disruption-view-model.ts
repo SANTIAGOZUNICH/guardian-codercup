@@ -115,6 +115,7 @@ export function buildReSimulatingDisruptionLabel(resourceName: string): string {
 
 const GOAL_STATUS_LABEL: Record<GoalOutcomeKind, string> = {
   fully_viable: "Fully viable",
+  operationally_viable: "Operationally viable", // Checkpoint 9B.1 — materiales no evaluados, nunca "fully viable"
   conditionally_viable: "Conditional",
   deadline_missed: "Deadline missed",
   infeasible: "Infeasible",

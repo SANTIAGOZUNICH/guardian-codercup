@@ -169,6 +169,49 @@ export interface TwinCompleteness {
 
 /**
  * ============================================================================
+ * TWIN CAPABILITIES (Checkpoint 9B.1)
+ * ============================================================================
+ * "Capability" responde una pregunta distinta de `TwinCompleteness`:
+ * TwinCompleteness cuenta CUÁNTO se sabe (números); TwinCapabilities dice
+ * QUÉ TIPO de análisis GUARDIAN puede intentar con lo que hay — un booleano
+ * por dimensión, nunca un porcentaje. Se deriva 100% de `OperationalModel`,
+ * nunca se persiste por separado (ver `buildTwinCapabilities` en
+ * lib/model/twin-capabilities.ts) — exactamente el mismo principio que ya
+ * usa `TwinCompleteness`.
+ *
+ * IMPORTANTE — capability ≠ calidad del resultado: `materials: true` solo
+ * dice "hay BOM declarado para al menos un producto", nunca "los materiales
+ * alcanzan". Un Twin puede tener `materials: true` y aun así terminar en
+ * `MaterialFeasibility: "fail"` para un pedido puntual — son preguntas
+ * distintas (¿tengo el dato? vs. ¿qué dice el dato?).
+ */
+export interface TwinCapabilities {
+  /** Al menos un recurso de tipo Máquina declarado en algún proceso. */
+  productionFlow: boolean;
+  /** Al menos una máquina con capacidad > 0 declarada (no placeholder). */
+  resourceCapacity: boolean;
+  /** Al menos un recurso de tipo Personal declarado. Nunca bloquea ningún cálculo — puro contexto, igual que hoy. */
+  staffing: boolean;
+  /**
+   * Siempre `true` en la arquitectura actual: `OperationsCalendar` no vive
+   * dentro de `OperationalModel` todavía — el motor siempre tiene un
+   * calendario disponible vía `DEFAULT_OPERATIONS_CALENDAR` (reference_profile).
+   * Este campo existe para que un futuro calendario declarado por la empresa
+   * tenga un lugar natural acá sin cambiar la forma de `TwinCapabilities`.
+   */
+  scheduling: boolean;
+  /** Al menos un producto con ProductionProfile que declara batchSize/hoursPerBatch o ratePerHour — el dato mínimo de TIEMPO, independiente de materiales. */
+  productionReference: boolean;
+  /** Al menos un pedido cargado en el Twin. */
+  orders: boolean;
+  /** Al menos un producto con BOM declarado (materialsPerUnit no vacío en algún step de su profile). */
+  materials: boolean;
+  /** Hay datos de inventario cargados (aunque sea parcial/incompleto). */
+  inventory: boolean;
+}
+
+/**
+ * ============================================================================
  * SIMULATION CORE — tipos usados por evaluateScenario() (engine/evaluate-scenario.ts)
  * ============================================================================
  * Estos tipos son el contrato compartido entre Constraint Detection, el
@@ -216,22 +259,44 @@ export interface CapacityIssue {
 }
 
 /**
+ * ============================================================================
+ * MATERIAL FEASIBILITY — tri-state (Checkpoint 9B.1)
+ * ============================================================================
+ * Ausencia de datos NUNCA es equivalente a "pass". Un producto sin BOM
+ * declarado, o con BOM pero sin inventario conectado, no tiene forma real de
+ * evaluarse — eso es categóricamente distinto de "se evaluó y no hay
+ * faltante". Ver `canEvaluateMaterials()` en evaluate-scenario.ts para la
+ * regla exacta de cuándo una evaluación real es posible.
+ *
+ * - "pass": se evaluó contra BOM + inventario reales, sin faltantes.
+ * - "fail": se evaluó contra BOM + inventario reales, con al menos un faltante.
+ * - "not_evaluated": no hay BOM y/o inventario suficiente para evaluar — NUNCA
+ *   se interpreta como "no hay problema", ni tampoco como "hay un problema".
+ */
+export type MaterialFeasibility = "pass" | "fail" | "not_evaluated";
+
+/**
  * Resultado de evaluar UNA configuración de recursos contra UN pedido.
  *
  * Semántica deliberada (no son sinónimos):
- * - `materialsFeasible`: el stock alcanza para los materiales requeridos.
+ * - `materialsFeasible`: ver `MaterialFeasibility` arriba — nunca un booleano,
+ *   para que "no evaluado" nunca pueda confundirse con "sin faltantes".
  * - `capacityFeasible`: la configuración de recursos puede físicamente
  *   producir la cantidad pedida (throughput > 0 en cada etapa, unidades
- *   asignadas dentro de lo disponible) — SIN mirar el deadline.
+ *   asignadas dentro de lo disponible) — SIN mirar el deadline. Esto es
+ *   independiente de materiales y siempre se puede calcular con o sin BOM.
  * - `deadlineMet`: la fecha de finalización estimada cae en o antes del
- *   deadline del pedido. Puede ser `false` con `feasible: true` — un
+ *   deadline del pedido. Puede ser `false` con `capacityFeasible: true` — un
  *   escenario puede ser operacionalmente realizable pero terminar tarde.
- * - `feasible`: `materialsFeasible && capacityFeasible`. El deadline NO
- *   participa de este campo a propósito.
+ * - `feasible`: `materialsFeasible === "pass" && capacityFeasible`. Deliberadamente
+ *   estricto — nunca es `true` cuando los materiales no fueron confirmados,
+ *   así este campo nunca sugiere una validación que GUARDIAN no hizo. El
+ *   deadline NO participa de este campo a propósito (ver `PlanStatus` para la
+ *   clasificación que sí lo combina todo, con nombres que nunca prometen de más).
  */
 export interface ScenarioResult {
   orderId: string;
-  materialsFeasible: boolean;
+  materialsFeasible: MaterialFeasibility;
   capacityFeasible: boolean;
   deadlineMet: boolean;
   feasible: boolean;
@@ -358,14 +423,21 @@ export interface ContentionInfo {
 /**
  * Clasificación determinística de un escenario evaluado — reemplaza
  * cualquier lógica dispersa tipo `if (!materials && deadline...)` en JSX.
- * - fully_viable: materialsFeasible && capacityFeasible && deadlineMet.
+ * - fully_viable: materialsFeasible === "pass" && capacityFeasible && deadlineMet.
+ *   Solo existe cuando materiales fueron REALMENTE evaluados y dieron pass —
+ *   nunca cuando no se evaluaron (ver `operationally_viable` para ese caso).
+ * - operationally_viable (Checkpoint 9B.1): capacityFeasible && deadlineMet,
+ *   pero materialsFeasible === "not_evaluated". Deliberadamente un estado
+ *   propio, nunca colapsado en "fully_viable" — la palabra "fully" nunca debe
+ *   sugerir una validación de materiales que GUARDIAN no hizo.
  * - conditionally_viable: llegaría a tiempo (capacityFeasible && deadlineMet)
- *   pero está bloqueado por materiales — "funcionaría SI se resuelve el faltante".
+ *   pero está CONFIRMADO bloqueado por materiales (materialsFeasible === "fail")
+ *   — "funcionaría SI se resuelve el faltante". Nunca se usa para "no evaluado".
  * - deadline_missed: es físicamente ejecutable (capacityFeasible) pero no
- *   llega a tiempo (con o sin problema de materiales adicional).
+ *   llega a tiempo (con cualquier estado de materiales).
  * - infeasible: ni siquiera es físicamente ejecutable (capacityFeasible=false).
  */
-export type PlanStatus = "fully_viable" | "conditionally_viable" | "deadline_missed" | "infeasible";
+export type PlanStatus = "fully_viable" | "operationally_viable" | "conditionally_viable" | "deadline_missed" | "infeasible";
 
 export interface EvaluatedScenario {
   config: ScenarioConfig;
@@ -381,7 +453,7 @@ export interface EvaluatedScenario {
  * mostrar (Recommended Plans / Best Conditional Plan / No Plan Meets Deadline
  * / Infeasible). `candidates` ya viene ordenado, listo para mostrar tal cual.
  */
-export type GoalOutcomeKind = "fully_viable" | "conditionally_viable" | "deadline_missed" | "infeasible";
+export type GoalOutcomeKind = "fully_viable" | "operationally_viable" | "conditionally_viable" | "deadline_missed" | "infeasible";
 
 export interface GoalOutcome {
   kind: GoalOutcomeKind;
@@ -396,8 +468,8 @@ export interface GoalSimulationResult {
   scenarios: EvaluatedScenario[];
   /** scenarios, ordenado por rankScenarios(). */
   ranked: EvaluatedScenario[];
-  /** true si algún escenario generado cumple materialsFeasible (constante entre escenarios del mismo goal). */
-  materialsFeasible: boolean;
+  /** Estado de materiales del Goal (constante entre escenarios del mismo goal — ver MaterialFeasibility). */
+  materialsFeasible: MaterialFeasibility;
   outcome: GoalOutcome;
 }
 

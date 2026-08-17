@@ -4,6 +4,7 @@ import type {
   Goal,
   GoalOutcome,
   GoalSimulationResult,
+  MaterialFeasibility,
   OperationalModel,
   OperationsCalendar,
   Order,
@@ -50,6 +51,17 @@ import { baselineResourceConfig, evaluateScenario } from "./evaluate-scenario";
  */
 
 const MAX_SCENARIOS = 50;
+
+/**
+ * Orden de "mejor a peor" para MaterialFeasibility (Checkpoint 9B.1) — usado
+ * por rankScenarios/explainDominance. "not_evaluated" queda deliberadamente
+ * entre pass y fail: es estrictamente mejor que un faltante CONFIRMADO (fail),
+ * pero nunca se trata como equivalente a pass. En la práctica este criterio
+ * nunca desempata nada real: materialsFeasible es constante entre todos los
+ * escenarios de un mismo Goal (mismo pedido, mismo Twin) — queda acá para que
+ * la comparación nunca sea lógicamente incorrecta si algo cambia eso en el futuro.
+ */
+const MATERIAL_RANK: Record<MaterialFeasibility, number> = { pass: 0, not_evaluated: 1, fail: 2 };
 
 export function buildHypotheticalOrder(goal: Goal): Order {
   return {
@@ -208,9 +220,14 @@ export function computeExtraResourcesUsed(model: OperationalModel, config: Scena
  */
 export function classifyPlan(result: ScenarioResult): PlanStatus {
   if (!result.capacityFeasible) return "infeasible";
-  if (result.materialsFeasible && result.deadlineMet) return "fully_viable";
-  if (!result.materialsFeasible && result.deadlineMet) return "conditionally_viable";
-  return "deadline_missed";
+  if (!result.deadlineMet) return "deadline_missed";
+  // A partir de acá, capacityFeasible && deadlineMet — la única pregunta que queda es materiales.
+  if (result.materialsFeasible === "pass") return "fully_viable";
+  // "not_evaluated" NUNCA se etiqueta "fully_viable" (nunca sugiere una
+  // confirmación de materiales que no existió) ni "conditionally_viable"
+  // (eso implica un faltante CONFIRMADO, que tampoco es el caso).
+  if (result.materialsFeasible === "not_evaluated") return "operationally_viable";
+  return "conditionally_viable"; // materialsFeasible === "fail"
 }
 
 function completionTimeMs(s: EvaluatedScenario): number {
@@ -227,7 +244,9 @@ function completionTimeMs(s: EvaluatedScenario): number {
 export function rankScenarios(scenarios: EvaluatedScenario[]): EvaluatedScenario[] {
   return [...scenarios].sort((a, b) => {
     if (a.result.capacityFeasible !== b.result.capacityFeasible) return a.result.capacityFeasible ? -1 : 1;
-    if (a.result.materialsFeasible !== b.result.materialsFeasible) return a.result.materialsFeasible ? -1 : 1;
+    if (a.result.materialsFeasible !== b.result.materialsFeasible) {
+      return MATERIAL_RANK[a.result.materialsFeasible] - MATERIAL_RANK[b.result.materialsFeasible];
+    }
     if (a.result.deadlineMet !== b.result.deadlineMet) return a.result.deadlineMet ? -1 : 1;
 
     const timeDiff = completionTimeMs(a) - completionTimeMs(b);
@@ -255,7 +274,8 @@ export function explainDominance(a: EvaluatedScenario, b: EvaluatedScenario, lab
     return `${winner} es físicamente realizable con los recursos disponibles; ${loser} no.`;
   }
   if (a.result.materialsFeasible !== b.result.materialsFeasible) {
-    const [winner, loser] = a.result.materialsFeasible ? [labelA, labelB] : [labelB, labelA];
+    const aBetter = MATERIAL_RANK[a.result.materialsFeasible] < MATERIAL_RANK[b.result.materialsFeasible];
+    const [winner, loser] = aBetter ? [labelA, labelB] : [labelB, labelA];
     return `${winner} tiene los materiales disponibles; ${loser} no.`;
   }
   if (a.result.deadlineMet !== b.result.deadlineMet) {
@@ -291,11 +311,16 @@ export function explainDominance(a: EvaluatedScenario, b: EvaluatedScenario, lab
  * Decide qué tipo de resultado obtuvo el Goal en conjunto — determina qué
  * pantalla mostrar. Orden de evaluación (del más al menos severo):
  * 1. infeasible: NINGÚN escenario es siquiera físicamente ejecutable.
- * 2. fully_viable: existe al menos un escenario que cumple todo — Guardian
- *    puede recomendar, tal como pediste, NUNCA si esto no se cumple.
- * 3. conditionally_viable: ninguno cumple todo, pero alguno llegaría a
- *    tiempo si se resolviera el bloqueo de materiales.
- * 4. deadline_missed: los materiales no son el problema (o no alcanza para
+ * 2. fully_viable: existe al menos un escenario que cumple todo, CON
+ *    materiales confirmados — Guardian puede recomendar, NUNCA si esto no se
+ *    cumple.
+ * 3. operationally_viable (Checkpoint 9B.1): ninguno es fully_viable, pero
+ *    existe al menos uno que cumple capacidad+deadline con materiales
+ *    todavía no evaluados — nunca se etiqueta "fully_viable" ni
+ *    "conditionally_viable" (esta última implica un faltante confirmado).
+ * 4. conditionally_viable: ninguno de los anteriores, pero alguno llegaría a
+ *    tiempo si se resolviera un bloqueo de materiales CONFIRMADO.
+ * 5. deadline_missed: los materiales no son el problema (o no alcanza para
  *    salvarlo), pero ningún escenario llega a tiempo — se muestra el de
  *    finalización más temprana, nunca fingiendo que "cumple".
  */
@@ -308,6 +333,11 @@ export function resolveGoalOutcome(scenarios: EvaluatedScenario[]): GoalOutcome 
   const fullyViable = capacityFeasibleOnes.filter((s) => s.status === "fully_viable");
   if (fullyViable.length > 0) {
     return { kind: "fully_viable", candidates: rankScenarios(fullyViable) };
+  }
+
+  const operationallyViable = capacityFeasibleOnes.filter((s) => s.status === "operationally_viable");
+  if (operationallyViable.length > 0) {
+    return { kind: "operationally_viable", candidates: rankScenarios(operationallyViable) };
   }
 
   const deadlineCapable = capacityFeasibleOnes.filter((s) => s.result.deadlineMet);

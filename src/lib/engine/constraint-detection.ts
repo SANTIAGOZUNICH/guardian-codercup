@@ -31,7 +31,13 @@ export function deriveConstraints(
 ): Constraint[] {
   const constraints: Constraint[] = [];
 
-  if (!scenario.materialsFeasible) {
+  // "not_evaluated" NUNCA genera un material_shortage — no hay base real
+  // para afirmar un faltante. Tampoco se afirma lo contrario ("sin
+  // faltantes"): simplemente no se agrega ningún constraint de materiales.
+  // La distinción sigue disponible después, vía `scenario.materialsFeasible`
+  // (Checkpoint 9B.1) — OrderConstraints conserva el ScenarioResult completo,
+  // así que "nunca evaluado" nunca se pierde, aunque todavía no haya UI para mostrarlo.
+  if (scenario.materialsFeasible === "fail") {
     for (const shortage of scenario.materialShortages) {
       const material = model.materials.find((m) => m.code === shortage.materialCode);
       constraints.push({

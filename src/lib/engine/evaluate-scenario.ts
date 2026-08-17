@@ -1,5 +1,6 @@
 import type {
   CapacityIssue,
+  MaterialFeasibility,
   MaterialShortage,
   OperationalModel,
   OperationsCalendar,
@@ -25,12 +26,16 @@ export { DEFAULT_OPERATIONS_CALENDAR };
  * esta lógica (ver Day 1 Checkpoint 1).
  *
  * Semántica de feasibility (deliberadamente separada):
- * - materialsFeasible: stock alcanza para los materiales requeridos.
+ * - materialsFeasible: tri-state "pass"/"fail"/"not_evaluated" (Checkpoint 9B.1)
+ *   — ver `canEvaluateMaterials()` para la regla exacta de cuándo hay datos
+ *   suficientes. Ausencia de BOM/inventario NUNCA se lee como "pass".
  * - capacityFeasible: la configuración de recursos puede físicamente
- *   producir la cantidad pedida, sin mirar el deadline.
+ *   producir la cantidad pedida, sin mirar el deadline. Independiente de
+ *   materiales — se calcula igual con o sin BOM/inventario conectado.
  * - deadlineMet: la fecha estimada de finalización cae en o antes del
- *   deadline. Puede ser false con feasible=true.
- * - feasible: materialsFeasible && capacityFeasible (el deadline NO participa).
+ *   deadline. Puede ser false con capacityFeasible=true.
+ * - feasible: materialsFeasible === "pass" && capacityFeasible (el deadline
+ *   NO participa). Nunca true si los materiales no fueron confirmados.
  *
  * Supuestos declarados (no inventados en silencio):
  * - Personal (`Resource.type === "Personal"`) es SOLO una restricción de
@@ -51,10 +56,43 @@ export { DEFAULT_OPERATIONS_CALENDAR };
  *   explícitamente antes de llamar al motor (no lo resuelve este archivo).
  */
 
+/**
+ * ============================================================================
+ * Material Feasibility tri-state (Checkpoint 9B.1)
+ * ============================================================================
+ * "¿Puede evaluarse materiales para este pedido, con datos reales?" —
+ * deliberadamente NO se responde mirando `model.inventory.length === 0` a
+ * secas: puede existir inventario sin BOM (nada que necesitar) o BOM sin
+ * inventario (nada contra qué comparar). Ambas combinaciones son
+ * "not_evaluated", nunca "pass" ni "fail".
+ *
+ * Regla exacta:
+ * 1. El producto del pedido debe tener un ProductionProfile con AL MENOS un
+ *    step cuyo `materialsPerUnit` no esté vacío (hay una fórmula/BOM real
+ *    declarada) — si no, no hay nada que calcular.
+ * 2. El Twin debe tener datos de inventario cargados (`model.inventory.length > 0`)
+ *    — si no, no hay contra qué comparar la necesidad calculada, aunque el
+ *    BOM exista.
+ *
+ * Solo cuando AMBAS condiciones se cumplen se ejecuta la comparación real
+ * contra stock (incluyendo un stock explícito de 0 — eso SÍ es un dato real,
+ * distinto de "nunca se cargó inventario").
+ */
+export function canEvaluateMaterials(model: OperationalModel, order: Order): boolean {
+  const profile = model.profiles.find((p) => p.productId === order.productId);
+  const bomDeclared = !!profile && profile.steps.some((s) => s.materialsPerUnit.length > 0);
+  if (!bomDeclared) return false;
+  return model.inventory.length > 0;
+}
+
 function evaluateMaterials(
   model: OperationalModel,
   order: Order,
-): { feasible: boolean; shortages: MaterialShortage[] } {
+): { status: MaterialFeasibility; shortages: MaterialShortage[] } {
+  if (!canEvaluateMaterials(model, order)) {
+    return { status: "not_evaluated", shortages: [] };
+  }
+
   const needs = computeMaterialNeeds(order, model);
   const shortages: MaterialShortage[] = [];
 
@@ -72,7 +110,7 @@ function evaluateMaterials(
       });
     }
   }
-  return { feasible: shortages.length === 0, shortages };
+  return { status: shortages.length === 0 ? "pass" : "fail", shortages };
 }
 
 function allocationFor(resourceConfig: ResourceAllocation[], resourceId: string) {
@@ -274,7 +312,7 @@ export function evaluateScenario(
     throw new Error(`No hay ProductionProfile para "${order.productId}" — no se puede evaluar el escenario.`);
   }
 
-  const { feasible: materialsFeasible, shortages } = evaluateMaterials(model, order);
+  const { status: materialsFeasible, shortages } = evaluateMaterials(model, order);
 
   const steps: StepEvaluation[] = [];
   const capacityIssues: CapacityIssue[] = [];
@@ -305,7 +343,9 @@ export function evaluateScenario(
     materialsFeasible,
     capacityFeasible,
     deadlineMet,
-    feasible: materialsFeasible && capacityFeasible,
+    // Deliberadamente estricto: "not_evaluated" nunca cuenta como feasible,
+    // así este campo nunca sugiere una confirmación de materiales que no existió.
+    feasible: materialsFeasible === "pass" && capacityFeasible,
     totalHoursNeeded,
     completionAt,
     steps,

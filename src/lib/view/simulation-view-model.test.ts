@@ -70,7 +70,7 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para T
 
   it("buildBaselineView: refleja el faltante real de materiales en la config actual", () => {
     const baseline = buildBaselineView(result.baseline);
-    expect(baseline.materialsAvailable).toBe(result.baseline.result.materialsFeasible);
+    expect(baseline.materialsAvailable).toBe(result.baseline.result.materialsFeasible === "pass");
     expect(baseline.capacityFeasible).toBe(result.baseline.result.capacityFeasible);
     expect(baseline.deadlineMet).toBe(result.baseline.result.deadlineMet);
     if (!baseline.materialsAvailable) {

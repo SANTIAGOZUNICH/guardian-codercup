@@ -96,7 +96,7 @@ describe("buildOperationalImpactView — casos sintéticos (items 13/14/21)", ()
       config: { id: "baseline", label: "Current configuration", resourceConfig: [] },
       result: {
         orderId: "HYPOTHETICAL-GOAL",
-        materialsFeasible: true,
+        materialsFeasible: "pass" as const,
         capacityFeasible: true,
         deadlineMet: true,
         feasible: true,
@@ -119,7 +119,7 @@ describe("buildOperationalImpactView — casos sintéticos (items 13/14/21)", ()
       baseline,
       scenarios: top ? [top] : [],
       ranked: top ? [top] : [],
-      materialsFeasible: true,
+      materialsFeasible: "pass",
       outcome: { kind: overrides.outcomeKind, candidates: top ? [top] : [] },
     };
   }

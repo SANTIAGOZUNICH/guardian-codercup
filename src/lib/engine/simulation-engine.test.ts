@@ -147,7 +147,7 @@ describe("classifyPlan — Plan Status (item 5)", () => {
   function result(overrides: Partial<ScenarioResult>): ScenarioResult {
     return {
       orderId: "X",
-      materialsFeasible: true,
+      materialsFeasible: "pass",
       capacityFeasible: true,
       deadlineMet: true,
       feasible: true,
@@ -166,7 +166,7 @@ describe("classifyPlan — Plan Status (item 5)", () => {
   });
 
   it("2. deadline met + material shortage -> conditionally_viable (nunca fully_viable)", () => {
-    expect(classifyPlan(result({ materialsFeasible: false, feasible: false }))).toBe("conditionally_viable");
+    expect(classifyPlan(result({ materialsFeasible: "fail", feasible: false }))).toBe("conditionally_viable");
   });
 
   it("3. materials ok + deadline missed -> deadline_missed", () => {
@@ -174,11 +174,21 @@ describe("classifyPlan — Plan Status (item 5)", () => {
   });
 
   it("4. material shortage + deadline missed -> deadline_missed (no se confunde con conditionally_viable)", () => {
-    expect(classifyPlan(result({ materialsFeasible: false, deadlineMet: false, feasible: false }))).toBe("deadline_missed");
+    expect(classifyPlan(result({ materialsFeasible: "fail", deadlineMet: false, feasible: false }))).toBe("deadline_missed");
   });
 
   it("capacityFeasible false -> infeasible, sin importar el resto", () => {
     expect(classifyPlan(result({ capacityFeasible: false, deadlineMet: false, completionAt: null }))).toBe("infeasible");
+  });
+
+  it("5. Checkpoint 9B.1 — capacity ok + deadline ok + materials NOT_EVALUATED -> operationally_viable, NUNCA fully_viable", () => {
+    const status = classifyPlan(result({ materialsFeasible: "not_evaluated", feasible: false }));
+    expect(status).toBe("operationally_viable");
+    expect(status).not.toBe("fully_viable");
+  });
+
+  it("6. Checkpoint 9B.1 — materials NOT_EVALUATED + deadline missed -> deadline_missed (no operationally_viable)", () => {
+    expect(classifyPlan(result({ materialsFeasible: "not_evaluated", deadlineMet: false, feasible: false }))).toBe("deadline_missed");
   });
 });
 
@@ -188,9 +198,14 @@ describe("resolveGoalOutcome — nunca recomendar un plan que no sea fully viabl
       config: { id, label: id, resourceConfig: [] },
       result: {
         orderId: "X",
-        materialsFeasible: status !== "conditionally_viable" && status !== "deadline_missed",
+        materialsFeasible:
+          status === "conditionally_viable" || status === "deadline_missed"
+            ? "fail"
+            : status === "operationally_viable"
+              ? "not_evaluated"
+              : "pass",
         capacityFeasible: status !== "infeasible",
-        deadlineMet: status === "fully_viable" || status === "conditionally_viable",
+        deadlineMet: status === "fully_viable" || status === "conditionally_viable" || status === "operationally_viable",
         feasible: status === "fully_viable",
         totalHoursNeeded: 10,
         completionAt: status === "infeasible" ? null : "2026-08-20T10:00:00.000",
@@ -227,6 +242,15 @@ describe("resolveGoalOutcome — nunca recomendar un plan que no sea fully viabl
     expect(outcome.kind).toBe("infeasible");
   });
 
+  it("Checkpoint 9B.1 — ningún fully_viable, pero hay operationally_viable -> outcome operationally_viable, nunca fully_viable ni conditionally_viable", () => {
+    const ov = scenario("operationally_viable");
+    const cv = scenario("conditionally_viable", {}, "cv3");
+    const outcome = resolveGoalOutcome([ov, cv]);
+    expect(outcome.kind).toBe("operationally_viable");
+    expect(outcome.kind).not.toBe("fully_viable");
+    expect(outcome.candidates.every((s) => s.status === "operationally_viable")).toBe(true);
+  });
+
   it("caso C: materiales ok pero nadie llega a tiempo -> deadline_missed", () => {
     const outcome = resolveGoalOutcome([scenario("deadline_missed")]);
     expect(outcome.kind).toBe("deadline_missed");
@@ -244,7 +268,7 @@ describe("rankScenarios — sin contención como criterio (item 7)", () => {
       config,
       result: {
         orderId: "X",
-        materialsFeasible: true,
+        materialsFeasible: "pass",
         capacityFeasible: true,
         deadlineMet: true,
         feasible: true,
@@ -312,7 +336,7 @@ describe("explainDominance — nunca afirma un hecho falso sobre el deadline (bu
       config,
       result: {
         orderId: "X",
-        materialsFeasible: true,
+        materialsFeasible: "pass",
         capacityFeasible: true,
         deadlineMet: true,
         feasible: true,
@@ -377,7 +401,7 @@ describe("simulateGoal — integración con el dataset demo real", () => {
     const result = simulateGoal(model, parsed.goal, CALENDAR, DEMO_SNAPSHOT_AT);
     // Elaboración (2 opciones) × Envasado L1/L2/ambas (3 opciones) — sin la dimensión de prioridad ya retirada.
     expect(result.scenarios).toHaveLength(6);
-    expect(result.materialsFeasible).toBe(false); // 30.000 excede el stock de MP-003
+    expect(result.materialsFeasible).toBe("fail"); // 30.000 excede el stock de MP-003
     expect(result.outcome.kind).toBe("conditionally_viable"); // ninguno fully viable, pero algunos llegan a tiempo
     expect(result.outcome.candidates.every((s) => s.status === "conditionally_viable")).toBe(true);
     expect(result.outcome.candidates.length).toBeGreaterThan(0);

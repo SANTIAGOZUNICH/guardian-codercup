@@ -122,7 +122,7 @@ describe("Constraint Detection — caso 3: solo deadline missed", () => {
     const scenario = evalBaseline(modelStockAmplio, order);
     const constraints = deriveConstraints(modelStockAmplio, order, scenario, CALENDAR);
 
-    expect(scenario.materialsFeasible).toBe(true);
+    expect(scenario.materialsFeasible).toBe("pass");
     expect(constraints).toHaveLength(1);
     expect(constraints[0].kind).toBe("deadline_at_risk");
     if (constraints[0].kind === "deadline_at_risk") {
@@ -250,6 +250,56 @@ describe("Constraint Detection — caso 8: agregar capacidad modifica completion
 
     // Pero el completion/deadline sí cambia: con más capacidad, termina antes (menos tarde, o a tiempo).
     expect(scenarioMucha.totalHoursNeeded).toBeLessThan(scenarioPoca.totalHoursNeeded);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Material Feasibility tri-state y Constraint Detection (Checkpoint 9B.1) —
+// casos H/I obligatorios.
+// ---------------------------------------------------------------------------
+describe("Constraint Detection — materiales not_evaluated nunca generan un shortage falso (Checkpoint 9B.1)", () => {
+  const noBomProfile = [
+    {
+      productId: "producto-x",
+      steps: [
+        { process: "Elaboración" as const, batchSize: 500, hoursPerBatch: 2, materialsPerUnit: [] },
+        { process: "Envasado" as const, ratePerHour: 1000, materialsPerUnit: [] },
+      ],
+    },
+  ];
+
+  it("CASO H — materials fail -> genera material_shortage real, con los datos reales del faltante", () => {
+    const model = buildFixtureModel({ inventory: [{ materialCode: "MP-X", stock: 50, unit: "kg" }] }); // necesita 100kg
+    const order = buildOrder();
+    const scenario = evalBaseline(model, order);
+    const constraints = deriveConstraints(model, order, scenario, CALENDAR);
+
+    expect(scenario.materialsFeasible).toBe("fail");
+    expect(constraints.some((c) => c.kind === "material_shortage")).toBe(true);
+  });
+
+  it("CASO I — materials not_evaluated (sin BOM ni inventario) -> cero material_shortage, pero el estado 'not_evaluated' sigue disponible vía scenario.materialsFeasible para una futura UI", () => {
+    const order = buildOrder();
+    const model = buildFixtureModel({ profiles: noBomProfile, inventory: [], orders: [order] });
+    const scenario = evalBaseline(model, order);
+    const constraints = deriveConstraints(model, order, scenario, CALENDAR);
+
+    expect(scenario.materialsFeasible).toBe("not_evaluated");
+    expect(constraints.some((c) => c.kind === "material_shortage")).toBe(false);
+    // La info de capability nunca se pierde: OrderConstraints conserva el ScenarioResult completo.
+    const orderConstraints = detectConstraints(model, CALENDAR, FRIDAY_0800);
+    const oc = orderConstraints.find((r) => r.orderId === order.id)!;
+    expect(oc.scenario.materialsFeasible).toBe("not_evaluated");
+  });
+
+  it("materials not_evaluated con deadline también en riesgo -> deadline_at_risk sigue funcionando sin materiales", () => {
+    const model = buildFixtureModel({ profiles: noBomProfile, inventory: [] });
+    const order = buildOrder({ quantity: 1_000_000, deliveryDate: "2026-08-14" }); // imposible en tiempo
+    const scenario = evalBaseline(model, order);
+    const constraints = deriveConstraints(model, order, scenario, CALENDAR);
+
+    expect(scenario.materialsFeasible).toBe("not_evaluated");
+    expect(constraints.map((c) => c.kind)).toEqual(["deadline_at_risk"]);
   });
 });
 
