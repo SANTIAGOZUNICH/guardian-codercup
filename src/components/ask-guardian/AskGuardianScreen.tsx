@@ -250,7 +250,7 @@ export function AskGuardianScreen({
         </div>
 
         {error && (
-          <p className="mt-3 rounded-[var(--radius-sm)] border border-risk-high/30 bg-risk-high-soft px-4 py-3 text-sm text-risk-high">
+          <p className="mt-3 whitespace-pre-line rounded-[var(--radius-sm)] border border-risk-high/30 bg-risk-high-soft px-4 py-3 text-sm text-risk-high">
             Guardian: {error}
           </p>
         )}

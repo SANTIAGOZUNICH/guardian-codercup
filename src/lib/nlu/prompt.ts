@@ -19,6 +19,7 @@ export const NLU_SYSTEM_PROMPT = [
   "- Cuando el texto no tiene relacion con produccion, recursos, capacidad u objetivos operativos, status: irrelevant.",
   "- Cuando el texto no se puede relacionar con NINGUNA informacion operacional real (nonsense), status: nonsense. Nunca guardes nada de ahi.",
   "- Cuando describe una operacion real pero el motor no la soporta hoy (ausentismo, mantenimiento predictivo, IoT, delays de materiales, multi-planta), status: unsupported.",
+  "- Cuando status es unsupported, unsupportedReason debe ser una frase corta (3-6 palabras) que nombra la categoria del escenario, en minuscula, sin punto final y sin repetir 'que queres analizar' (eso ya lo agrega la UI aparte). Ejemplos de frases esperadas: 'una reduccion de personal' para ausentismo, 'un retraso de abastecimiento' para demoras de proveedores. Nunca una oracion completa.",
   "- Corregi errores de tipeo y fonetica con confianza razonable (yenedora -> llenadora, produsir -> producir, 30mil -> 30000) y marca status: understood_with_correction.",
   "- Si el texto se entiende directamente sin necesitar correccion visible, status: understood.",
   "- Si falta un dato puntual (ej. capacidad de una maquina que si se nombro), status: missing_information y dejalo null en la entidad — nunca lo completes con un valor tipico de la industria.",

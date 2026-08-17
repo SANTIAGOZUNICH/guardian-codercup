@@ -21,6 +21,7 @@ import { INDUSTRY_SUGGESTIONS } from "@/data/industries";
 import { InterpretationCard } from "@/components/nlu/InterpretationCard";
 import { interpretWithAI } from "@/lib/nlu/client";
 import { AI_UNAVAILABLE_MESSAGE, buildBlockedMessage, isBlockedStatus } from "@/lib/nlu/interpretation-view-model";
+import { detectResourceCapacityMismatch } from "@/lib/nlu/validation";
 import type { NluEntities } from "@/lib/nlu/types";
 import {
   processEntriesFromNluEntities,
@@ -166,6 +167,16 @@ function AiAssistBlock({
       setError(buildBlockedMessage(r));
       return;
     }
+    // Guardrail determinístico (nunca confía en el status de la IA): si el
+    // texto menciona 2+ capacidades distintas pero las entidades las
+    // colapsaron en un solo recurso, nunca se ofrece un confirm que podría
+    // ocultar la capacidad perdida — se pide reformular explícitamente.
+    if (context === "guided_setup_resource" && detectResourceCapacityMismatch(draft, r.entities.resources)) {
+      setError(
+        'Guardian detectó una posible inconsistencia: mencionaste más de una capacidad distinta, pero la interpretación no las separó correctamente. Probá describiendo cada máquina por separado, por ejemplo: "Llenadora 1, 1800 por hora" y después "Llenadora 2, 1500 por hora".',
+      );
+      return;
+    }
     setPendingEntities(r.entities);
     setConfirmText(r.interpretedText);
     setMode("confirm");
@@ -221,7 +232,7 @@ function AiAssistBlock({
           Cancelar
         </Button>
       </div>
-      {error && <p className="text-xs text-risk-high">{error}</p>}
+      {error && <p className="whitespace-pre-line text-xs text-risk-high">{error}</p>}
     </div>
   );
 }

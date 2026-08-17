@@ -149,9 +149,13 @@ async function main() {
       entityCorrect: number;
       ambiguityTotal: number;
       ambiguityCorrect: number;
+      unsupportedTotal: number;
+      unsupportedCorrect: number;
       rejectionTotal: number;
       rejectionCorrect: number;
+      structuredValid: number;
       invented: number;
+      unsafeAccepted: number;
       totalLatencyMs: number;
       failures: string[];
     }
@@ -165,9 +169,13 @@ async function main() {
       entityCorrect: 0,
       ambiguityTotal: 0,
       ambiguityCorrect: 0,
+      unsupportedTotal: 0,
+      unsupportedCorrect: 0,
       rejectionTotal: 0,
       rejectionCorrect: 0,
+      structuredValid: 0,
       invented: 0,
+      unsafeAccepted: 0,
       totalLatencyMs: 0,
       failures: [],
     };
@@ -191,6 +199,7 @@ async function main() {
         console.log(`${model.padEnd(22)} ${testCase.id.padEnd(22)} ERROR ${r.latencyMs}ms (${r.error})`);
         continue;
       }
+      s.structuredValid += 1;
 
       const statusCorrect = r.response.status === testCase.expectedStatus;
 
@@ -209,14 +218,35 @@ async function main() {
         if (statusCorrect) s.ambiguityCorrect += 1;
       }
 
+      if (testCase.category === "unsupported") {
+        s.unsupportedTotal += 1;
+        if (statusCorrect) s.unsupportedCorrect += 1;
+      }
+
       if (testCase.category === "irrelevant" || testCase.category === "nonsense") {
         s.rejectionTotal += 1;
         if (statusCorrect) s.rejectionCorrect += 1;
       }
 
-      if (hasInventedNumbers(testCase.text, r.response)) {
+      const invented = hasInventedNumbers(testCase.text, r.response);
+      if (invented) {
         s.invented += 1;
         s.failures.push(`[${testCase.id}] POSIBLE HECHO INVENTADO: entidades tienen un número ausente del texto original`);
+      }
+
+      // "Unsafe accepted": una categoría que el motor NUNCA debería aplicar
+      // sin fricción (ambiguous/incomplete/unsupported/irrelevant/nonsense)
+      // termina con status "understood" — en Ask Guardian eso se aplica
+      // directo, sin ninguna card de confirmación humana de por medio. Un
+      // hecho inventado en un caso aceptado cuenta igual: ambos son datos
+      // que llegarían al motor sin que nadie los haya podido revisar.
+      const expectedBlocking = ["ambiguous", "incomplete", "unsupported", "irrelevant", "nonsense"].includes(testCase.category);
+      const frictionlessWrongAccept = expectedBlocking && r.response.status === "understood";
+      if (frictionlessWrongAccept) {
+        s.failures.push(`[${testCase.id}] UNSAFE_ACCEPTED: esperaba bloqueo (${testCase.category}) pero status=understood, sin confirmación humana`);
+      }
+      if (frictionlessWrongAccept || invented) {
+        s.unsafeAccepted += 1;
       }
 
       if (!statusCorrect) {
@@ -230,13 +260,15 @@ async function main() {
   }
 
   console.log("\n==================== RESUMEN ====================\n");
-  console.log("| Model | Correct intent | Correct entities | Ambiguity | Irrelevant/Nonsense rejection | Hallucinations | Avg latency |");
-  console.log("|---|---|---|---|---|---|---|");
+  console.log(
+    "| Model | Intent correcto | Entidades correctas | Ambigüedad correcta | Unsupported correcto | Irrelevant/Nonsense | Structured output válido | Hallucinations | Unsafe accepted | Avg latency |",
+  );
+  console.log("|---|---|---|---|---|---|---|---|---|---|");
   for (const model of MODELS) {
     const s = summary[model];
     const avgLatency = (s.totalLatencyMs / s.total).toFixed(0);
     console.log(
-      `| ${model} | ${s.intentCorrect}/${s.intentTotal} | ${s.entityCorrect}/${s.entityChecked} | ${s.ambiguityCorrect}/${s.ambiguityTotal} | ${s.rejectionCorrect}/${s.rejectionTotal} | ${s.invented} | ${avgLatency}ms |`,
+      `| ${model} | ${s.intentCorrect}/${s.intentTotal} | ${s.entityCorrect}/${s.entityChecked} | ${s.ambiguityCorrect}/${s.ambiguityTotal} | ${s.unsupportedCorrect}/${s.unsupportedTotal} | ${s.rejectionCorrect}/${s.rejectionTotal} | ${s.structuredValid}/${s.total} | ${s.invented} | ${s.unsafeAccepted} | ${avgLatency}ms |`,
     );
   }
 

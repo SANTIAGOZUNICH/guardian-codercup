@@ -11,9 +11,38 @@ export function buildClarificationMessage(response: InterpretationResponse): str
   return response.clarificationQuestion ?? "No pude interpretar eso con seguridad. ¿Podés reformularlo?";
 }
 
+function stripAccentsLower(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+
+/**
+ * Categorías conocidas del motor -> frase canónica + qué le falta
+ * concretamente. La IA da texto libre (nunca garantizado palabra por
+ * palabra, ej. puede omitir tildes) — cuando el texto matchea una categoría
+ * conocida por keyword, se usa la frase canónica en vez del texto crudo de
+ * la IA, para que el copy final sea siempre estable y bien escrito. Una
+ * categoría no reconocida cae en un fallback honesto con el texto real de
+ * la IA, nunca en una frase inventada sobre qué SÍ se soporta.
+ */
+const UNSUPPORTED_CATEGORIES: { keywords: string[]; reason: string; gap: string }[] = [
+  { keywords: ["personal", "empleado", "dotacion", "ausentismo"], reason: "una reducción de personal", gap: "modela ausentismo" },
+  { keywords: ["proveedor", "abastecimiento", "insumo"], reason: "un retraso de abastecimiento", gap: "simula retrasos de proveedores" },
+  { keywords: ["terceriz"], reason: "una tercerización de producción", gap: "simula tercerización de producción" },
+  { keywords: ["mantenimiento", "predictivo"], reason: "mantenimiento predictivo", gap: "simula mantenimiento predictivo" },
+  { keywords: ["planta", "sede", "multiplanta"], reason: "múltiples plantas", gap: "simula múltiples plantas" },
+  { keywords: ["iot", "sensor"], reason: "sensores IoT", gap: "integra sensores IoT" },
+];
+
 export function buildUnsupportedMessage(response: InterpretationResponse): string {
-  const reason = response.unsupportedReason ?? "ese tipo de escenario";
-  return `Entiendo lo que querés analizar, pero GUARDIAN todavía no simula ${reason}.`;
+  const rawReason = (response.unsupportedReason ?? "ese escenario").trim();
+  const normalizedReason = stripAccentsLower(rawReason);
+  const match = UNSUPPORTED_CATEGORIES.find((entry) => entry.keywords.some((k) => normalizedReason.includes(k)));
+  const reason = match?.reason ?? rawReason;
+  const gap = match?.gap ?? "simula ese escenario";
+  return `Entiendo que querés analizar ${reason}.\n\nEsta versión de GUARDIAN todavía no ${gap}.`;
 }
 
 export const IRRELEVANT_MESSAGE =

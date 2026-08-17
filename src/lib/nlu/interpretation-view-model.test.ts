@@ -49,10 +49,24 @@ describe("interpretation-view-model", () => {
     expect(buildClarificationMessage(r)).toContain("reformular");
   });
 
-  it("buildUnsupportedMessage nombra la razón real dada por la IA, nunca un texto genérico inventado", () => {
-    const r = response({ status: "unsupported", unsupportedReason: "ausentismo de personal" });
+  it("buildUnsupportedMessage nombra la razón real dada por la IA y arma un mensaje de 2 líneas sin duplicación gramatical", () => {
+    const r = response({ status: "unsupported", unsupportedReason: "una reducción de personal" });
     expect(buildUnsupportedMessage(r)).toBe(
-      "Entiendo lo que querés analizar, pero GUARDIAN todavía no simula ausentismo de personal.",
+      "Entiendo que querés analizar una reducción de personal.\n\nEsta versión de GUARDIAN todavía no modela ausentismo.",
+    );
+  });
+
+  it("buildUnsupportedMessage reconoce la categoría de retraso de proveedores", () => {
+    const r = response({ status: "unsupported", unsupportedReason: "un retraso de abastecimiento" });
+    expect(buildUnsupportedMessage(r)).toBe(
+      "Entiendo que querés analizar un retraso de abastecimiento.\n\nEsta versión de GUARDIAN todavía no simula retrasos de proveedores.",
+    );
+  });
+
+  it("buildUnsupportedMessage cae en un fallback honesto para categorías no reconocidas, nunca inventa qué SÍ se soporta", () => {
+    const r = response({ status: "unsupported", unsupportedReason: "fabricación en otro país" });
+    expect(buildUnsupportedMessage(r)).toBe(
+      "Entiendo que querés analizar fabricación en otro país.\n\nEsta versión de GUARDIAN todavía no simula ese escenario.",
     );
   });
 
