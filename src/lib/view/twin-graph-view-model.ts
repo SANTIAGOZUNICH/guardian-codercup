@@ -70,6 +70,8 @@ export function buildTwinGraph(
   const affected = orderConstraints.filter((oc) => oc.constraints.length > 0);
   const bottleneckSeverityByProcess = new Map<string, "critical" | "high">();
   for (const oc of affected) {
+    // Sin Production Reference evaluable no hay ningún step que resaltar — nunca se inventa uno.
+    if (!oc.scenario.bottleneck) continue;
     const process = oc.scenario.bottleneck.process;
     const current = bottleneckSeverityByProcess.get(process);
     if (oc.severity === "critical" || (oc.severity === "high" && current !== "critical")) {
@@ -78,9 +80,9 @@ export function buildTwinGraph(
   }
 
   const materialsInBom = new Set(
-    model.profiles.flatMap((p) => p.steps.flatMap((s) => s.materialsPerUnit.map((m) => m.materialCode))),
+    model.profiles.flatMap((p) => p.materials.flatMap((s) => s.materialsPerUnit.map((m) => m.materialCode))),
   ).size;
-  const processesInProfiles = new Set(model.profiles.flatMap((p) => p.steps.map((s) => s.process))).size;
+  const processesInProfiles = new Set(model.profiles.flatMap((p) => p.productionReference.map((s) => s.process))).size;
 
   const constraintsStatus: GraphNodeStatus = allConstraints.length === 0 ? "normal" : hasCritical ? "danger" : "warning";
 

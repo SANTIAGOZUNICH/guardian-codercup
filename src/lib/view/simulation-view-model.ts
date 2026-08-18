@@ -72,8 +72,8 @@ export function buildBaselineView(baseline: EvaluatedScenario): BaselineView {
     capacityFeasible: baseline.result.capacityFeasible,
     deadlineMet: baseline.result.deadlineMet,
     completionLabel: baseline.result.completionAt ? formatDisplayDate(baseline.result.completionAt) : "Cannot be estimated",
-    bottleneckProcess: baseline.result.bottleneck.process,
-    bottleneckHoursLabel: formatHours(baseline.result.bottleneck.hours),
+    bottleneckProcess: baseline.result.bottleneck?.process ?? "—",
+    bottleneckHoursLabel: baseline.result.bottleneck ? formatHours(baseline.result.bottleneck.hours) : "sin capacidad asignada",
     materialBlockerLabel: materialBlockerLabel(baseline),
   };
 }
@@ -134,8 +134,8 @@ export function buildPlanCardView(
     materialsAvailable: scenario.result.materialsFeasible === "pass",
     materialBlockerLabel: materialBlockerLabel(scenario),
     resourcesLabel: scenario.config.label,
-    bottleneckProcess: scenario.result.bottleneck.process,
-    bottleneckHoursLabel: formatHours(scenario.result.bottleneck.hours),
+    bottleneckProcess: scenario.result.bottleneck?.process ?? "—",
+    bottleneckHoursLabel: scenario.result.bottleneck ? formatHours(scenario.result.bottleneck.hours) : "sin capacidad asignada",
     tradeOffLabel:
       scenario.extraResourcesUsed > 0
         ? `Uses ${scenario.extraResourcesUsed} extra resource unit${scenario.extraResourcesUsed !== 1 ? "s" : ""} beyond the minimum.`
@@ -259,7 +259,7 @@ export function buildWhyThisPlanView(
     recommendedLabel: "A",
     reasons,
     dominanceNote,
-    bottleneckProcess: top.result.bottleneck.process,
+    bottleneckProcess: top.result.bottleneck?.process ?? "—",
     materialBlockerLabel: materialBlockerLabel(top),
     disruptionLabel,
   };

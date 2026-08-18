@@ -15,15 +15,18 @@ export function buildTwinCapabilities(model: OperationalModel): TwinCapabilities
   const personnel = model.resources.filter((r) => r.type === "Personal");
 
   return {
+    products: model.products.length > 0,
     productionFlow: machines.length > 0,
     resourceCapacity: machines.some((r) => r.capacity > 0),
     staffing: personnel.length > 0,
     // Ver comentario de TwinCapabilities.scheduling en types.ts — siempre true
     // hoy, porque OperationsCalendar no vive todavía dentro de OperationalModel.
     scheduling: true,
-    productionReference: model.profiles.some((p) => p.steps.some((s) => s.batchSize !== undefined || s.ratePerHour !== undefined)),
+    productionReference: model.profiles.some((p) =>
+      p.productionReference.some((s) => s.batchSize !== undefined || s.ratePerHour !== undefined),
+    ),
     orders: model.orders.length > 0,
-    materials: model.profiles.some((p) => p.steps.some((s) => s.materialsPerUnit.length > 0)),
+    materials: model.profiles.some((p) => p.materials.some((s) => s.materialsPerUnit.length > 0)),
     inventory: model.inventory.length > 0,
   };
 }

@@ -26,7 +26,7 @@ export function computeMaterialNeeds(order: Order, model: OperationalModel): Mat
   if (!profile) return [];
 
   const needs = new Map<string, number>();
-  for (const step of profile.steps) {
+  for (const step of profile.materials) {
     for (const mat of step.materialsPerUnit) {
       const current = needs.get(mat.materialCode) ?? 0;
       needs.set(mat.materialCode, current + mat.qtyPerUnit * order.quantity);

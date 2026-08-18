@@ -10,7 +10,19 @@ import {
 } from "./guided-setup-dependency";
 
 function emptyEntities(overrides: Partial<NluEntities> = {}): NluEntities {
-  return { resources: [], processes: [], goal: null, disruption: null, industry: null, ...overrides };
+  return {
+    resources: [],
+    processes: [],
+    goal: null,
+    disruption: null,
+    industry: null,
+    products: [],
+    equipmentV2: [],
+    batchInfo: [],
+    staffingCount: null,
+    schedule: null,
+    ...overrides,
+  };
 }
 
 describe("removeProcessAndDependents — cambiar un proceso invalida sus recursos", () => {

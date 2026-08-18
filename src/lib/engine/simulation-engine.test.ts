@@ -12,7 +12,7 @@ import {
 } from "./simulation-engine";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 import { parseGoalText } from "./goal-parser";
 import { applyDisruption } from "./disruption";
 
@@ -43,10 +43,11 @@ function buildFixtureModel(): OperationalModel {
     profiles: [
       {
         productId: "producto-x",
-        steps: [
-          { process: "Elaboración", batchSize: 500, hoursPerBatch: 2, materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }] },
-          { process: "Envasado", ratePerHour: 1800, materialsPerUnit: [] },
+        productionReference: [
+          { process: "Elaboración", batchSize: { value: 500, source: "reference_estimate" }, hoursPerBatch: { value: 2, source: "reference_estimate" } },
+          { process: "Envasado", ratePerHour: { value: 1800, source: "reference_estimate" } },
         ],
+        materials: [{ process: "Elaboración", materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }] }],
       },
     ],
   };
@@ -139,7 +140,7 @@ describe("generateScenarioConfigs — respeta un Twin disrupted (items 11/19)", 
     const after = simulateGoal(disruptedModel, goal, CALENDAR, SNAPSHOT);
     // No afirmamos CUÁL de los dos gana en cada caso (depende del dataset) — solo que el
     // motor recalcula el bottleneck real de la nueva configuración, no reutiliza el viejo.
-    expect(after.baseline.result.bottleneck.hours).toBeGreaterThanOrEqual(before.baseline.result.bottleneck.hours);
+    expect(after.baseline.result.bottleneck!.hours).toBeGreaterThanOrEqual(before.baseline.result.bottleneck!.hours);
   });
 });
 
@@ -147,6 +148,7 @@ describe("classifyPlan — Plan Status (item 5)", () => {
   function result(overrides: Partial<ScenarioResult>): ScenarioResult {
     return {
       orderId: "X",
+      operationalFeasibility: "evaluated",
       materialsFeasible: "pass",
       capacityFeasible: true,
       deadlineMet: true,
@@ -198,6 +200,7 @@ describe("resolveGoalOutcome — nunca recomendar un plan que no sea fully viabl
       config: { id, label: id, resourceConfig: [] },
       result: {
         orderId: "X",
+        operationalFeasibility: "evaluated",
         materialsFeasible:
           status === "conditionally_viable" || status === "deadline_missed"
             ? "fail"
@@ -268,6 +271,7 @@ describe("rankScenarios — sin contención como criterio (item 7)", () => {
       config,
       result: {
         orderId: "X",
+        operationalFeasibility: "evaluated",
         materialsFeasible: "pass",
         capacityFeasible: true,
         deadlineMet: true,
@@ -336,6 +340,7 @@ describe("explainDominance — nunca afirma un hecho falso sobre el deadline (bu
       config,
       result: {
         orderId: "X",
+        operationalFeasibility: "evaluated",
         materialsFeasible: "pass",
         capacityFeasible: true,
         deadlineMet: true,
@@ -380,7 +385,7 @@ describe("simulateGoal — integración con el dataset demo real", () => {
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildOperationalModel({
+  const model = buildGenusDemoModel({
     company: { name: "Laboratorio Genus", industry: "cosmeticos" },
     orders,
     productNames,

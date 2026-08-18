@@ -4,7 +4,7 @@ import path from "node:path";
 import type { OperationalModel } from "@/lib/types";
 import { buildTwinCapabilities } from "./twin-capabilities";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "./buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 
 function emptyModel(): OperationalModel {
   return {
@@ -22,6 +22,7 @@ describe("buildTwinCapabilities — Checkpoint 9B.1", () => {
   it("Twin completamente vacío -> todo false salvo scheduling (siempre disponible vía calendario de referencia)", () => {
     const caps = buildTwinCapabilities(emptyModel());
     expect(caps).toEqual({
+      products: false,
       productionFlow: false,
       resourceCapacity: false,
       staffing: false,
@@ -57,7 +58,15 @@ describe("buildTwinCapabilities — Checkpoint 9B.1", () => {
 
   it("producto con batchSize/hoursPerBatch declarado -> productionReference true, aunque no tenga materialsPerUnit", () => {
     const model = emptyModel();
-    model.profiles = [{ productId: "p", steps: [{ process: "Elaboración", batchSize: 500, hoursPerBatch: 2, materialsPerUnit: [] }] }];
+    model.profiles = [
+      {
+        productId: "p",
+        productionReference: [
+          { process: "Elaboración", batchSize: { value: 500, source: "reference_estimate" }, hoursPerBatch: { value: 2, source: "reference_estimate" } },
+        ],
+        materials: [],
+      },
+    ];
     const caps = buildTwinCapabilities(model);
     expect(caps.productionReference).toBe(true);
     expect(caps.materials).toBe(false); // BOM sigue vacío — son preguntas independientes
@@ -65,7 +74,13 @@ describe("buildTwinCapabilities — Checkpoint 9B.1", () => {
 
   it("producto con materialsPerUnit declarado -> materials true", () => {
     const model = emptyModel();
-    model.profiles = [{ productId: "p", steps: [{ process: "Elaboración", materialsPerUnit: [{ materialCode: "MP-1", qtyPerUnit: 1 }] }] }];
+    model.profiles = [
+      {
+        productId: "p",
+        productionReference: [],
+        materials: [{ process: "Elaboración", materialsPerUnit: [{ materialCode: "MP-1", qtyPerUnit: 1 }] }],
+      },
+    ];
     expect(buildTwinCapabilities(model).materials).toBe(true);
   });
 
@@ -83,7 +98,13 @@ describe("buildTwinCapabilities — Checkpoint 9B.1", () => {
 
   it("capability nunca implica calidad del resultado: materials=true no dice si el pedido tiene faltante", () => {
     const model = emptyModel();
-    model.profiles = [{ productId: "p", steps: [{ process: "Elaboración", materialsPerUnit: [{ materialCode: "MP-1", qtyPerUnit: 999 }] }] }];
+    model.profiles = [
+      {
+        productId: "p",
+        productionReference: [],
+        materials: [{ process: "Elaboración", materialsPerUnit: [{ materialCode: "MP-1", qtyPerUnit: 999 }] }],
+      },
+    ];
     model.inventory = [{ materialCode: "MP-1", stock: 1, unit: "kg" }]; // insuficiente para casi cualquier pedido
     const caps = buildTwinCapabilities(model);
     expect(caps.materials).toBe(true);
@@ -103,7 +124,7 @@ describe("buildTwinCapabilities — dataset demo real (Laboratorio Genus)", () =
     const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
     const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
     const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-    const model = buildOperationalModel({
+    const model = buildGenusDemoModel({
       company: { name: "Laboratorio Genus", industry: "cosmeticos" },
       orders,
       productNames,

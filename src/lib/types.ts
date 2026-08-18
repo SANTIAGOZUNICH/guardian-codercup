@@ -48,28 +48,159 @@ export interface Resource {
 }
 
 /**
- * Receta operativa de un producto. Es "reference data": no viene de ningún
- * Excel cargado por la empresa en esta versión — está explícitamente
- * declarada en src/data/production-profiles.ts y marcada como referencia
- * en toda la UI que la consuma.
+ * ============================================================================
+ * DATA ORIGIN — de dónde salió un valor de entrada (Checkpoint 9B.2)
+ * ============================================================================
+ * Distinto de `DataProvenance` (abajo): `DataProvenance` documenta, a nivel
+ * de TIPO DE CAMPO, de dónde suele venir una categoría de datos (para la capa
+ * de explicabilidad "Why this plan?"). `DataOrigin`/`SourcedValue` etiquetan
+ * un VALOR CONCRETO, uno por uno — necesario porque, a partir de este
+ * checkpoint, `batchSize`/`hoursPerBatch`/`ratePerHour` de UN MISMO producto
+ * pueden mezclar datos declarados por la empresa con estimaciones de
+ * referencia aceptadas explícitamente. Nunca incluye "calculated": un valor
+ * de entrada (lo que el motor CONSUME) nunca es un resultado (lo que el motor
+ * PRODUCE) — ver `ScenarioResult` para los campos calculados.
  */
-export interface ProductionProfileStep {
-  process: ResourceProcess;
-  materialsPerUnit: { materialCode: string; qtyPerUnit: number }[];
-  ratePerHour?: number;
-  batchSize?: number;
-  /**
-   * Horas que tarda UN batch de esta etapa (solo aplica a etapas con `batchSize`).
-   * Valor de referencia — no existe hoy ninguna fuente de datos con esta
-   * dimensión temporal para procesos por lote, así que se declara acá
-   * explícitamente en vez de inventarse dentro del motor.
-   */
-  hoursPerBatch?: number;
+export type DataOrigin = "company_data" | "reference_estimate";
+
+/**
+ * Envoltorio explícito para cualquier número de entrada que pueda venir de la
+ * empresa O de una referencia aceptada. Nunca un campo vacío con un default
+ * escondido: si el valor no existe, el campo entero (`SourcedValue<T> |
+ * undefined`) está ausente — no hay forma de "adivinar" un origen para un
+ * valor que no fue provisto explícitamente por ninguna capa superior.
+ */
+export interface SourcedValue<T> {
+  value: T;
+  source: DataOrigin;
 }
 
+/**
+ * ============================================================================
+ * PRODUCT / PRODUCTION REFERENCE / MATERIAL FORMULA (Checkpoint 9B.2)
+ * ============================================================================
+ * Tres preguntas deliberadamente separadas, cada una respondible sin las
+ * otras dos:
+ * - `Product` (ver arriba): ¿QUÉ fabrica el laboratorio? Ya vivía
+ *   independiente de perfiles — se mantiene así.
+ * - `ProductionReferenceStep`: ¿CÓMO se comporta operacionalmente ese
+ *   producto en una etapa? (tiempos/capacidad) — nunca necesita materiales
+ *   para existir.
+ * - `MaterialFormulaStep`: ¿QUÉ materiales necesita esa etapa? — opcional,
+ *   nunca bloquea el cálculo operacional (ver MaterialFeasibility, 9B.1).
+ *
+ * Cada campo de `ProductionReferenceStep` es un `SourcedValue<number>`
+ * opcional — "no declarado" y "declarado por la empresa" y "declarado como
+ * referencia aceptada" son tres estados distintos, nunca colapsados.
+ */
+/**
+ * ============================================================================
+ * BATCH UNIT — desacople TIEMPO/MATERIALES en etapas por lote (Checkpoint 9B.3)
+ * ============================================================================
+ * Qué representa `batchSize`, declarado explícitamente en vez de asumido:
+ * - "units": `batchSize` ya está en unidades de producto ("hacemos 500
+ *   unidades por batch") — el motor calcula `batchesNeeded` directo desde
+ *   `order.quantity`, SIN necesitar ninguna Material Formula. Esto es lo que
+ *   permite que "Hacemos 500 unidades por batch y cada batch tarda 3 horas"
+ *   alcance para calcular tiempo, sin fórmula ni materias primas.
+ * - "kg": `batchSize` es masa — el motor necesita convertir `order.quantity`
+ *   (unidades) a masa vía `MaterialFormulaStep.materialsPerUnit` para saber
+ *   cuántos batches hacen falta. Sin esa fórmula, la etapa queda `blocked`
+ *   honestamente (ver `computeBatchesNeeded` en evaluate-scenario.ts) — NUNCA
+ *   `hours: 0` fabricado.
+ *
+ * Ausente (`undefined`) se comporta como "kg" — el modelado histórico de
+ * Laboratorio Genus (reactores medidos en kg) sigue funcionando sin cambios;
+ * "units" es la opción nueva que una empresa puede declarar explícitamente
+ * cuando su Production Reference ya está en unidades de producto.
+ */
+export type BatchUnit = "units" | "kg";
+
+export interface ProductionReferenceStep {
+  process: ResourceProcess;
+  /** Cantidad que produce UN batch, en la unidad que indica `batchUnit` — solo aplica a etapas por lote. */
+  batchSize?: SourcedValue<number>;
+  /** Qué representa `batchSize` — ver `BatchUnit` arriba. */
+  batchUnit?: BatchUnit;
+  /** Horas que tarda UN batch — solo aplica a etapas por lote, junto con `batchSize`. */
+  hoursPerBatch?: SourcedValue<number>;
+  /** Techo de unidades/hora específico del producto (nunca reemplaza `resource.capacity`, solo la acota — ver evaluate-scenario.ts). Solo aplica a etapas continuas. */
+  ratePerHour?: SourcedValue<number>;
+}
+
+export interface MaterialRequirement {
+  materialCode: string;
+  qtyPerUnit: number;
+}
+
+/** BOM de UNA etapa — independiente de si esa etapa tiene Production Reference declarada. */
+export interface MaterialFormulaStep {
+  process: ResourceProcess;
+  materialsPerUnit: MaterialRequirement[];
+}
+
+/**
+ * ============================================================================
+ * REFERENCE CATALOG (Checkpoint 9B.3)
+ * ============================================================================
+ * Catálogo pequeño y explícito de valores de referencia para equipos típicos
+ * de un laboratorio cosmético — nunca una tabla gigantesca ni números
+ * inventados sin fuente. Cada entrada es auditable: qué categoría de equipo,
+ * qué parámetro estima, en qué unidad, con qué valor o rango, de dónde sale
+ * esa estimación, para qué tipo de operación aplica, y una versión para poder
+ * rastrear cambios. Ver `src/data/reference-catalog.ts` para el catálogo
+ * concreto (el seed inicial) y `src/lib/engine/reference-catalog.ts` para las
+ * funciones puras que lo consultan y resuelven.
+ *
+ * Que una entrada EXISTA en el catálogo (`REFERENCE AVAILABLE`) nunca implica
+ * que el motor pueda usarla — eso requiere aceptación explícita del usuario
+ * (`REFERENCE ACCEPTED` → `REFERENCE IN USE`, ver `applyAcceptedReference` en
+ * reference-catalog.ts). `evaluateScenario()` nunca busca un default acá por
+ * su cuenta.
+ */
+export interface ReferenceRange {
+  min: number;
+  max: number;
+}
+
+/** Estrategia explícita para resolver un rango a un número concreto — nunca Monte Carlo, nunca probabilístico (ver reference-catalog.ts). */
+export type ReferenceStrategy = "conservative" | "midpoint" | "optimistic";
+
+/** Qué campo de `ProductionReferenceStep` estima esta entrada — acotado a los 3 campos que el motor realmente consume. */
+export type ReferenceParameter = "batchSize" | "hoursPerBatch" | "ratePerHour";
+
+export interface ReferenceCatalogEntry {
+  /** Identificador estable, ej. "filling-machine-automatic-rate". */
+  id: string;
+  /** Categoría de equipo/proceso, ej. "reactor", "llenadora", "etiquetadora", "codificadora". Texto libre deliberadamente — el catálogo crece sin tocar un enum cerrado. */
+  category: string;
+  process: ResourceProcess;
+  parameter: ReferenceParameter;
+  /** Solo relevante cuando `parameter === "batchSize"` — ver `BatchUnit`. */
+  batchUnit?: BatchUnit;
+  unit: string;
+  value: number | ReferenceRange;
+  /** Descripción auditable de dónde sale este valor — nunca "porque sí". */
+  source: string;
+  /** A qué tipo de operación aplica razonablemente, ej. "Laboratorio cosmético pequeño/mediano, llenadora automática estándar". */
+  applicability: string;
+  /** Para rastrear cambios de este valor a través del tiempo, ej. "9B.3-seed-1". */
+  version: string;
+  /** true = fixture explícito de test, NUNCA debe usarse fuera de tests (ver reference-catalog.ts). */
+  isTestReference?: boolean;
+}
+
+/**
+ * Contenedor por producto — nunca global, nunca compartido entre empresas
+ * (cada `OperationalModel` trae su propio array `profiles`, construido
+ * explícitamente por quien arma el Twin — ver buildOperationalModel.ts).
+ * `productionReference` y `materials` son independientes: un producto puede
+ * tener uno sin el otro, o ninguno de los dos.
+ */
 export interface ProductionProfile {
   productId: string;
-  steps: ProductionProfileStep[];
+  productionReference: ProductionReferenceStep[];
+  materials: MaterialFormulaStep[];
 }
 
 export interface OperationalModel {
@@ -131,7 +262,18 @@ export interface OperationsCalendar {
   workingDays: number[];
 }
 
-export type DataProvenance = "company_data" | "reference_profile" | "calculated" | "user_provided";
+/**
+ * Documenta, a nivel de TIPO DE CAMPO, de qué categoría suele venir un dato
+ * (usado por la tabla estática `DATA_PROVENANCE` en data-provenance.ts, para
+ * la capa de explicabilidad). Checkpoint 9B.2 renombra `reference_profile` a
+ * `reference_estimate` — incluso para valores estáticos (ej. el calendario
+ * productivo por defecto), sigue siendo "un valor de referencia, usado
+ * porque la empresa no declaró el suyo", ahora el mismo vocabulario que
+ * `DataOrigin` usa para valores individuales. Nunca se agregó "not_connected"
+ * acá (decisión de 9B.1, se mantiene): esa pregunta es de `TwinCapabilities`,
+ * no de provenance — "¿tengo este dato?" es distinto de "¿de dónde salió?".
+ */
+export type DataProvenance = "company_data" | "reference_estimate" | "calculated" | "user_provided";
 
 /**
  * ============================================================================
@@ -186,6 +328,8 @@ export interface TwinCompleteness {
  * distintas (¿tengo el dato? vs. ¿qué dice el dato?).
  */
 export interface TwinCapabilities {
+  /** Al menos un producto declarado (Checkpoint 9B.2) — independiente de si tiene Production Reference o Material Formula. */
+  products: boolean;
   /** Al menos un recurso de tipo Máquina declarado en algún proceso. */
   productionFlow: boolean;
   /** Al menos una máquina con capacidad > 0 declarada (no placeholder). */
@@ -195,7 +339,7 @@ export interface TwinCapabilities {
   /**
    * Siempre `true` en la arquitectura actual: `OperationsCalendar` no vive
    * dentro de `OperationalModel` todavía — el motor siempre tiene un
-   * calendario disponible vía `DEFAULT_OPERATIONS_CALENDAR` (reference_profile).
+   * calendario disponible vía `DEFAULT_OPERATIONS_CALENDAR` (reference_estimate).
    * Este campo existe para que un futuro calendario declarado por la empresa
    * tenga un lugar natural acá sin cambiar la forma de `TwinCapabilities`.
    */
@@ -276,15 +420,36 @@ export interface CapacityIssue {
 export type MaterialFeasibility = "pass" | "fail" | "not_evaluated";
 
 /**
+ * ============================================================================
+ * OPERATIONAL FEASIBILITY (Checkpoint 9B.3)
+ * ============================================================================
+ * Responde una pregunta previa a `capacityFeasible`: "¿el producto siquiera
+ * tiene una Production Reference declarada para intentar el cálculo?" —
+ * "not_evaluated" cuando `profile` no existe o `profile.productionReference`
+ * está vacío. En ese estado, ningún otro campo numérico de `ScenarioResult`
+ * representa un cálculo real (ver comentarios de cada campo abajo) — nunca
+ * se inventa un 0, un Infinity visible como resultado final, ni una fecha.
+ */
+export type OperationalFeasibility = "evaluated" | "not_evaluated";
+
+/**
  * Resultado de evaluar UNA configuración de recursos contra UN pedido.
  *
  * Semántica deliberada (no son sinónimos):
+ * - `operationalFeasibility`: ver arriba — "not_evaluated" es la puerta de
+ *   entrada; cuando es así, `capacityFeasible`/`deadlineMet`/`feasible` quedan
+ *   en `false` (nunca calculados, nunca un true fabricado), `totalHoursNeeded`
+ *   y `completionAt` quedan en `null` (nunca 0, nunca una fecha inventada), y
+ *   `bottleneck` queda en `null` (no hay ninguna etapa que comparar).
  * - `materialsFeasible`: ver `MaterialFeasibility` arriba — nunca un booleano,
  *   para que "no evaluado" nunca pueda confundirse con "sin faltantes".
+ *   Independiente de `operationalFeasibility`: un producto sin Production
+ *   Reference puede igual tener Material Formula declarada, y viceversa.
  * - `capacityFeasible`: la configuración de recursos puede físicamente
  *   producir la cantidad pedida (throughput > 0 en cada etapa, unidades
  *   asignadas dentro de lo disponible) — SIN mirar el deadline. Esto es
- *   independiente de materiales y siempre se puede calcular con o sin BOM.
+ *   independiente de materiales y siempre se puede calcular con o sin BOM,
+ *   pero SOLO cuando `operationalFeasibility === "evaluated"`.
  * - `deadlineMet`: la fecha de finalización estimada cae en o antes del
  *   deadline del pedido. Puede ser `false` con `capacityFeasible: true` — un
  *   escenario puede ser operacionalmente realizable pero terminar tarde.
@@ -296,15 +461,18 @@ export type MaterialFeasibility = "pass" | "fail" | "not_evaluated";
  */
 export interface ScenarioResult {
   orderId: string;
+  operationalFeasibility: OperationalFeasibility;
   materialsFeasible: MaterialFeasibility;
   capacityFeasible: boolean;
   deadlineMet: boolean;
   feasible: boolean;
-  totalHoursNeeded: number;
-  /** ISO datetime. null si `capacityFeasible` es false (no hay forma real de estimar una fecha). */
+  /** Horas totales estimadas. null cuando `operationalFeasibility` es "not_evaluated" — nunca 0 (eso significaría "instantáneo"). */
+  totalHoursNeeded: number | null;
+  /** ISO datetime. null si `capacityFeasible` es false o si no se evaluó (no hay forma real de estimar una fecha). */
   completionAt: string | null;
   steps: StepEvaluation[];
-  bottleneck: StepEvaluation;
+  /** null cuando `steps` está vacío — no hay ninguna etapa que pueda ser "la más lenta". */
+  bottleneck: StepEvaluation | null;
   materialShortages: MaterialShortage[];
   capacityIssues: CapacityIssue[];
 }
@@ -343,7 +511,8 @@ export interface DeadlineAtRiskConstraint {
   completionAt: string | null;
   effectiveDeadlineAt: string;
   hoursLate: number | null;
-  bottleneck: StepEvaluation;
+  /** null cuando el producto no tiene Production Reference evaluable (`operationalFeasibility: "not_evaluated"`). */
+  bottleneck: StepEvaluation | null;
 }
 
 export type Constraint = MaterialShortageConstraint | DeadlineAtRiskConstraint;
@@ -490,6 +659,10 @@ export interface LastSimulation {
   completionLabel: string;
   /** Etiqueta corta de la disrupción activa (ej. "Llenadora 2 unavailable"), o null si no hay ninguna. */
   disruptionLabel: string | null;
+  /** Los 3 campos reales del `ScenarioResult` elegido — nunca recalculados, solo capturados tal cual quedaron (Reference-Driven Redesign). */
+  capacityFeasible: boolean;
+  deadlineMet: boolean;
+  materialsFeasible: MaterialFeasibility;
 }
 
 /**

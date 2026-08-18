@@ -1,6 +1,7 @@
-import type { OperationalModel, OrderConstraints, OrderSeverity } from "@/lib/types";
-import { sortBySeverity } from "./constraint-view-model";
+import type { OperationalModel, OrderConstraints, ResourceProcess } from "@/lib/types";
 import type { TwinGraph, GraphNodeStatus } from "./twin-graph-view-model";
+import { buildTwinCapabilities } from "@/lib/model/twin-capabilities";
+import { computeModelSimulationBasis, type SimulationBasis } from "@/lib/engine/simulation-basis";
 
 /**
  * ============================================================================
@@ -26,44 +27,10 @@ export function buildOperationalHealth(model: OperationalModel, all: OrderConstr
   };
 }
 
-const KIND_LABEL: Record<string, string> = {
-  material_shortage: "Material shortage",
-  deadline_at_risk: "Deadline missed",
-};
-
-export interface ActiveConstraintSummary {
-  orderId: string;
-  client: string;
-  productName: string;
-  severity: OrderSeverity;
-  constraintCount: number;
-  kindLabels: string[];
-}
-
-/** El pedido más severo con constraints activos, o null si no hay ninguno. */
-export function buildActiveConstraintSummary(
-  model: OperationalModel,
-  all: OrderConstraints[],
-): ActiveConstraintSummary | null {
-  const affected = sortBySeverity(all.filter((oc) => oc.constraints.length > 0));
-  const headline = affected[0];
-  if (!headline || !headline.severity) return null;
-
-  const order = model.orders.find((o) => o.id === headline.orderId);
-  if (!order) return null;
-  const product = model.products.find((p) => p.id === order.productId);
-
-  return {
-    orderId: order.id,
-    client: order.client,
-    productName: product?.name ?? order.productId,
-    severity: headline.severity,
-    constraintCount: headline.constraints.length,
-    kindLabels: headline.constraints.map((c) => KIND_LABEL[c.kind] ?? c.kind),
-  };
-}
+export type HeroMetricKind = "orders" | "resources" | "processes" | "products" | "constraints";
 
 export interface HeroMetric {
+  kind: HeroMetricKind;
   label: string;
   value: number;
   tone: "normal" | "warning" | "danger";
@@ -85,22 +52,115 @@ export function selectHeroMetrics(model: OperationalModel, all: OrderConstraints
 
   if (model.orders.length > 0) {
     const metrics: HeroMetric[] = [
-      { label: "Orders", value: health.totalOrders, tone: "normal" },
-      { label: "Resources", value: model.resources.length, tone: "normal" },
-      { label: "Processes", value: health.totalProcesses, tone: "normal" },
+      { kind: "orders", label: "Pedidos", value: health.totalOrders, tone: "normal" },
+      { kind: "resources", label: "Recursos", value: model.resources.length, tone: "normal" },
+      { kind: "processes", label: "Procesos", value: health.totalProcesses, tone: "normal" },
     ];
     if (health.totalConstraints > 0) {
-      metrics.push({ label: "Constraints", value: health.totalConstraints, tone: "danger" });
+      metrics.push({ kind: "constraints", label: "Restricciones", value: health.totalConstraints, tone: "danger" });
     }
     return metrics;
   }
 
   // Twin simple (Guided Setup sin pedidos cargados) — solo lo que realmente existe.
   const metrics: HeroMetric[] = [];
-  if (health.totalProcesses > 0) metrics.push({ label: "Processes", value: health.totalProcesses, tone: "normal" });
-  if (model.resources.length > 0) metrics.push({ label: "Resources", value: model.resources.length, tone: "normal" });
-  if (model.products.length > 0) metrics.push({ label: "Products", value: model.products.length, tone: "normal" });
+  if (health.totalProcesses > 0) metrics.push({ kind: "processes", label: "Procesos", value: health.totalProcesses, tone: "normal" });
+  if (model.resources.length > 0) metrics.push({ kind: "resources", label: "Recursos", value: model.resources.length, tone: "normal" });
+  if (model.products.length > 0) metrics.push({ kind: "products", label: "Productos", value: model.products.length, tone: "normal" });
   return metrics;
+}
+
+/**
+ * ============================================================================
+ * Process Flow Preview (Reference-Driven Redesign)
+ * ============================================================================
+ * Representación compacta y horizontal de los procesos REALES del Twin —
+ * reemplaza el grafo completo (NodeGraphV2) en el hero de Command Center,
+ * que sigue existiendo tal cual en Explore Twin. Nunca inventa un flujo fijo:
+ * solo entran acá los `ResourceProcess` que tienen al menos un recurso
+ * declarado, en el mismo orden canónico que ya usa el resto del motor
+ * (Elaboración → Envasado → Codificado) — nunca los 3 si el Twin solo tiene 2.
+ */
+export interface ProcessFlowStage {
+  process: ResourceProcess;
+  resourceCount: number;
+  status: GraphNodeStatus;
+}
+
+const PROCESS_ORDER: ResourceProcess[] = ["Elaboración", "Envasado", "Codificado"];
+
+export function buildProcessFlowPreview(model: OperationalModel, all: OrderConstraints[]): ProcessFlowStage[] {
+  const present = new Set(model.resources.map((r) => r.process));
+  const severityByProcess = new Map<ResourceProcess, "critical" | "high">();
+  for (const oc of all) {
+    if (!oc.severity) continue;
+    for (const c of oc.constraints) {
+      if (c.kind !== "deadline_at_risk" || !c.bottleneck) continue;
+      const current = severityByProcess.get(c.bottleneck.process);
+      if (oc.severity === "critical" || (oc.severity === "high" && current !== "critical")) {
+        severityByProcess.set(c.bottleneck.process, oc.severity);
+      }
+    }
+  }
+
+  return PROCESS_ORDER.filter((p) => present.has(p)).map((process) => {
+    const severity = severityByProcess.get(process);
+    const status: GraphNodeStatus = severity === "critical" ? "danger" : severity === "high" ? "warning" : "normal";
+    return { process, resourceCount: model.resources.filter((r) => r.process === process).length, status };
+  });
+}
+
+/**
+ * ============================================================================
+ * Material Intelligence (Visual Checkpoint A)
+ * ============================================================================
+ * "Connected" exige Formula Y Inventory a la vez (mismo umbral que
+ * `canEvaluateMaterials()` en evaluate-scenario.ts) — tener uno solo de los
+ * dos no alcanza para evaluar faltantes reales, así que tampoco alcanza para
+ * mostrarse como "ACTIVE" acá. `materialConstraintCount` solo tiene sentido
+ * cuando `connected` es true; si no, queda en 0 sin pretender nada.
+ */
+export interface MaterialIntelligenceSummary {
+  connected: boolean;
+  materialConstraintCount: number;
+}
+
+export function buildMaterialIntelligence(model: OperationalModel, all: OrderConstraints[]): MaterialIntelligenceSummary {
+  const capabilities = buildTwinCapabilities(model);
+  const connected = capabilities.materials && capabilities.inventory;
+  const materialConstraintCount = connected
+    ? all.reduce((sum, oc) => sum + oc.constraints.filter((c) => c.kind === "material_shortage").length, 0)
+    : 0;
+  return { connected, materialConstraintCount };
+}
+
+/**
+ * ============================================================================
+ * Ask Guardian — preguntas de ejemplo (Reference-Driven Redesign)
+ * ============================================================================
+ * Cada pregunta solo aparece si `TwinCapabilities` confirma que GUARDIAN
+ * realmente puede intentar responderla — nunca una lista fija de ejemplos.
+ * Máximo 3, en un orden de relevancia fijo (nunca aleatorio).
+ */
+export function selectAskGuardianPrompts(model: OperationalModel): string[] {
+  const caps = buildTwinCapabilities(model);
+  const prompts: string[] = [];
+  if (caps.orders && caps.productionReference) prompts.push("¿Llego a cumplir mis pedidos?");
+  if (caps.productionReference && caps.resourceCapacity) prompts.push("¿Cuál es mi cuello de botella?");
+  if (caps.resourceCapacity) prompts.push("¿Qué pasa si una máquina falla?");
+  if (caps.materials && caps.inventory) prompts.push("¿Me alcanza la materia prima?");
+  return prompts.slice(0, 3);
+}
+
+/**
+ * "Based on: N Company Data / N Reference Estimates" a nivel de operación
+ * completa — null cuando no hay ningún valor de ninguno de los dos orígenes
+ * (nunca se muestra un bloque en 0/0, ver Command Center).
+ */
+export function buildSimulationBasisSummary(model: OperationalModel): SimulationBasis | null {
+  const basis = computeModelSimulationBasis(model);
+  if (basis.companyDataCount === 0 && basis.referenceEstimateCount === 0) return null;
+  return basis;
 }
 
 export interface TwinPreviewLayer {

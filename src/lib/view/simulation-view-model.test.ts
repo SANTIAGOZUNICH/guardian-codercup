@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 import { parseGoalText } from "@/lib/engine/goal-parser";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import {
@@ -28,7 +28,7 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para T
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildOperationalModel({
+  const model = buildGenusDemoModel({
     company: { name: "Laboratorio Genus", industry: "cosmeticos" },
     orders,
     productNames,

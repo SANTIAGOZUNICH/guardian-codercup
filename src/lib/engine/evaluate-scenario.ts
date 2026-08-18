@@ -1,11 +1,13 @@
 import type {
   CapacityIssue,
   MaterialFeasibility,
+  MaterialFormulaStep,
+  MaterialRequirement,
   MaterialShortage,
   OperationalModel,
   OperationsCalendar,
   Order,
-  ProductionProfileStep,
+  ProductionReferenceStep,
   Resource,
   ResourceAllocation,
   ScenarioResult,
@@ -43,8 +45,10 @@ export { DEFAULT_OPERATIONS_CALENDAR };
  * - Para etapas continuas con más de una máquina física distinta, el
  *   throughput efectivo de cada máquina es `min(capacidad física, ratePerHour
  *   del producto)` — combina dos valores ya declarados, no inventa un tercero.
- * - Etapas por lote (`batchSize`) requieren `hoursPerBatch`, declarado en
- *   production-profiles.ts como `reference_profile`.
+ * - Etapas por lote (`batchSize`) requieren `hoursPerBatch` Y un Material
+ *   Formula con `materialsPerUnit` no vacío (Checkpoint 9B.2) — sin
+ *   cualquiera de los dos, la etapa queda `blocked` (nunca `hours: 0`
+ *   fabricado, nunca un throw que tire abajo toda la simulación).
  * - Calendario productivo explícito (`OperationsCalendar`): lunes a viernes,
  *   jornada de N horas desde una hora de inicio fija, sin feriados. Los
  *   fines de semana NO consumen horas productivas.
@@ -68,8 +72,8 @@ export { DEFAULT_OPERATIONS_CALENDAR };
  *
  * Regla exacta:
  * 1. El producto del pedido debe tener un ProductionProfile con AL MENOS un
- *    step cuyo `materialsPerUnit` no esté vacío (hay una fórmula/BOM real
- *    declarada) — si no, no hay nada que calcular.
+ *    Material Formula step cuyo `materialsPerUnit` no esté vacío (hay una
+ *    fórmula/BOM real declarada) — si no, no hay nada que calcular.
  * 2. El Twin debe tener datos de inventario cargados (`model.inventory.length > 0`)
  *    — si no, no hay contra qué comparar la necesidad calculada, aunque el
  *    BOM exista.
@@ -80,7 +84,7 @@ export { DEFAULT_OPERATIONS_CALENDAR };
  */
 export function canEvaluateMaterials(model: OperationalModel, order: Order): boolean {
   const profile = model.profiles.find((p) => p.productId === order.productId);
-  const bomDeclared = !!profile && profile.steps.some((s) => s.materialsPerUnit.length > 0);
+  const bomDeclared = !!profile && profile.materials.some((s) => s.materialsPerUnit.length > 0);
   if (!bomDeclared) return false;
   return model.inventory.length > 0;
 }
@@ -113,6 +117,28 @@ function evaluateMaterials(
   return { status: shortages.length === 0 ? "pass" : "fail", shortages };
 }
 
+/**
+ * ============================================================================
+ * Batches necesarios para UNA etapa por lote (Checkpoint 9B.3)
+ * ============================================================================
+ * Desacoplado de TIEMPO vs MATERIALES: cuando `batchUnit === "units"`,
+ * `batchSize` ya está en unidades de producto — no hace falta ninguna
+ * Material Formula para saber cuántos batches hacen falta. Solo cuando
+ * `batchUnit` es "kg" (o no se declaró, comportamiento histórico) el cálculo
+ * necesita convertir `quantity` a masa vía el BOM. `null` = no se puede
+ * determinar con los datos disponibles — nunca 0 (instantáneo) ni un número
+ * inventado.
+ */
+function computeBatchesNeeded(step: ProductionReferenceStep, materialsPerUnit: MaterialRequirement[], quantity: number): number | null {
+  if (!step.batchSize) return null;
+  if (step.batchUnit === "units") {
+    return Math.ceil(quantity / step.batchSize.value);
+  }
+  const totalMass = materialsPerUnit.reduce((sum, m) => sum + m.qtyPerUnit * quantity, 0);
+  if (totalMass <= 0) return null;
+  return Math.ceil(totalMass / step.batchSize.value);
+}
+
 function allocationFor(resourceConfig: ResourceAllocation[], resourceId: string) {
   return resourceConfig.find((a) => a.resourceId === resourceId);
 }
@@ -140,7 +166,8 @@ function validMachineUnits(
 
 function computeStep(
   model: OperationalModel,
-  step: ProductionProfileStep,
+  step: ProductionReferenceStep,
+  materials: MaterialFormulaStep | undefined,
   order: Order,
   resourceConfig: ResourceAllocation[],
   workdayHours: number,
@@ -162,29 +189,33 @@ function computeStep(
   }
 
   const machines = stepResources.filter((r) => r.type === "Máquina");
+  const materialsPerUnit = materials?.materialsPerUnit ?? [];
   let hours: number;
 
   if (step.batchSize !== undefined) {
-    if (step.hoursPerBatch === undefined) {
-      throw new Error(
-        `ProductionProfileStep de "${step.process}" declara batchSize sin hoursPerBatch — dato de referencia faltante.`,
-      );
+    // Una etapa por lote necesita hoursPerBatch (cuánto tarda un batch) Y una
+    // forma de saber cuántos batches hacen falta (`computeBatchesNeeded` —
+    // desde `order.quantity` directo si `batchUnit === "units"`, o vía BOM si
+    // es masa). Si falta cualquiera de los dos, la etapa queda `blocked`
+    // honestamente — nunca `hours: 0` (una respuesta fabricada) ni un throw
+    // que tire abajo toda la simulación por un dato de referencia ausente.
+    const batchesNeeded = computeBatchesNeeded(step, materialsPerUnit, order.quantity);
+    if (step.hoursPerBatch === undefined || batchesNeeded === null) {
+      hours = Infinity;
+    } else {
+      let batchSlots = 0;
+      for (const machine of machines) {
+        batchSlots += validMachineUnits(machine, resourceConfig, step.process, issues);
+      }
+      hours = batchSlots > 0 ? Math.ceil(batchesNeeded / batchSlots) * step.hoursPerBatch.value : Infinity;
     }
-    const totalMass = step.materialsPerUnit.reduce((sum, m) => sum + m.qtyPerUnit * order.quantity, 0);
-    const batchesNeeded = Math.ceil(totalMass / step.batchSize);
-
-    let batchSlots = 0;
-    for (const machine of machines) {
-      batchSlots += validMachineUnits(machine, resourceConfig, step.process, issues);
-    }
-    hours = batchSlots > 0 ? Math.ceil(batchesNeeded / batchSlots) * step.hoursPerBatch : Infinity;
   } else {
     let throughput = 0;
     for (const machine of machines) {
       const units = validMachineUnits(machine, resourceConfig, step.process, issues);
       if (units <= 0) continue;
       const effectiveRate =
-        step.ratePerHour !== undefined ? Math.min(machine.capacity, step.ratePerHour) : machine.capacity;
+        step.ratePerHour !== undefined ? Math.min(machine.capacity, step.ratePerHour.value) : machine.capacity;
       throughput += effectiveRate * units;
     }
     hours = throughput > 0 ? order.quantity / throughput : Infinity;
@@ -308,18 +339,39 @@ export function evaluateScenario(
   startAt: string,
 ): ScenarioResult {
   const profile = model.profiles.find((p) => p.productId === order.productId);
-  if (!profile || profile.steps.length === 0) {
-    throw new Error(`No hay ProductionProfile para "${order.productId}" — no se puede evaluar el escenario.`);
-  }
-
   const { status: materialsFeasible, shortages } = evaluateMaterials(model, order);
+
+  // Checkpoint 9B.3 — un producto sin Production Reference NUNCA rompe el
+  // motor. `operationalFeasibility: "not_evaluated"` es la señal estructurada
+  // que la UI puede leer ("Necesito algunos datos más para estimar este
+  // producto"), nunca un throw, nunca 0 horas, nunca un Infinity mostrado
+  // como resultado final, nunca una fecha inventada. `materialsFeasible` se
+  // evalúa igual arriba — es independiente de si hay Production Reference.
+  if (!profile || profile.productionReference.length === 0) {
+    return {
+      orderId: order.id,
+      operationalFeasibility: "not_evaluated",
+      materialsFeasible,
+      capacityFeasible: false,
+      deadlineMet: false,
+      feasible: false,
+      totalHoursNeeded: null,
+      completionAt: null,
+      steps: [],
+      bottleneck: null,
+      materialShortages: shortages,
+      capacityIssues: [],
+    };
+  }
 
   const steps: StepEvaluation[] = [];
   const capacityIssues: CapacityIssue[] = [];
-  for (const step of profile.steps) {
+  for (const step of profile.productionReference) {
+    const materials = profile.materials.find((m) => m.process === step.process);
     const { evaluation, capacityIssues: stepIssues } = computeStep(
       model,
       step,
+      materials,
       order,
       resourceConfig,
       calendar.workdayHours,
@@ -340,6 +392,7 @@ export function evaluateScenario(
 
   return {
     orderId: order.id,
+    operationalFeasibility: "evaluated",
     materialsFeasible,
     capacityFeasible,
     deadlineMet,
@@ -363,7 +416,7 @@ export function evaluateScenario(
 export function baselineResourceConfig(model: OperationalModel, order: Order): ResourceAllocation[] {
   const profile = model.profiles.find((p) => p.productId === order.productId);
   if (!profile) return [];
-  const processes = new Set(profile.steps.map((s) => s.process));
+  const processes = new Set(profile.productionReference.map((s) => s.process));
   return model.resources
     .filter((r) => processes.has(r.process))
     .map((r) => ({ resourceId: r.id, unitsUsed: r.quantityAvailable }));

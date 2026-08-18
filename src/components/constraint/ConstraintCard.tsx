@@ -113,15 +113,17 @@ export function ConstraintCard({ vm, additionalCount }: { vm: ConstraintViewMode
         </div>
 
         {/* Contexto operacional: separado visualmente de los constraints, no es una 3ra alerta. */}
-        <div className="mt-6 flex items-center justify-between rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] px-4 py-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.06em] text-text-tertiary">
-            Operational context
-          </span>
-          <span className="text-sm text-text-secondary">
-            Bottleneck: <span className="font-medium text-text-primary">{vm.bottleneck.process}</span> ·{" "}
-            {vm.bottleneck.hoursLabel}
-          </span>
-        </div>
+        {vm.bottleneck && (
+          <div className="mt-6 flex items-center justify-between rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] px-4 py-3">
+            <span className="text-xs font-semibold uppercase tracking-[0.06em] text-text-tertiary">
+              Operational context
+            </span>
+            <span className="text-sm text-text-secondary">
+              Bottleneck: <span className="font-medium text-text-primary">{vm.bottleneck.process}</span> ·{" "}
+              {vm.bottleneck.hoursLabel}
+            </span>
+          </div>
+        )}
 
         {additionalCount > 0 && (
           <p className="mt-4 text-xs text-text-tertiary">

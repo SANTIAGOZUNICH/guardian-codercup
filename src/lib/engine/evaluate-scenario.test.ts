@@ -5,7 +5,7 @@ import type { OperationalModel, OperationsCalendar, Order, ResourceAllocation } 
 import { evaluateScenario, baselineResourceConfig, projectCompletionDate, effectiveDeadline, canEvaluateMaterials } from "./evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 
 const CALENDAR: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR; // lun-vie, 8h, arranca 08:00
 
@@ -71,14 +71,19 @@ function buildFixtureModel(overrides: Partial<OperationalModel> = {}): Operation
     profiles: [
       {
         productId: "producto-x",
-        steps: [
+        productionReference: [
           {
             process: "Elaboración",
-            batchSize: 500,
-            hoursPerBatch: 2,
+            batchSize: { value: 500, source: "reference_estimate" },
+            hoursPerBatch: { value: 2, source: "reference_estimate" },
+          },
+          { process: "Envasado", ratePerHour: { value: 1000, source: "reference_estimate" } },
+        ],
+        materials: [
+          {
+            process: "Elaboración",
             materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }],
           },
-          { process: "Envasado", ratePerHour: 1000, materialsPerUnit: [] },
         ],
       },
     ],
@@ -146,10 +151,15 @@ describe("Material Feasibility tri-state — casos obligatorios (Checkpoint 9B.1
   const noBomProfile = [
     {
       productId: "producto-x",
-      steps: [
-        { process: "Elaboración" as const, batchSize: 500, hoursPerBatch: 2, materialsPerUnit: [] },
-        { process: "Envasado" as const, ratePerHour: 1000, materialsPerUnit: [] },
+      productionReference: [
+        {
+          process: "Elaboración" as const,
+          batchSize: { value: 500, source: "reference_estimate" as const },
+          hoursPerBatch: { value: 2, source: "reference_estimate" as const },
+        },
+        { process: "Envasado" as const, ratePerHour: { value: 1000, source: "reference_estimate" as const } },
       ],
+      materials: [],
     },
   ];
 
@@ -253,8 +263,8 @@ describe("evaluateScenario — caso 5: bottleneck correcto", () => {
     const order = buildOrder({ quantity: 1000 });
     const result = evaluateScenario(model, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
 
-    expect(result.bottleneck.process).toBe("Elaboración");
-    expect(result.bottleneck.hours).toBeCloseTo(2, 5);
+    expect(result.bottleneck!.process).toBe("Elaboración");
+    expect(result.bottleneck!.hours).toBeCloseTo(2, 5);
   });
 
   it("cambia el bottleneck si Envasado se vuelve la etapa más lenta", () => {
@@ -264,8 +274,8 @@ describe("evaluateScenario — caso 5: bottleneck correcto", () => {
     });
     const result = evaluateScenario(modelConStockAmplio, order, FULL_CONFIG, CALENDAR, FRIDAY_0800);
 
-    expect(result.bottleneck.process).toBe("Envasado");
-    expect(result.bottleneck.hours).toBeCloseTo(50, 5);
+    expect(result.bottleneck!.process).toBe("Envasado");
+    expect(result.bottleneck!.hours).toBeCloseTo(50, 5);
   });
 });
 
@@ -431,14 +441,19 @@ describe("evaluateScenario — dos máquinas heterogéneas en el mismo proceso",
       profiles: [
         {
           productId: "producto-x",
-          steps: [
+          productionReference: [
             {
               process: "Elaboración",
-              batchSize: 500,
-              hoursPerBatch: 2,
+              batchSize: { value: 500, source: "reference_estimate" },
+              hoursPerBatch: { value: 2, source: "reference_estimate" },
+            },
+            { process: "Envasado", ratePerHour: { value: 1800, source: "reference_estimate" } },
+          ],
+          materials: [
+            {
+              process: "Elaboración",
               materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }],
             },
-            { process: "Envasado", ratePerHour: 1800, materialsPerUnit: [] },
           ],
         },
       ],
@@ -557,7 +572,7 @@ describe("evaluateScenario — integración con el dataset demo real", () => {
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildOperationalModel({
+  const model = buildGenusDemoModel({
     company: { name: "Laboratorio Genus", industry: "cosmeticos" },
     orders,
     productNames,
@@ -576,7 +591,7 @@ describe("evaluateScenario — integración con el dataset demo real", () => {
     expect(result.capacityFeasible).toBe(true); // con todos los recursos disponibles, la capacidad alcanza
     expect(result.feasible).toBe(false); // por el material, no por capacidad
     expect(Number.isFinite(result.totalHoursNeeded)).toBe(true);
-    expect(["Elaboración", "Envasado", "Codificado"]).toContain(result.bottleneck.process);
+    expect(["Elaboración", "Envasado", "Codificado"]).toContain(result.bottleneck!.process);
 
     // 30.15h (15+6.06+9.09) desde viernes 14/08 08:00, saltando el fin de semana -> termina
     // miércoles 19/08 14:09. El pedido vence el 18/08 (martes) -> el calendario correcto lo

@@ -1,34 +1,60 @@
 /**
  * ============================================================================
- * REFERENCE PRODUCTION PROFILES — valores de referencia, NO datos del cliente
+ * GENUS DEMO PRODUCTION PROFILES — dataset de demo EXPLÍCITO, nunca global
  * ============================================================================
+ * (Checkpoint 9B.2 — reemplaza el antiguo `PRODUCTION_PROFILES` que
+ * `buildOperationalModel()` inyectaba a TODO Twin sin importar la empresa.)
  *
- * Estos perfiles NO provienen de ningún Excel cargado por la empresa.
- * Son la "receta operativa" (BOM + proceso) de cada producto para esta
- * versión de la demo de GUARDIAN, declarados explícitamente acá para que:
+ * Estos perfiles NO provienen de ningún Excel cargado por la empresa. Son la
+ * "receta operativa" (proceso + tiempos + BOM) de los 3 productos de
+ * Laboratorio Genus — el dataset de demo anonimizado de GUARDIAN — y viven
+ * acá para que:
  *
  *   1. El motor sea determinístico y auditable (nada vive escondido dentro
  *      de la lógica del engine).
  *   2. Cualquier persona pueda editar estos valores sin tocar el motor.
  *   3. La UI pueda marcar siempre estos valores como "VALOR DE REFERENCIA"
- *      y nunca presentarlos como si fueran datos reales del laboratorio.
+ *      (`source: "reference_estimate"`) y nunca presentarlos como si fueran
+ *      datos reales cargados por el laboratorio.
  *
- * Si en una futura versión el cliente carga sus propias recetas (BOM real),
- * este archivo se reemplaza por un 4to Excel — no antes.
+ * AISLAMIENTO DE GENUS (requisito central de 9B.2): estos perfiles se
+ * adjuntan a un Operational Model EXCLUSIVAMENTE a través de
+ * `buildGenusDemoModel()`, más abajo. `buildOperationalModel()` — el builder
+ * genérico que usa cualquier empresa real — NUNCA los importa ni los inyecta
+ * implícitamente. Cada laboratorio nuevo empieza con `profiles: []` hasta
+ * que declara los suyos.
+ *
+ * Si en una futura versión Laboratorio Genus carga su propia receta real,
+ * este archivo se reemplaza por datos cargados — no antes.
  */
 
 import type { ProductionProfile } from "@/lib/types";
+import type { RawModelInput } from "@/lib/model/buildOperationalModel";
+import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
 
 export const DATA_SOURCE = "reference" as const;
 
-export const PRODUCTION_PROFILES: ProductionProfile[] = [
+export const GENUS_DEMO_PRODUCTION_PROFILES: ProductionProfile[] = [
   {
     productId: "shampoo-premium",
-    steps: [
+    productionReference: [
       {
         process: "Elaboración",
-        batchSize: 500, // kg por batch — coincide con capacidad de Reactores
-        hoursPerBatch: 3, // ciclo típico de mezcla/calentamiento/enfriado para 500kg
+        batchSize: { value: 500, source: "reference_estimate" }, // kg por batch — coincide con capacidad de Reactores
+        hoursPerBatch: { value: 3, source: "reference_estimate" }, // ciclo típico de mezcla/calentamiento/enfriado para 500kg
+      },
+      {
+        process: "Envasado",
+        ratePerHour: { value: 1800, source: "reference_estimate" }, // unidades/hora — coincide con Llenadora 1
+      },
+      {
+        process: "Codificado",
+        ratePerHour: { value: 2200, source: "reference_estimate" },
+      },
+    ],
+    materials: [
+      {
+        process: "Elaboración",
         materialsPerUnit: [
           { materialCode: "MP-001", qtyPerUnit: 0.04 }, // Tensioactivo Base (kg)
           { materialCode: "MP-002", qtyPerUnit: 0.18 }, // Agua Desmineralizada (L)
@@ -38,7 +64,6 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       },
       {
         process: "Envasado",
-        ratePerHour: 1800, // unidades/hora — coincide con Llenadora 1
         materialsPerUnit: [
           { materialCode: "MP-013", qtyPerUnit: 1 }, // Envase Frasco 250ml
           { materialCode: "MP-015", qtyPerUnit: 1 }, // Tapa Dosificadora
@@ -47,18 +72,30 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       },
       {
         process: "Codificado",
-        ratePerHour: 2200,
         materialsPerUnit: [{ materialCode: "MP-018", qtyPerUnit: 1 }], // Film Termocontraíble
       },
     ],
   },
   {
     productId: "crema-hidratante",
-    steps: [
+    productionReference: [
       {
         process: "Elaboración",
-        batchSize: 500,
-        hoursPerBatch: 3,
+        batchSize: { value: 500, source: "reference_estimate" },
+        hoursPerBatch: { value: 3, source: "reference_estimate" },
+      },
+      {
+        process: "Envasado",
+        ratePerHour: { value: 1500, source: "reference_estimate" },
+      },
+      {
+        process: "Codificado",
+        ratePerHour: { value: 2200, source: "reference_estimate" },
+      },
+    ],
+    materials: [
+      {
+        process: "Elaboración",
         materialsPerUnit: [
           { materialCode: "MP-005", qtyPerUnit: 0.03 }, // Emulsionante Crema (kg)
           { materialCode: "MP-006", qtyPerUnit: 0.05 }, // Aceite Vegetal Base (kg)
@@ -69,7 +106,6 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       },
       {
         process: "Envasado",
-        ratePerHour: 1500,
         materialsPerUnit: [
           { materialCode: "MP-014", qtyPerUnit: 1 }, // Pote Crema 200g
           { materialCode: "MP-016", qtyPerUnit: 1 }, // Etiqueta Impresa
@@ -77,18 +113,30 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       },
       {
         process: "Codificado",
-        ratePerHour: 2200,
         materialsPerUnit: [{ materialCode: "MP-018", qtyPerUnit: 1 }],
       },
     ],
   },
   {
     productId: "serum-regenerador",
-    steps: [
+    productionReference: [
       {
         process: "Elaboración",
-        batchSize: 500,
-        hoursPerBatch: 4, // formulación más delicada, ciclo más lento que shampoo/crema
+        batchSize: { value: 500, source: "reference_estimate" },
+        hoursPerBatch: { value: 4, source: "reference_estimate" }, // formulación más delicada, ciclo más lento que shampoo/crema
+      },
+      {
+        process: "Envasado",
+        ratePerHour: { value: 1200, source: "reference_estimate" }, // dosificación más lenta (gotero de precisión)
+      },
+      {
+        process: "Codificado",
+        ratePerHour: { value: 2200, source: "reference_estimate" },
+      },
+    ],
+    materials: [
+      {
+        process: "Elaboración",
         materialsPerUnit: [
           { materialCode: "MP-007", qtyPerUnit: 0.015 }, // Ácido Hialurónico (kg)
           { materialCode: "MP-009", qtyPerUnit: 0.02 }, // Extracto Botánico Regenerador (kg)
@@ -98,7 +146,6 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       },
       {
         process: "Envasado",
-        ratePerHour: 1200, // dosificación más lenta (gotero de precisión)
         materialsPerUnit: [
           { materialCode: "MP-013", qtyPerUnit: 1 }, // Envase (reutiliza frasco base)
           { materialCode: "MP-015", qtyPerUnit: 1 }, // Tapa Dosificadora
@@ -107,23 +154,38 @@ export const PRODUCTION_PROFILES: ProductionProfile[] = [
       },
       {
         process: "Codificado",
-        ratePerHour: 2200,
         materialsPerUnit: [{ materialCode: "MP-018", qtyPerUnit: 1 }],
       },
     ],
   },
 ];
 
-export function getProductionProfile(productId: string): ProductionProfile | undefined {
-  return PRODUCTION_PROFILES.find((p) => p.productId === productId);
+export function getGenusDemoProductionProfile(productId: string): ProductionProfile | undefined {
+  return GENUS_DEMO_PRODUCTION_PROFILES.find((p) => p.productId === productId);
+}
+
+/**
+ * Único punto de entrada que adjunta los perfiles de referencia de
+ * Laboratorio Genus a un Operational Model. Úsalo SOLO para el botón
+ * "Usar datos demo" — cualquier empresa real construida desde sus propios
+ * Excel (Import Data) o desde Guided Setup pasa por `buildOperationalModel()`
+ * directamente y jamás recibe estos perfiles.
+ */
+export function buildGenusDemoModel(input: Omit<RawModelInput, "profiles">) {
+  return buildOperationalModel({ ...input, profiles: GENUS_DEMO_PRODUCTION_PROFILES });
 }
 
 /**
  * Catálogo mínimo de productos conocidos — el único lugar donde texto libre
- * ("shampoo", "un gel para...") puede resolverse a un productId REAL con
- * ProductionProfile. Guided Setup (Checkpoint 7) lo usa para nunca inventar
- * un profile por similitud: si el texto no matchea ningún keyword acá, el
- * producto queda honestamente "sin profile", nunca asignado al más parecido.
+ * ("shampoo", "un gel para...") puede resolverse a un productId REAL y a un
+ * nombre de producto. Guided Setup (Checkpoint 7) lo usa para nunca inventar
+ * un producto por similitud: si el texto no matchea ningún keyword acá, el
+ * producto queda honestamente "sin reconocer".
+ *
+ * IMPORTANTE (Checkpoint 9B.2): que un texto matchee acá NUNCA implica que
+ * el producto resultante tenga una ProductionProfile adjunta — eso violaría
+ * el aislamiento de Genus (ver comentario arriba). Este catálogo solo resuelve
+ * NOMBRES, nunca datos operativos.
  */
 export interface KnownProductCatalogEntry {
   productId: string;

@@ -13,7 +13,8 @@ function baseModel(stockMP001: number): OperationalModel {
     profiles: [
       {
         productId: "shampoo-premium",
-        steps: [
+        productionReference: [],
+        materials: [
           {
             process: "Elaboración",
             materialsPerUnit: [{ materialCode: "MP-001", qtyPerUnit: 0.01 }],

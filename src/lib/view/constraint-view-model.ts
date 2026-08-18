@@ -62,7 +62,8 @@ export interface ConstraintViewModel {
   severity: OrderSeverity;
   material: MaterialConstraintView | null;
   deadline: DeadlineConstraintView | null;
-  bottleneck: BottleneckView;
+  /** null cuando el producto no tiene Production Reference evaluable (Checkpoint 9B.3) — no hay ninguna etapa que mostrar como cuello de botella. */
+  bottleneck: BottleneckView | null;
   /** Frase corta, para el bubble de Guardian. */
   guardianMessage: string;
   /** Frase más larga, solo cuando hay más de una causa — para texto de apoyo en la card. */
@@ -110,10 +111,9 @@ export function buildConstraintViewModel(
     severity: oc.severity,
     material,
     deadline,
-    bottleneck: {
-      process: oc.scenario.bottleneck.process,
-      hoursLabel: formatHours(oc.scenario.bottleneck.hours),
-    },
+    bottleneck: oc.scenario.bottleneck
+      ? { process: oc.scenario.bottleneck.process, hoursLabel: formatHours(oc.scenario.bottleneck.hours) }
+      : null,
     guardianMessage: buildGuardianConstraintMessage(oc),
     detailMessage: material && deadline ? buildGuardianDetailMessage() : null,
   };

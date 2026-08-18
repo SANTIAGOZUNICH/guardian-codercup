@@ -6,9 +6,9 @@ import type {
   OperationalModelCounts,
   Order,
   Product,
+  ProductionProfile,
   Resource,
 } from "@/lib/types";
-import { PRODUCTION_PROFILES } from "@/data/production-profiles";
 
 export interface RawModelInput {
   company: Company;
@@ -17,21 +17,27 @@ export interface RawModelInput {
   materials: Material[];
   inventory: InventoryItem[];
   resources: Resource[];
+  /**
+   * Production Reference + Material Formula del laboratorio (Checkpoint 9B.2).
+   * Opcional y vacío por defecto — cada laboratorio declara los suyos. Este
+   * builder NUNCA inyecta un dataset ajeno (ej. Laboratorio Genus) por
+   * defecto: eso violaría el aislamiento entre laboratorios. El único lugar
+   * que adjunta los perfiles de referencia de Genus es
+   * `buildGenusDemoModel()` en `@/data/production-profiles`.
+   */
+  profiles?: ProductionProfile[];
 }
 
 /**
  * Construye el Operational Model a partir de los datos parseados de los 3
- * Excel + los ProductionProfiles de referencia. Products se deriva de los
- * nombres de producto realmente presentes en Pedidos.xlsx (dato cargado),
- * nunca de una lista fija.
+ * Excel (+ opcionalmente las Production Profiles propias del laboratorio,
+ * Checkpoint 9B.2). Products se deriva de los nombres de producto realmente
+ * presentes en Pedidos.xlsx (dato cargado), nunca de una lista fija.
  */
 export function buildOperationalModel(input: RawModelInput): OperationalModel {
   const products: Product[] = Array.from(input.productNames.entries()).map(
     ([id, name]) => ({ id, name, unit: "unidades" }),
   );
-
-  const knownProfileIds = new Set(PRODUCTION_PROFILES.map((p) => p.productId));
-  const profiles = PRODUCTION_PROFILES.filter((p) => knownProfileIds.has(p.productId));
 
   return {
     company: input.company,
@@ -40,7 +46,7 @@ export function buildOperationalModel(input: RawModelInput): OperationalModel {
     materials: input.materials,
     inventory: input.inventory,
     resources: input.resources,
-    profiles,
+    profiles: input.profiles ?? [],
   };
 }
 

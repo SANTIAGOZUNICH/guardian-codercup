@@ -18,11 +18,12 @@ function buildModel(): OperationalModel {
     profiles: [
       {
         productId: "shampoo-premium",
-        steps: [
-          { process: "Elaboración", batchSize: 500, hoursPerBatch: 3, materialsPerUnit: [] },
-          { process: "Envasado", ratePerHour: 1800, materialsPerUnit: [] },
-          { process: "Codificado", ratePerHour: 2200, materialsPerUnit: [] },
+        productionReference: [
+          { process: "Elaboración", batchSize: { value: 500, source: "reference_estimate" }, hoursPerBatch: { value: 3, source: "reference_estimate" } },
+          { process: "Envasado", ratePerHour: { value: 1800, source: "reference_estimate" } },
+          { process: "Codificado", ratePerHour: { value: 2200, source: "reference_estimate" } },
         ],
+        materials: [],
       },
     ],
   };

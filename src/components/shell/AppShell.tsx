@@ -85,18 +85,18 @@ export function AppShell({
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-border-subtle bg-bg-base/80 px-8 py-4 backdrop-blur-xl">
+        <header className="flex items-center justify-between border-b border-border-subtle bg-bg-base/80 px-8 py-3.5 backdrop-blur-xl">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-text-primary">{companyName}</h1>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-text-tertiary">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
-              Operational Twin · Active
+              <span className="h-1.5 w-1.5 rounded-full bg-accent-bright animate-pulse-soft" />
+              Operational Twin · <span className="text-accent-bright">ACTIVE</span>
             </p>
           </div>
           <Guardian state="idle" size={44} className="gap-0" />
         </header>
 
-        <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
+        <main className="flex-1 overflow-y-auto px-8 py-5">{children}</main>
       </div>
     </div>
   );

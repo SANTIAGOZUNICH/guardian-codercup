@@ -33,6 +33,8 @@ const CONTEXT_HINT: Record<InterpretRequest["context"], string> = {
   guided_setup_process: "El usuario está describiendo los pasos de producción de su operación, en cualquier orden u orden narrativo.",
   guided_setup_resource: "El usuario está describiendo máquinas/recursos, posiblemente con cantidades y capacidades mezcladas en una sola frase.",
   ask_guardian: "El usuario le está preguntando algo a Guardian sobre un objetivo de producción o una disrupción hipotética (ej. una máquina que deja de estar disponible).",
+  guided_setup_v2_freeform:
+    "El usuario está armando su Operational Twin (Guided Setup V2) — puede responder una pregunta puntual o describir toda su operación en un solo mensaje: productos, equipos, capacidades, tiempos de tanda, personal, horario.",
 };
 
 const RESPONSE_JSON_SCHEMA = z.toJSONSchema(InterpretationResponseSchema);
@@ -59,9 +61,13 @@ export async function POST(request: Request) {
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GUARDIAN_API_KEY });
+    const knownEquipmentHint =
+      body.context === "guided_setup_v2_freeform" && body.knownEquipmentNames && body.knownEquipmentNames.length > 0
+        ? `\n\nEquipos ya conocidos en esta conversación (para detectar correcciones vía updatesExisting): ${body.knownEquipmentNames.join(", ")}`
+        : "";
     const response = await ai.models.generateContent({
       model: NLU_MODEL,
-      contents: `Contexto: ${CONTEXT_HINT[body.context]}\n\nTexto del usuario:\n"""\n${text}\n"""`,
+      contents: `Contexto: ${CONTEXT_HINT[body.context]}${knownEquipmentHint}\n\nTexto del usuario:\n"""\n${text}\n"""`,
       config: {
         systemInstruction: NLU_SYSTEM_PROMPT,
         responseMimeType: "application/json",

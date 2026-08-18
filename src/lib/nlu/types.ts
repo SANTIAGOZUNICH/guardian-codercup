@@ -80,12 +80,56 @@ export const NluDisruptionEntitySchema = z.object({
   resourceName: z.string().nullable().describe("Nombre o categoría del recurso mencionado, ej. 'llenadora' o 'Llenadora 2'"),
 });
 
+/**
+ * ============================================================================
+ * Guided Setup V2 (Checkpoint 9B.3) — entidades del contexto
+ * "guided_setup_v2_freeform", el único que puede resolver varios bloques a
+ * la vez desde una sola respuesta en lenguaje libre (usuario avanzado).
+ * ============================================================================
+ */
+export const NluEquipmentMentionSchema = z.object({
+  name: z.string().nullable().describe("Nombre específico si el usuario lo dio (ej. 'Llenadora 1'), null si solo describió la categoría genérica"),
+  category: z
+    .string()
+    .nullable()
+    .describe("Categoría del equipo en minúscula y sin tildes, ej. 'reactor', 'llenadora', 'etiquetadora', 'codificadora', u otra si es genuinamente distinta"),
+  process: z.enum(["Elaboración", "Envasado", "Codificado"]).nullable(),
+  quantity: z.number().nullable().describe("Cuántas unidades de este equipo — null si no se mencionó, nunca asumas 1"),
+  capacityValue: z.number().nullable(),
+  capacityUnit: z.string().nullable(),
+  updatesExisting: z
+    .string()
+    .nullable()
+    .describe(
+      "Si este mensaje CORRIGE una cantidad o dato de un equipo YA mencionado antes en la conversación (ver el contexto de equipos conocidos), el nombre EXACTO tal como aparece en ese contexto. null si es un equipo nuevo o si no hay corrección.",
+    ),
+});
+
+export const NluBatchInfoMentionSchema = z.object({
+  process: z.enum(["Elaboración", "Envasado", "Codificado"]).nullable(),
+  batchAmount: z.number().nullable().describe("Cuánto produce UNA tanda/batch — en la unidad que indica batchUnit"),
+  batchUnit: z.enum(["units", "kg"]).nullable().describe("'units' si describió unidades de producto por tanda, 'kg' si describió masa/peso"),
+  hoursPerBatch: z.number().nullable(),
+});
+
+export const NluScheduleMentionSchema = z.object({
+  workingDaysText: z.string().nullable().describe("Días de trabajo tal como los describió, ej. 'lunes a viernes'"),
+  startTime: z.string().nullable().describe("Hora de inicio en formato HH:mm si se mencionó"),
+  endTime: z.string().nullable().describe("Hora de fin en formato HH:mm si se mencionó"),
+});
+
 export const NluEntitiesSchema = z.object({
   resources: z.array(NluResourceEntitySchema).default([]),
   processes: z.array(NluProcessEntitySchema).default([]),
   goal: NluGoalEntitySchema.nullable().default(null),
   disruption: NluDisruptionEntitySchema.nullable().default(null),
   industry: NluIndustryEntitySchema.nullable().default(null),
+  // Checkpoint 9B.3 — solo se completan en el contexto guided_setup_v2_freeform.
+  products: z.array(z.string()).default([]),
+  equipmentV2: z.array(NluEquipmentMentionSchema).default([]),
+  batchInfo: z.array(NluBatchInfoMentionSchema).default([]),
+  staffingCount: z.number().nullable().default(null),
+  schedule: NluScheduleMentionSchema.nullable().default(null),
 });
 
 export type NluEntities = z.infer<typeof NluEntitiesSchema>;
@@ -128,5 +172,13 @@ export interface InterpretRequest {
   /** Texto libre del usuario, tal cual. */
   text: string;
   /** Qué tipo de pregunta se está interpretando — acota el prompt y las entidades esperadas. */
-  context: "guided_setup_industry" | "guided_setup_process" | "guided_setup_resource" | "ask_guardian";
+  context: "guided_setup_industry" | "guided_setup_process" | "guided_setup_resource" | "ask_guardian" | "guided_setup_v2_freeform";
+  /**
+   * Solo relevante en "guided_setup_v2_freeform" — nombres de equipos YA
+   * declarados en la conversación, para que la IA pueda reconocer una
+   * corrección ("perdón, son dos") como `updatesExisting` en vez de crear un
+   * equipo duplicado. Nunca se usa para decidir matemática — solo para
+   * resolver A QUÉ nombre se refiere una mención nueva.
+   */
+  knownEquipmentNames?: string[];
 }

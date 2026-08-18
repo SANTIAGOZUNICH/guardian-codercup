@@ -92,12 +92,16 @@ describe("buildModelInputsFromGuidedSetup", () => {
     expect(completeness.known.capacities).toBe(2); // Reactor 1 + Codificadora 1, no Llenadora 1
   });
 
-  it("7. producto conocido (Shampoo) resuelve al productId real con ProductionProfile de referencia", () => {
+  it("7. producto conocido (Shampoo) resuelve al productId/nombre real, pero SIN ProductionProfile adjunta — Genus nunca es fallback (Checkpoint 9B.2)", () => {
     const { input } = buildModelInputsFromGuidedSetup(fullAnswers(), COMPANY);
     const model = buildOperationalModel(input);
-    const profile = model.profiles.find((p) => p.productId === "shampoo-premium");
-    expect(profile).toBeDefined();
+    // El nombre SÍ se reconoce vía PRODUCT_CATALOG (matchKnownProduct resuelve texto -> productId/nombre).
     expect(model.products.some((p) => p.id === "shampoo-premium" && p.name === "Shampoo Premium")).toBe(true);
+    // Pero ninguna Production Reference se adjunta jamás por este camino: reconocer un nombre
+    // nunca implica heredar los datos operativos de Laboratorio Genus para OTRA empresa.
+    // El Twin queda honestamente con profiles=[] hasta que la empresa (o un futuro catálogo de
+    // referencia explícito) declare su propia Production Reference.
+    expect(model.profiles).toEqual([]);
   });
 
   it("8. producto desconocido (Gel) -> registrado como missing, nunca asignado a un profile por similitud", () => {

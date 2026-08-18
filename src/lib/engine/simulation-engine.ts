@@ -137,7 +137,7 @@ export function generateScenarioConfigs(model: OperationalModel, goal: Goal): Sc
   const profile = model.profiles.find((p) => p.productId === goal.productId);
   if (!profile) return [];
 
-  const processes = Array.from(new Set(profile.steps.map((s) => s.process)));
+  const processes = Array.from(new Set(profile.productionReference.map((s) => s.process)));
   const optionsByProcess = processes.map((p) => machineOptionsForProcess(model, p));
   if (optionsByProcess.some((opts) => opts.length === 0)) return []; // algún proceso no tiene ningún recurso -> no hay configuración posible
 
@@ -192,7 +192,7 @@ export function computeContention(model: OperationalModel, config: ScenarioConfi
 
   const sharing = model.orders.filter((o) => {
     const profile = model.profiles.find((p) => p.productId === o.productId);
-    return !!profile && profile.steps.some((s) => usedProcesses.has(s.process));
+    return !!profile && profile.productionReference.some((s) => usedProcesses.has(s.process));
   });
 
   return {
@@ -255,8 +255,8 @@ export function rankScenarios(scenarios: EvaluatedScenario[]): EvaluatedScenario
     const extraDiff = a.extraResourcesUsed - b.extraResourcesUsed;
     if (extraDiff !== 0) return extraDiff;
 
-    const au = a.result.bottleneck.utilization;
-    const bu = b.result.bottleneck.utilization;
+    const au = a.result.bottleneck?.utilization ?? NaN;
+    const bu = b.result.bottleneck?.utilization ?? NaN;
     if (Number.isFinite(au) && Number.isFinite(bu) && au !== bu) return au - bu;
 
     return a.config.id.localeCompare(b.config.id); // desempate final estable y determinístico
@@ -298,8 +298,8 @@ export function explainDominance(a: EvaluatedScenario, b: EvaluatedScenario, lab
     const [winner, loser] = a.extraResourcesUsed < b.extraResourcesUsed ? [labelA, labelB] : [labelB, labelA];
     return `Ambos completan al mismo tiempo, pero ${winner} usa menos recursos adicionales que ${loser}.`;
   }
-  const au = a.result.bottleneck.utilization;
-  const bu = b.result.bottleneck.utilization;
+  const au = a.result.bottleneck?.utilization ?? NaN;
+  const bu = b.result.bottleneck?.utilization ?? NaN;
   if (Number.isFinite(au) && Number.isFinite(bu) && au !== bu) {
     const [winner, loser] = au < bu ? [labelA, labelB] : [labelB, labelA];
     return `Son equivalentes en deadline y recursos, pero ${winner} deja menor utilización en su cuello de botella que ${loser}.`;

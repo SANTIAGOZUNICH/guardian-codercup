@@ -197,8 +197,8 @@ export function buildOperationalImpactView(
     },
     {
       label: "Bottleneck",
-      before: `${beforeBottleneck.process} · ${formatHoursShort(beforeBottleneck.hours)}`,
-      after: `${afterBottleneck.process} · ${formatHoursShort(afterBottleneck.hours)}`,
+      before: beforeBottleneck ? `${beforeBottleneck.process} · ${formatHoursShort(beforeBottleneck.hours)}` : "—",
+      after: afterBottleneck ? `${afterBottleneck.process} · ${formatHoursShort(afterBottleneck.hours)}` : "—",
     },
     {
       label: "Goal status",

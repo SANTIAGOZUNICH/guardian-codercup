@@ -16,11 +16,17 @@ export const DATA_PROVENANCE: Record<string, { provenance: DataProvenance; sourc
   "resource.capacity": { provenance: "company_data", source: "Recursos.xlsx" },
   "resource.quantityAvailable": { provenance: "company_data", source: "Recursos.xlsx" },
 
-  "productionProfile.materialsPerUnit": { provenance: "reference_profile", source: "production-profiles.ts" },
-  "productionProfile.ratePerHour": { provenance: "reference_profile", source: "production-profiles.ts" },
-  "productionProfile.batchSize": { provenance: "reference_profile", source: "production-profiles.ts" },
-  "productionProfile.hoursPerBatch": { provenance: "reference_profile", source: "production-profiles.ts" },
-  "operationsCalendar": { provenance: "reference_profile", source: "operations-reference.ts" },
+  // NOTA (Checkpoint 9B.2): batchSize/hoursPerBatch/ratePerHour ahora llevan
+  // su propio `SourcedValue.source` por instancia (company_data vs.
+  // reference_estimate) — esta tabla documenta el caso por defecto del
+  // dataset de demo (Laboratorio Genus), no una verdad global para toda
+  // empresa. `materialsPerUnit` no tiene provenance propio todavía (no es un
+  // SourcedValue): se documenta acá como referencia hasta que exista.
+  "productionProfile.materialsPerUnit": { provenance: "reference_estimate", source: "production-profiles.ts" },
+  "productionProfile.ratePerHour": { provenance: "reference_estimate", source: "production-profiles.ts" },
+  "productionProfile.batchSize": { provenance: "reference_estimate", source: "production-profiles.ts" },
+  "productionProfile.hoursPerBatch": { provenance: "reference_estimate", source: "production-profiles.ts" },
+  "operationsCalendar": { provenance: "reference_estimate", source: "operations-reference.ts" },
 
   "scenarioResult.materialShortages": { provenance: "calculated", source: "evaluate-scenario.ts" },
   "scenarioResult.steps[].hours": { provenance: "calculated", source: "evaluate-scenario.ts" },

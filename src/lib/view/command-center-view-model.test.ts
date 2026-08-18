@@ -4,9 +4,17 @@ import path from "node:path";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 import { buildTwinGraph } from "./twin-graph-view-model";
-import { buildOperationalHealth, buildActiveConstraintSummary, buildTwinPreview, selectHeroMetrics } from "./command-center-view-model";
+import {
+  buildOperationalHealth,
+  buildTwinPreview,
+  buildProcessFlowPreview,
+  selectHeroMetrics,
+  selectAskGuardianPrompts,
+  buildMaterialIntelligence,
+  buildSimulationBasisSummary,
+} from "./command-center-view-model";
 import type { OperationalModel } from "@/lib/types";
 
 function loadDemoFile(name: string): ArrayBuffer {
@@ -19,7 +27,7 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildOperationalModel({
+  const model = buildGenusDemoModel({
     company: { name: "Laboratorio Genus", industry: "cosmeticos" },
     orders,
     productNames,
@@ -44,25 +52,19 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
     expect(health.affectedOrders).toBe(1);
   });
 
-  it("3. constraints correctas en Active Constraints", () => {
-    const summary = buildActiveConstraintSummary(model, orderConstraints);
-    expect(summary).toEqual({
-      orderId: "PED-1001",
-      client: "TCL",
-      productName: "Shampoo Premium",
-      severity: "critical",
-      constraintCount: 2,
-      kindLabels: ["Material shortage", "Deadline missed"],
-    });
+  it("selectHeroMetrics — Twin enriquecido: Pedidos/Recursos/Procesos/Restricciones, en ese orden, con datos reales", () => {
+    expect(selectHeroMetrics(model, orderConstraints)).toEqual([
+      { kind: "orders", label: "Pedidos", value: 40, tone: "normal" },
+      { kind: "resources", label: "Recursos", value: 7, tone: "normal" },
+      { kind: "processes", label: "Procesos", value: 3, tone: "normal" },
+      { kind: "constraints", label: "Restricciones", value: 2, tone: "danger" },
+    ]);
   });
 
-  it("selectHeroMetrics — Twin enriquecido: Orders/Resources/Processes/Constraints, en ese orden, con datos reales", () => {
-    expect(selectHeroMetrics(model, orderConstraints)).toEqual([
-      { label: "Orders", value: 40, tone: "normal" },
-      { label: "Resources", value: 7, tone: "normal" },
-      { label: "Processes", value: 3, tone: "normal" },
-      { label: "Constraints", value: 2, tone: "danger" },
-    ]);
+  it("buildProcessFlowPreview — 3 procesos reales del dataset demo, en el orden canónico, todos con recursos", () => {
+    const preview = buildProcessFlowPreview(model, orderConstraints);
+    expect(preview.map((s) => s.process)).toEqual(["Elaboración", "Envasado", "Codificado"]);
+    expect(preview.every((s) => s.resourceCount > 0)).toBe(true);
   });
 
   it("Twin preview refleja el status real de cada capa (Understanding en danger por el material constraint)", () => {
@@ -75,8 +77,8 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
 });
 
 describe("Command Center view model — 4. sin constraints -> empty state correcto", () => {
-  it("buildActiveConstraintSummary devuelve null si ningún pedido tiene constraints", () => {
-    const emptyModel = {
+  it("buildProcessFlowPreview devuelve [] y buildOperationalHealth queda en 0 si el Twin está vacío", () => {
+    const emptyModel: OperationalModel = {
       company: { name: "Empresa Sana", industry: "cosmeticos" },
       orders: [],
       products: [],
@@ -85,8 +87,7 @@ describe("Command Center view model — 4. sin constraints -> empty state correc
       resources: [],
       profiles: [],
     };
-    const summary = buildActiveConstraintSummary(emptyModel, []);
-    expect(summary).toBeNull();
+    expect(buildProcessFlowPreview(emptyModel, [])).toEqual([]);
 
     const health = buildOperationalHealth(emptyModel, []);
     expect(health).toEqual({ totalOrders: 0, affectedOrders: 0, totalConstraints: 0, totalProcesses: 0 });
@@ -114,12 +115,21 @@ describe("selectHeroMetrics — Twin simple (Guided Setup, sin pedidos)", () => 
     };
   }
 
-  it("muestra Processes/Resources/Products cuando no hay pedidos — nunca Orders/Constraints en cero", () => {
+  it("muestra Procesos/Recursos/Productos cuando no hay pedidos — nunca Pedidos/Restricciones en cero", () => {
     const model = buildSimpleTwinModel();
     expect(selectHeroMetrics(model, [])).toEqual([
-      { label: "Processes", value: 3, tone: "normal" },
-      { label: "Resources", value: 4, tone: "normal" },
-      { label: "Products", value: 2, tone: "normal" },
+      { kind: "processes", label: "Procesos", value: 3, tone: "normal" },
+      { kind: "resources", label: "Recursos", value: 4, tone: "normal" },
+      { kind: "products", label: "Productos", value: 2, tone: "normal" },
+    ]);
+  });
+
+  it("buildProcessFlowPreview — Twin simple: 3 procesos en orden canónico, todos status normal (sin constraints)", () => {
+    const model = buildSimpleTwinModel();
+    expect(buildProcessFlowPreview(model, [])).toEqual([
+      { process: "Elaboración", resourceCount: 1, status: "normal" },
+      { process: "Envasado", resourceCount: 2, status: "normal" },
+      { process: "Codificado", resourceCount: 1, status: "normal" },
     ]);
   });
 
@@ -134,5 +144,86 @@ describe("selectHeroMetrics — Twin simple (Guided Setup, sin pedidos)", () => 
       profiles: [],
     };
     expect(selectHeroMetrics(model, [])).toEqual([]);
+  });
+});
+
+describe("buildMaterialIntelligence / buildSimulationBasisSummary — Visual Checkpoint A", () => {
+  it("dataset demo real: materials conectado (Formula+Inventory), 1 material constraint activo (PED-1001/MP-003)", () => {
+    const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
+    const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
+    const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
+    const model = buildGenusDemoModel({ company: { name: "Laboratorio Genus", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
+    const orderConstraints = detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT);
+
+    const intelligence = buildMaterialIntelligence(model, orderConstraints);
+    expect(intelligence.connected).toBe(true);
+    expect(intelligence.materialConstraintCount).toBe(1);
+  });
+
+  it("dataset demo real: Simulation Basis suma reference_estimate de los 3 productos (Genus siempre reference_estimate)", () => {
+    const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
+    const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
+    const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
+    const model = buildGenusDemoModel({ company: { name: "Laboratorio Genus", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
+
+    const basis = buildSimulationBasisSummary(model);
+    expect(basis).not.toBeNull();
+    expect(basis!.companyDataCount).toBe(0);
+    expect(basis!.referenceEstimateCount).toBeGreaterThan(0);
+  });
+
+  it("Twin sin materials/inventory -> not connected, 0 constraints nunca inventados", () => {
+    const model: OperationalModel = {
+      company: { name: "Empresa Nueva", industry: "" },
+      orders: [],
+      products: [],
+      materials: [],
+      inventory: [],
+      resources: [],
+      profiles: [],
+    };
+    const intelligence = buildMaterialIntelligence(model, []);
+    expect(intelligence).toEqual({ connected: false, materialConstraintCount: 0 });
+  });
+
+  it("Twin sin ningún valor de Production Reference -> Simulation Basis es null (nunca un bloque en 0/0)", () => {
+    const model: OperationalModel = {
+      company: { name: "Empresa Nueva", industry: "" },
+      orders: [],
+      products: [],
+      materials: [],
+      inventory: [],
+      resources: [],
+      profiles: [],
+    };
+    expect(buildSimulationBasisSummary(model)).toBeNull();
+  });
+});
+
+describe("selectAskGuardianPrompts — Reference-Driven Redesign", () => {
+  it("dataset demo real: las 3 primeras preguntas ganan (máximo 3, orden fijo de relevancia)", () => {
+    const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
+    const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
+    const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
+    const model = buildGenusDemoModel({ company: { name: "Laboratorio Genus", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
+
+    expect(selectAskGuardianPrompts(model)).toEqual([
+      "¿Llego a cumplir mis pedidos?",
+      "¿Cuál es mi cuello de botella?",
+      "¿Qué pasa si una máquina falla?",
+    ]);
+  });
+
+  it("Twin completamente vacío -> ninguna pregunta (ninguna capability real)", () => {
+    const model: OperationalModel = {
+      company: { name: "Empresa Nueva", industry: "" },
+      orders: [],
+      products: [],
+      materials: [],
+      inventory: [],
+      resources: [],
+      profiles: [],
+    };
+    expect(selectAskGuardianPrompts(model)).toEqual([]);
   });
 });

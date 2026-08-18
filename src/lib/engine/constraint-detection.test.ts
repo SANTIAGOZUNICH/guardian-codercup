@@ -6,7 +6,7 @@ import { evaluateScenario, baselineResourceConfig } from "./evaluate-scenario";
 import { deriveConstraints, computeSeverity, detectConstraints } from "./constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 
 const CALENDAR: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR;
 const FRIDAY_0800 = "2026-08-14T08:00:00"; // viernes real, verificado en Checkpoint 1
@@ -46,14 +46,19 @@ function buildFixtureModel(overrides: Partial<OperationalModel> = {}): Operation
     profiles: [
       {
         productId: "producto-x",
-        steps: [
+        productionReference: [
           {
             process: "Elaboración",
-            batchSize: 500,
-            hoursPerBatch: 2,
+            batchSize: { value: 500, source: "reference_estimate" },
+            hoursPerBatch: { value: 2, source: "reference_estimate" },
+          },
+          { process: "Envasado", ratePerHour: { value: 1000, source: "reference_estimate" } },
+        ],
+        materials: [
+          {
+            process: "Elaboración",
             materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }],
           },
-          { process: "Envasado", ratePerHour: 1000, materialsPerUnit: [] },
         ],
       },
     ],
@@ -158,7 +163,7 @@ describe("Constraint Detection — caso 5: bottleneck existe pero no genera cons
     const scenario = evalBaseline(model, order);
     const constraints = deriveConstraints(model, order, scenario, CALENDAR);
 
-    expect(scenario.bottleneck.utilization).toBeGreaterThan(0.5); // hay presión real sobre el recurso
+    expect(scenario.bottleneck!.utilization).toBeGreaterThan(0.5); // hay presión real sobre el recurso
     expect(scenario.feasible).toBe(true);
     expect(scenario.deadlineMet).toBe(true);
     expect(constraints).toEqual([]); // el bottleneck NUNCA genera un 3er tipo de constraint por sí solo
@@ -249,7 +254,7 @@ describe("Constraint Detection — caso 8: agregar capacidad modifica completion
     expect(matPoca).toEqual(matMucha);
 
     // Pero el completion/deadline sí cambia: con más capacidad, termina antes (menos tarde, o a tiempo).
-    expect(scenarioMucha.totalHoursNeeded).toBeLessThan(scenarioPoca.totalHoursNeeded);
+    expect(scenarioMucha.totalHoursNeeded!).toBeLessThan(scenarioPoca.totalHoursNeeded!);
   });
 });
 
@@ -261,10 +266,15 @@ describe("Constraint Detection — materiales not_evaluated nunca generan un sho
   const noBomProfile = [
     {
       productId: "producto-x",
-      steps: [
-        { process: "Elaboración" as const, batchSize: 500, hoursPerBatch: 2, materialsPerUnit: [] },
-        { process: "Envasado" as const, ratePerHour: 1000, materialsPerUnit: [] },
+      productionReference: [
+        {
+          process: "Elaboración" as const,
+          batchSize: { value: 500, source: "reference_estimate" as const },
+          hoursPerBatch: { value: 2, source: "reference_estimate" as const },
+        },
+        { process: "Envasado" as const, ratePerHour: { value: 1000, source: "reference_estimate" as const } },
       ],
+      materials: [],
     },
   ];
 
@@ -314,7 +324,7 @@ describe("Constraint Detection — integración con el dataset demo real", () =>
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildOperationalModel({
+  const model = buildGenusDemoModel({
     company: { name: "Laboratorio Genus", industry: "cosmeticos" },
     orders,
     productNames,

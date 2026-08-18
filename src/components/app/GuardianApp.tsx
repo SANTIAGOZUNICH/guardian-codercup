@@ -263,6 +263,9 @@ export function GuardianApp() {
             chosenPlanLabel: `${prefix} Plan ${rankLabel}`,
             completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "—",
             disruptionLabel: disruption && disruptionResourceName ? `${disruptionResourceName} unavailable` : null,
+            capacityFeasible: scenario.result.capacityFeasible,
+            deadlineMet: scenario.result.deadlineMet,
+            materialsFeasible: scenario.result.materialsFeasible,
           });
           setPhase("command-center");
         }}

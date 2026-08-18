@@ -13,6 +13,7 @@ import {
   parseRecursosFile,
 } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 import { formatNaive } from "@/lib/engine/evaluate-scenario";
 import { DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import type { OperationalModel } from "@/lib/types";
@@ -47,7 +48,18 @@ export function UploadScreen({
 
   const allPresent = SLOTS.every((s) => files[s.key]);
 
-  async function buildFromBuffers(buffers: Record<SlotKey, ArrayBuffer>, snapshotAt: string) {
+  /**
+   * `useGenusReference` solo es true para el botón de demo (más abajo): es el
+   * único punto de la app que adjunta la Production Reference de Laboratorio
+   * Genus. Un Import Data real (`handleBuildFromUploads`) nunca la recibe —
+   * cada laboratorio empieza sin Production Reference hasta declarar la suya
+   * (Checkpoint 9B.2).
+   */
+  async function buildFromBuffers(
+    buffers: Record<SlotKey, ArrayBuffer>,
+    snapshotAt: string,
+    useGenusReference: boolean,
+  ) {
     setError(null);
     setBuilding(true);
     try {
@@ -55,14 +67,15 @@ export function UploadScreen({
       const { materials, inventory } = parseInventarioFile(buffers.inventario);
       const resources = parseRecursosFile(buffers.recursos);
 
-      const model = buildOperationalModel({
+      const rawInput = {
         company: { name: companyName, industry },
         orders,
         productNames,
         materials,
         inventory,
         resources,
-      });
+      };
+      const model = useGenusReference ? buildGenusDemoModel(rawInput) : buildOperationalModel(rawInput);
       onModelReady(model, snapshotAt);
     } catch (e) {
       const message = e instanceof ExcelParseError ? e.message : "No se pudo leer alguno de los archivos.";
@@ -83,7 +96,7 @@ export function UploadScreen({
         }),
       );
       const buffers = Object.fromEntries(entries) as Record<SlotKey, ArrayBuffer>;
-      await buildFromBuffers(buffers, DEMO_SNAPSHOT_AT);
+      await buildFromBuffers(buffers, DEMO_SNAPSHOT_AT, true);
     } catch {
       setError("No se pudieron cargar los archivos de demo.");
       setBuilding(false);
@@ -96,7 +109,7 @@ export function UploadScreen({
       SLOTS.map(async (s) => [s.key, await files[s.key]!.arrayBuffer()] as const),
     );
     const buffers = Object.fromEntries(entries) as Record<SlotKey, ArrayBuffer>;
-    await buildFromBuffers(buffers, formatNaive(new Date()));
+    await buildFromBuffers(buffers, formatNaive(new Date()), false);
   }
 
   return (

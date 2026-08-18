@@ -5,7 +5,7 @@ import type { OperationalModel, OperationsCalendar, Order } from "@/lib/types";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 import {
   buildConstraintViewModel,
   buildTwinReadySummary,
@@ -50,14 +50,19 @@ function buildFixtureModel(overrides: Partial<OperationalModel> = {}): Operation
     profiles: [
       {
         productId: "producto-x",
-        steps: [
+        productionReference: [
           {
             process: "Elaboración",
-            batchSize: 500,
-            hoursPerBatch: 2,
+            batchSize: { value: 500, source: "reference_estimate" },
+            hoursPerBatch: { value: 2, source: "reference_estimate" },
+          },
+          { process: "Envasado", ratePerHour: { value: 1000, source: "reference_estimate" } },
+        ],
+        materials: [
+          {
+            process: "Elaboración",
             materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }],
           },
-          { process: "Envasado", ratePerHour: 1000, materialsPerUnit: [] },
         ],
       },
     ],
@@ -224,7 +229,7 @@ describe("Constraint View Model — integración con el dataset demo real", () =
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildOperationalModel({
+  const model = buildGenusDemoModel({
     company: { name: "Laboratorio Genus", industry: "cosmeticos" },
     orders,
     productNames,

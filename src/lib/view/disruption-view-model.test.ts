@@ -4,7 +4,7 @@ import path from "node:path";
 import type { EvaluatedScenario, GoalOutcomeKind, GoalSimulationResult, OperationalModel } from "@/lib/types";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
+import { buildGenusDemoModel } from "@/data/production-profiles";
 import { parseGoalText } from "@/lib/engine/goal-parser";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import { applyDisruption } from "@/lib/engine/disruption";
@@ -26,7 +26,7 @@ describe("Disruption view model — goal real (30.000 shampoos, disrupción Llen
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildOperationalModel({
+  const model = buildGenusDemoModel({
     company: { name: "Laboratorio Genus", industry: "cosmeticos" },
     orders,
     productNames,
@@ -96,6 +96,7 @@ describe("buildOperationalImpactView — casos sintéticos (items 13/14/21)", ()
       config: { id: "baseline", label: "Current configuration", resourceConfig: [] },
       result: {
         orderId: "HYPOTHETICAL-GOAL",
+        operationalFeasibility: "evaluated" as const,
         materialsFeasible: "pass" as const,
         capacityFeasible: true,
         deadlineMet: true,

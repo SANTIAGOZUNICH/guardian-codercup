@@ -46,15 +46,20 @@ interface GuardianProps {
 
 /**
  * ============================================================================
- * Guardian — chassis pseudo-3D (Checkpoint 9A)
+ * Guardian — AI operations companion (Reference-Driven Redesign)
  * ============================================================================
- * Silueta de "device/robot" (badge/shield oscuro con dos ojos de luz),
- * construida 100% en SVG — sin WebGL/3D real, sin dependencias nuevas. El
- * chassis (material) es constante entre estados; solo la luz (ojos, arcos
- * orbitales, rim light) cambia de color/velocidad según `STATE_COLOR` /
- * `STATE_RING_SPEED`, exactamente como en la versión anterior — la API
- * pública (`state`/`size`/`message`/`className`) no cambió, así que ningún
- * caller necesita tocarse.
+ * Reemplaza la silueta tipo "badge/shield" (9A) por un robot construido:
+ * cabeza redondeada + visor + torso mecánico + hombros, separados visualmente
+ * por un cuello — la identidad pedida es "dispositivo tecnológico premium",
+ * nunca infantil, nunca agresivo, nunca militar. La expresión es siempre
+ * neutral-amigable: los ojos son cápsulas suaves con el mismo tratamiento de
+ * luz radial que ya existía (nunca formas diagonales/agresivas), así que
+ * ningún estado cambia la personalidad — solo color/velocidad/intensidad.
+ *
+ * La arquitectura de estado/motion de 9A se mantiene intacta a propósito
+ * (glow ambiental, flotación, arcos orbitales, partículas de análisis,
+ * thrusters) — lo único que cambia es la geometría dibujada adentro. API
+ * pública (`state`/`size`/`message`/`className`) sin cambios.
  */
 export function Guardian({ state, size = 132, message, className }: GuardianProps) {
   const color = STATE_COLOR[state];
@@ -87,7 +92,7 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
           transition={{ duration: isAlert ? 1 : 3, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
         />
 
-        {/* Flotación ambiental muy lenta — todo el ensamble (chassis + ojos + arcos) se mueve como una sola pieza */}
+        {/* Flotación ambiental muy lenta — todo el ensamble se mueve como una sola pieza */}
         <motion.div
           className="absolute inset-0"
           animate={!motionSafe ? { y: 0 } : { y: [0, -5, 0] }}
@@ -96,21 +101,25 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
           <svg viewBox="0 0 200 200" className="h-full w-full" role="img" aria-label={`Guardian — ${state}`}>
             <defs>
               <linearGradient id={`chassis-${uid}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#171a24" />
-                <stop offset="55%" stopColor="#0e1017" />
+                <stop offset="0%" stopColor="#1b1f2b" />
+                <stop offset="55%" stopColor="#10131c" />
                 <stop offset="100%" stopColor="#05060a" />
               </linearGradient>
-              <radialGradient id={`highlight-${uid}`} cx="35%" cy="22%" r="55%">
-                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.16" />
+              <linearGradient id={`head-${uid}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#20242f" />
+                <stop offset="100%" stopColor="#0e1017" />
+              </linearGradient>
+              <radialGradient id={`highlight-${uid}`} cx="35%" cy="18%" r="55%">
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
                 <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
               </radialGradient>
-              <radialGradient id={`eye-${uid}`} cx="35%" cy="30%" r="65%">
+              <radialGradient id={`eye-${uid}`} cx="35%" cy="30%" r="70%">
                 <stop offset="0%" stopColor="#ffffff" />
                 <stop offset="45%" stopColor={color} />
                 <stop offset="100%" stopColor={color} stopOpacity="0" />
               </radialGradient>
-              <clipPath id={`chassis-clip-${uid}`}>
-                <path d={CHASSIS_PATH} />
+              <clipPath id={`head-clip-${uid}`}>
+                <path d={HEAD_PATH} />
               </clipPath>
             </defs>
 
@@ -118,11 +127,11 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
             <motion.circle
               cx={100}
               cy={100}
-              r={94}
+              r={96}
               fill="none"
               stroke={color}
               strokeWidth={1.4}
-              strokeOpacity={0.4}
+              strokeOpacity={0.35}
               strokeDasharray="70 520"
               strokeLinecap="round"
               animate={!motionSafe ? { rotate: 20 } : { rotate: 380 }}
@@ -132,11 +141,11 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
             <motion.circle
               cx={100}
               cy={100}
-              r={87}
+              r={89}
               fill="none"
               stroke={color}
               strokeWidth={1}
-              strokeOpacity={0.22}
+              strokeOpacity={0.2}
               strokeDasharray="40 480"
               strokeLinecap="round"
               animate={!motionSafe ? { rotate: -15 } : { rotate: -360 }}
@@ -144,11 +153,7 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
               style={{ transformOrigin: "100px 100px" }}
             />
 
-            {/* Chassis — material oscuro constante, nunca cambia con el estado */}
-            <path d={CHASSIS_PATH} fill={`url(#chassis-${uid})`} stroke={color} strokeOpacity={0.32} strokeWidth={1.25} />
-            <path d={CHASSIS_PATH} fill={`url(#highlight-${uid})`} clipPath={`url(#chassis-clip-${uid})`} />
-
-            {/* Partículas de análisis — mismo lenguaje que la versión anterior, ahora orbitando el chassis */}
+            {/* Partículas de análisis — orbitan por fuera de todo el chassis */}
             {isActive && (
               <motion.circle
                 cx={100}
@@ -165,7 +170,40 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
               />
             )}
 
-            {/* Ojos — el único punto de luz "vivo" del chassis */}
+            {/* Hombros — pequeños nubs redondeados, dan sensación de torso "armado" antes que el torso mismo */}
+            <circle cx={48} cy={124} r={10} fill={`url(#chassis-${uid})`} stroke={color} strokeOpacity={0.28} strokeWidth={1} />
+            <circle cx={152} cy={124} r={10} fill={`url(#chassis-${uid})`} stroke={color} strokeOpacity={0.28} strokeWidth={1} />
+
+            {/* Thrusters — detalle mecánico bajo cada hombro */}
+            <motion.g
+              animate={!motionSafe ? { opacity: 0.55 } : { opacity: [0.35, 0.6, 0.35] }}
+              transition={{ duration: isActive ? 1.4 : 3.4, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
+            >
+              <rect x={42} y={132} width={5} height={13} rx={2.5} fill={color} opacity={0.5} transform="rotate(-10 44.5 138.5)" />
+              <rect x={153} y={132} width={5} height={13} rx={2.5} fill={color} opacity={0.5} transform="rotate(10 155.5 138.5)" />
+            </motion.g>
+
+            {/* Torso — cuerpo mecánico compacto, separado de la cabeza por un cuello visible */}
+            <path d={TORSO_PATH} fill={`url(#chassis-${uid})`} stroke={color} strokeOpacity={0.3} strokeWidth={1.25} />
+
+            {/* Chest core — pequeño acento central, refuerzo de "AI companion" (no un ojo, no una cara) */}
+            <motion.circle
+              cx={100}
+              cy={148}
+              r={5}
+              fill={color}
+              animate={!motionSafe ? { opacity: 0.7 } : { opacity: [0.45, 0.85, 0.45] }}
+              transition={{ duration: isActive ? 1 : 2.6, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
+            />
+
+            {/* Cabeza — redondeada, separada del torso; visor + ojos viven acá */}
+            <path d={HEAD_PATH} fill={`url(#head-${uid})`} stroke={color} strokeOpacity={0.34} strokeWidth={1.25} />
+            <path d={HEAD_PATH} fill={`url(#highlight-${uid})`} clipPath={`url(#head-clip-${uid})`} />
+
+            {/* Visor — banda oscura que enmarca los ojos, nunca un ícono de cara agresivo */}
+            <rect x={66} y={62} width={68} height={30} rx={15} fill="#04050a" opacity={0.85} />
+
+            {/* Ojos — cápsulas suaves (nunca diagonales/agresivas), único punto de luz "vivo" */}
             <motion.g
               animate={
                 !motionSafe
@@ -180,12 +218,9 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
                 ease: "easeInOut",
               }}
             >
-              <circle cx={78} cy={96} r={7.5} fill={`url(#eye-${uid})`} />
-              <circle cx={122} cy={96} r={7.5} fill={`url(#eye-${uid})`} />
+              <rect x={75} y={71} width={16} height={9} rx={4.5} fill={`url(#eye-${uid})`} />
+              <rect x={109} y={71} width={16} height={9} rx={4.5} fill={`url(#eye-${uid})`} />
             </motion.g>
-
-            {/* Luz de mentón — pequeño acento en el vértice inferior del chassis */}
-            <rect x={96} y={166} width={8} height={8} fill={color} opacity={0.65} transform="rotate(45 100 170)" rx={1.5} />
           </svg>
         </motion.div>
       </motion.div>
@@ -213,9 +248,17 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
 }
 
 /**
- * Silueta "badge/shield" — hombros redondeados, se angosta hacia un vértice
- * inferior. Referencia conceptual aprobada: un dispositivo/robot reconocible,
- * no un círculo genérico de IA. viewBox fijo 200×200.
+ * Torso — trapezoide redondeado, hombro a hombro (~100px) angostándose hacia
+ * la base. Vive DEBAJO de la cabeza, con un espacio de cuello visible entre
+ * ambos (y≈112 a y≈128) para que se lean como dos piezas ensambladas, no una
+ * silueta única.
  */
-const CHASSIS_PATH =
-  "M 62 48 C 78 34, 122 34, 138 48 C 152 60, 164 74, 162 88 C 158 118, 132 148, 100 172 C 68 148, 42 118, 38 88 C 36 74, 48 60, 62 48 Z";
+const TORSO_PATH =
+  "M 62 128 C 62 122, 66 118, 72 118 L 128 118 C 134 118, 138 122, 138 128 L 136 168 C 135 178, 122 186, 100 188 C 78 186, 65 178, 64 168 Z";
+
+/**
+ * Cabeza — cápsula redondeada, más ancha que alta. viewBox fijo 200×200,
+ * centrada en x=100, de y≈40 a y≈112.
+ */
+const HEAD_PATH =
+  "M 100 40 C 128 40, 148 56, 148 78 C 148 100, 128 112, 100 112 C 72 112, 52 100, 52 78 C 52 56, 72 40, 100 40 Z";
