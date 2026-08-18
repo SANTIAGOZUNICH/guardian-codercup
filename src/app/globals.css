@@ -27,6 +27,10 @@
   --accent-soft-strong: rgba(62, 123, 250, 0.22);
   --accent-glow: rgba(94, 152, 255, 0.35);
 
+  /* Violeta secundario — MUY controlado, solo para el gradiente de marca/CTA protagonista (First Impression) */
+  --accent-violet: #8b6cf5;
+  --accent-gradient: linear-gradient(135deg, var(--accent) 0%, var(--accent-violet) 100%);
+
   /* Estados de riesgo — desaturados, no candy colors */
   --risk-low: #34c77b;
   --risk-low-soft: rgba(52, 199, 123, 0.12);

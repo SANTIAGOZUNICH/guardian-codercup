@@ -198,11 +198,13 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
             {/* Torso — cuerpo mecánico compacto, separado de la cabeza por un cuello visible */}
             <path d={TORSO_PATH} fill={`url(#chassis-${uid})`} stroke={color} strokeOpacity={0.3} strokeWidth={1.25} />
 
-            {/* Chest core — pequeño acento central, refuerzo de "AI companion" (no un ojo, no una cara) */}
-            <motion.circle
-              cx={100}
-              cy={148}
-              r={5}
+            {/* Costuras de placa — detalle mecánico estático, "placas diferenciadas" sin sobrecargar el chassis */}
+            <line x1={78} y1={130} x2={78} y2={162} stroke={color} strokeOpacity={0.14} strokeWidth={1} />
+            <line x1={122} y1={130} x2={122} y2={162} stroke={color} strokeOpacity={0.14} strokeWidth={1} />
+
+            {/* Chest core — hexágono pequeño (mismo lenguaje que la marca), refuerzo de "AI companion" sin ser un ojo/cara */}
+            <motion.path
+              d={CHEST_CORE_PATH}
               fill={color}
               animate={!motionSafe ? { opacity: 0.7 } : { opacity: [0.45, 0.85, 0.45] }}
               transition={{ duration: isActive ? 1 : 2.6, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
@@ -274,3 +276,6 @@ const TORSO_PATH =
  */
 const HEAD_PATH =
   "M 100 40 C 128 40, 148 56, 148 78 C 148 100, 128 112, 100 112 C 72 112, 52 100, 52 78 C 52 56, 72 40, 100 40 Z";
+
+/** Hexágono pequeño centrado en (100,148) r=6 — mismo lenguaje que GuardianLogo, ver chest core arriba. */
+const CHEST_CORE_PATH = "M 100 142 L 105 145 L 105 151 L 100 154 L 95 151 L 95 145 Z";

@@ -136,6 +136,16 @@ GUARDIAN es un producto independiente. Sin referencias visibles a "Genus"/"Labor
 
 Oscuro, premium, tecnológico, moderadamente futurista, industrial pero claro. Guardian (el personaje/ícono) es neutral e inteligente — nunca infantil, nunca agresivo. La dirección visual actual (glass panels, acentos, animaciones de reveal progresivo en el grafo del Twin) está aprobada — el próximo bloque de trabajo (post functional freeze) es pulido visual/demo experience, no redefinir esta dirección desde cero.
 
+**Login / First Impression (checkpoint dedicado, 2026-08-18) — dirección visual aprobada, referencia para el resto del pulido visual:**
+- Composición de dos columnas en desktop (izquierda: marca + promesa + Guardian + beneficios; derecha: panel de acceso), colapsa a una columna en viewports angostos.
+- Acento violeta secundario (`--accent-violet: #8b6cf5`) sumado al azul existente, combinados en `--accent-gradient` (`linear-gradient(135deg, var(--accent), var(--accent-violet))`) — reservado exclusivamente para el CTA protagonista de una pantalla (`Button variant="gradient"`), nunca decorativo en cascada.
+- Marca hexagonal reutilizable (`GuardianLogo`, `src/components/ui/GuardianLogo.tsx`) — hexágono + trazo abierto tipo "G", mismo gradiente azul→violeta; usada en el lockup de marca y como separador decorativo dentro del panel de acceso.
+- Guardian (el robot) mantiene su SVG/CSS existente y su API de estados sin cambios — se le sumaron detalles menores (costuras de torso, núcleo del pecho con forma hexagonal en vez de círculo) que ecoan el lenguaje del `GuardianLogo`, sin crear un componente paralelo.
+- Panel de acceso: `border-border-default` + `bg-bg-elevated` + `shadow-elevation-2`, esquinas redondeadas — elevación sutil, no glassmorphism exagerado.
+- Densidad reducida a propósito: máximo 3 claims de beneficio, sin footer legal ni métricas inventadas.
+- Movimiento controlado (entrada escalonada, sin partículas ni motion de fondo constante) — vía el hook existente `useMotionSafe`, respeta `prefers-reduced-motion`.
+- Patrón de extensión de componentes compartidos: `Input`/`Button` se extendieron de forma aditiva y retrocompatible (`icon`/`trailing` en `Input`, `variant="gradient"` en `Button`) en vez de crear variantes paralelas — este es el patrón a seguir en los próximos checkpoints de pulido visual (Guided Setup, Review, Command Center) para evitar deuda visual.
+
 ## 23. Current Architecture
 
 Basado en el código real del repo (`src/`):
@@ -156,7 +166,7 @@ Basado en el código real del repo (`src/`):
 - `operational-query.ts` responde "cuál es mi cuello de botella" de forma agregada (proceso más frecuente entre pedidos con restricción de deadline), no por pedido puntual.
 - No hay benchmark automatizado de calidad de las respuestas de conocimiento cosmético (son no determinísticas).
 - `PlanCardView`/`BaselineCard` colapsan visualmente `MaterialFeasibility: "fail"` y `"not_evaluated"` en el mismo label "Faltan" — la distinción real sigue existiendo en los datos (`ScenarioResult.materialsFeasible`), no en ese componente puntual.
-- Sin deployment activo (ver sección 29).
+- (Resuelta) Se creía que no había deployment activo — verificado que sí lo hay, ver sección 29.
 
 ## 26. Non-Negotiable Rules
 
@@ -184,12 +194,18 @@ Vitest, 360 tests en 30 archivos, todos deterministas (sin red — ningún test 
 
 ## 29. Deployment
 
-Sin deployment configurado — no hay `vercel.json` ni pipeline de CI/CD en el repo. Se corre localmente: `npm run dev` (desarrollo), `npm run build` + `npm run start` (producción local). `GUARDIAN_API_KEY` vive en `.env.local` (gitignored, nunca commiteado). No se deployó nada durante este ni ningún checkpoint anterior.
+Existe el proyecto Vercel `guardian-codercup`, conectado al repo `SANTIAGOZUNICH/guardian-codercup`. Branch productiva: `master`. Source: Git integration de Vercel (auto-deploy) — no requiere `vercel.json` en el repo para desplegar (Vercel autodetecta Next.js). Todo push a `master` dispara un deployment de producción automático, sin acción manual.
+
+URL de producción: `https://guardian-codercup.vercel.app`.
+
+Último estado verificado (ver sección 32): commit `2ce1de35fcfbbd76260e2775a60e24365789fdad`, deployment `dpl_5bcpEr1u9KsAeaUWn1BNjd5TQujD`, status `READY`.
+
+Localmente se sigue pudiendo correr con `npm run dev` (desarrollo) o `npm run build` + `npm run start` (producción local). `GUARDIAN_API_KEY` vive en `.env.local` (gitignored, nunca commiteado) — en Vercel debe estar configurada como variable de entorno del proyecto por separado (no verificado en este checkpoint; si el conocimiento cosmético o el NLU fallan en producción, revisar ahí primero).
 
 ## 30. Roadmap
 
-- **DONE**: Modelo de dominio (gramos/presentaciones), Motor (masa/batches/rates incluyendo precisión por producto-presentación-recurso), Guided Setup (bloques + progressive disclosure + modo avanzado), Ask Guardian (4 categorías de routing), Idioma (100% español), Branding (sin Genus visible), Production References por producto/presentación — **GUARDIAN V1 FUNCTIONAL FREEZE**.
-- **NEXT**: Visual Polish / Demo Experience — pulido de UI, transiciones, detalle de marca, pantalla de demo. (Explícitamente el próximo bloque después de este checkpoint.)
+- **DONE**: Modelo de dominio (gramos/presentaciones), Motor (masa/batches/rates incluyendo precisión por producto-presentación-recurso), Guided Setup (bloques + progressive disclosure + modo avanzado), Ask Guardian (4 categorías de routing), Idioma (100% español), Branding (sin Genus visible), Production References por producto/presentación — **GUARDIAN V1 FUNCTIONAL FREEZE**. Visual Polish — Login/First Impression (ver sección 22): rediseño completo de `LoginScreen.tsx`, único checkpoint visual cerrado hasta ahora.
+- **NEXT**: Visual Polish / Demo Experience para el resto de las pantallas — Guided Setup, Review, Building Twin, Command Center, Simulación, Disruption. Extender la dirección visual establecida en Login (sección 22), no redefinirla.
 - **LATER**: Profiles verdaderamente independientes por producto en Guided Setup V2 (eliminar la limitación de la sección 25); benchmark de calidad para conocimiento cosmético; distinción visual real fail vs. not_evaluated en PlanCard.
 - **CUT**: Todo lo listado en la sección 27 (Out of Scope) — no reconsiderar sin una decisión de producto explícita.
 
@@ -216,5 +232,5 @@ ANTES DE MODIFICAR:
 - **Lint**: verde, 0 errores, 0 warnings.
 - **TypeScript**: limpio (`tsc --noEmit`).
 - **Walkthrough manual**: Guided Setup modo avanzado (NLU de rates por equipo/producto en un solo mensaje) → Capacidades con variantes visibles y editables → Twin construido → Ask Guardian con dos productos de la misma máquina usando cada uno su rate correcto (Shampoo: Llenadora 1 @1800u/h + Llenadora 2 @1500u/h combinadas y por separado; Crema: solo Llenadora 1 @1000u/h, Llenadora 2 correctamente excluida por no tener rate conocido) — verificado en browser real, no asumido.
-- **Commit actual**: `56e81c28aff622762a91ffd6fa4f4fb1066ab91d` (branch `master`) — este checkpoint deja 83 archivos modificados SIN COMMIT (a pedido explícito, ver sección 29).
-- **Deploy actual**: ninguno.
+- **Commit actual**: `2ce1de35fcfbbd76260e2775a60e24365789fdad` (branch `master`), commiteado y pusheado a `origin/master`.
+- **Deploy actual**: verificado directamente contra la API de Vercel (no asumido) — proyecto `guardian-codercup`, deployment `dpl_5bcpEr1u9KsAeaUWn1BNjd5TQujD`, commit `2ce1de35fcfbbd76260e2775a60e24365789fdad`, status `READY`, `target: production`, servido en `https://guardian-codercup.vercel.app`. Auto-deploy vía Git integration confirmado (push a `master` → deployment automático).
