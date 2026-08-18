@@ -160,8 +160,8 @@ async function unsupportedCopyTest() {
 /** Mismo modelo mínimo que usan los tests unitarios de goal-parser.ts (ver goal-parser.test.ts) — evita depender del parser de Excel real, que usa sintaxis TS no soportada en modo strip-only de Node. */
 function buildFixtureModel(): OperationalModel {
   return {
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
-    orders: [{ id: "PED-1", client: "TCL", productId: "shampoo-premium", quantity: 100, deliveryDate: "2026-08-20", priority: "normal" }],
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
+    orders: [{ id: "PED-1", client: "Belleza Norte SA", productId: "shampoo-premium", quantity: 100, deliveryDate: "2026-08-20", priority: "normal" }],
     products: [
       { id: "shampoo-premium", name: "Shampoo Premium", unit: "unidades" },
       { id: "crema-hidratante", name: "Crema Hidratante", unit: "unidades" },

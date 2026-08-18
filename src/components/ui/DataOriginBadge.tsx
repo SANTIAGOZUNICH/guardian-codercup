@@ -15,24 +15,24 @@ import type { DataProvenance } from "@/lib/types";
  * solo cambia el canal por el que entró.
  */
 const STYLE: Record<DataProvenance, { dot: string; classes: string; label: string }> = {
-  company_data: { dot: "bg-accent-bright", classes: "border-accent/30 bg-accent-soft text-accent-bright", label: "Company Data" },
-  user_provided: { dot: "bg-accent-bright", classes: "border-accent/30 bg-accent-soft text-accent-bright", label: "Company Data" },
+  company_data: { dot: "bg-accent-bright", classes: "border-accent/30 bg-accent-soft text-accent-bright", label: "Dato de tu empresa" },
+  user_provided: { dot: "bg-accent-bright", classes: "border-accent/30 bg-accent-soft text-accent-bright", label: "Dato de tu empresa" },
   reference_estimate: {
     dot: "bg-risk-medium",
     classes: "border-risk-medium/30 bg-risk-medium-soft text-risk-medium",
-    label: "Reference Estimate",
+    label: "Valor de referencia",
   },
   calculated: {
     dot: "bg-[#9b8cff]",
     classes: "border-[#9b8cff]/25 bg-[#9b8cff]/10 text-[#b3a8ff]",
-    label: "Calculated",
+    label: "Calculado",
   },
 };
 
 const NOT_EVALUATED = {
   dot: "bg-text-disabled",
   classes: "border-border-default bg-white/[0.03] text-text-tertiary",
-  label: "Not Evaluated",
+  label: "No evaluado",
 };
 
 export function DataOriginBadge({ origin, className }: { origin: DataProvenance | "not_evaluated"; className?: string }) {

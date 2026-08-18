@@ -72,7 +72,7 @@ export function ModelBuildingScreen({
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
       <div className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">
-          {done ? "OPERATIONAL TWIN READY" : "BUILDING OPERATIONAL TWIN"}
+          {done ? "MODELO OPERACIONAL LISTO" : "CONSTRUYENDO MODELO OPERACIONAL"}
         </p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight text-text-primary">{model.company.name}</h2>
       </div>
@@ -102,8 +102,8 @@ export function ModelBuildingScreen({
           className="text-xs font-medium uppercase tracking-[0.1em] text-text-tertiary"
         >
           {hasConstraints
-            ? `${summary.totalConstraints} constraint${summary.totalConstraints !== 1 ? "s" : ""} · ${summary.affectedOrders} order${summary.affectedOrders !== 1 ? "s" : ""} affected`
-            : "0 constraints"}
+            ? `${summary.totalConstraints} restricci${summary.totalConstraints !== 1 ? "ones" : "ón"} · ${summary.affectedOrders} pedido${summary.affectedOrders !== 1 ? "s" : ""} afectado${summary.affectedOrders !== 1 ? "s" : ""}`
+            : "0 restricciones"}
         </motion.p>
       )}
 
@@ -115,13 +115,13 @@ export function ModelBuildingScreen({
           className="flex flex-wrap items-center justify-center gap-3"
         >
           {cta.primary === "view-constraints" ? (
-            <Button onClick={onViewConstraints}>View constraints</Button>
+            <Button onClick={onViewConstraints}>Ver restricciones</Button>
           ) : (
-            <Button onClick={onGoToCommandCenter}>Go to Command Center</Button>
+            <Button onClick={onGoToCommandCenter}>Ir al Centro de Operaciones</Button>
           )}
           {cta.showSecondary && (
             <Button variant="ghost" onClick={onGoToCommandCenter}>
-              Go to Command Center
+              Ir al Centro de Operaciones
             </Button>
           )}
         </motion.div>
@@ -136,7 +136,7 @@ export function ModelBuildingScreen({
           onClick={() => setShowMissingData(true)}
           className="rounded-full border border-border-default bg-white/[0.02] px-4 py-1.5 text-xs font-medium text-text-tertiary transition-colors hover:border-border-strong hover:text-text-secondary"
         >
-          {buildMissingDataLabel(twinCompleteness)} · Review missing data
+          {buildMissingDataLabel(twinCompleteness)} · Revisar datos faltantes
         </motion.button>
       )}
 

@@ -7,6 +7,7 @@ function buildModel(): OperationalModel {
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [],
+    presentations: [],
     materials: [],
     inventory: [],
     resources: [
@@ -27,7 +28,7 @@ describe("isDisruptionIntent", () => {
   });
 
   it("no confunde un Goal normal con una disrupción", () => {
-    expect(isDisruptionIntent("Necesito producir 30.000 shampoos para TCL antes del viernes.")).toBe(false);
+    expect(isDisruptionIntent("Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes.")).toBe(false);
   });
 });
 

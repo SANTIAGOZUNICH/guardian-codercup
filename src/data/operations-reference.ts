@@ -27,7 +27,7 @@ export const DEFAULT_OPERATIONS_CALENDAR: OperationsCalendar = {
 
 /**
  * Snapshot operacional estable del dataset demo — el instante en el que el
- * Operational Twin "representa" a Laboratorio Genus para efectos de
+ * Operational Twin "representa" a Laboratorio Guardian para efectos de
  * cualquier cálculo dependiente del tiempo (evaluateScenario, Constraint
  * Detection). Coincide con el "today" usado al generar
  * public/demo/*.xlsx (scripts/generate-demo-data.mjs) — el mismo viernes

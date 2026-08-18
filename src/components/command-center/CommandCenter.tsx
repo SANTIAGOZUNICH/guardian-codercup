@@ -96,7 +96,7 @@ export function CommandCenter({
       <Card className="p-5! relative overflow-hidden">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <SectionLabel icon={<Compass size={13} />}>Operational Twin</SectionLabel>
+            <SectionLabel icon={<Compass size={13} />}>Modelo Operacional</SectionLabel>
             <p className="mt-1 text-xs text-text-tertiary">Vista en vivo de tu flujo productivo</p>
           </div>
           <button
@@ -220,7 +220,7 @@ function MaterialIntelligenceCard({
   return (
     <Card className="p-5! flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <SectionLabel>Material Intelligence</SectionLabel>
+        <SectionLabel>Materiales</SectionLabel>
         <CapabilityBadge connected={data.connected} />
       </div>
       {data.connected ? (
@@ -245,7 +245,7 @@ function MaterialIntelligenceCard({
 function SimulationBasisCard({ basis }: { basis: { companyDataCount: number; referenceEstimateCount: number } }) {
   return (
     <Card className="p-5! flex flex-col gap-3">
-      <SectionLabel>Simulation Basis</SectionLabel>
+      <SectionLabel>Base de la simulación</SectionLabel>
       <div className="flex flex-col gap-2.5">
         {basis.companyDataCount > 0 && (
           <div className="flex items-center justify-between">
@@ -274,7 +274,7 @@ function AskGuardianCard({ onClick, prompts, wide }: { onClick: () => void; prom
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <SectionLabel className="text-accent-bright/80">Ask Guardian</SectionLabel>
+          <SectionLabel className="text-accent-bright/80">Preguntale a Guardian</SectionLabel>
           <p className="mt-1 text-sm text-text-secondary">Preguntale algo sobre tu operación.</p>
         </div>
         <Guardian state="idle" size={40} className="shrink-0 gap-0" />
@@ -310,7 +310,7 @@ function AskGuardianCard({ onClick, prompts, wide }: { onClick: () => void; prom
   );
 }
 
-const MATERIALS_LABEL: Record<MaterialFeasibility, string> = { pass: "PASS", fail: "FAIL", not_evaluated: "NO EVALUADO" };
+const MATERIALS_LABEL: Record<MaterialFeasibility, string> = { pass: "OK", fail: "FALTA", not_evaluated: "NO EVALUADO" };
 
 function InlineCheck({ ok, label, value }: { ok: boolean | null; label: string; value: string }) {
   const Icon = ok === null ? Minus : Check;
@@ -342,8 +342,8 @@ function LastSimulationStrip({ data }: { data: LastSimulation }) {
         <p className="mt-1 truncate text-sm text-text-primary">{data.goalSummary}</p>
       </div>
       <div className="hidden items-center gap-5 md:flex">
-        <InlineCheck ok={data.capacityFeasible} label="Capacidad" value={data.capacityFeasible ? "PASS" : "FAIL"} />
-        <InlineCheck ok={data.deadlineMet} label="Fecha" value={data.deadlineMet ? "PASS" : "FAIL"} />
+        <InlineCheck ok={data.capacityFeasible} label="Capacidad" value={data.capacityFeasible ? "OK" : "FALTA"} />
+        <InlineCheck ok={data.deadlineMet} label="Fecha" value={data.deadlineMet ? "OK" : "FALTA"} />
         <InlineCheck
           ok={data.materialsFeasible === "not_evaluated" ? null : data.materialsFeasible === "pass"}
           label="Materiales"

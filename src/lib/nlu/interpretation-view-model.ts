@@ -46,7 +46,7 @@ export function buildUnsupportedMessage(response: InterpretationResponse): strin
 }
 
 export const IRRELEVANT_MESSAGE =
-  "Esa pregunta no está relacionada con el Operational Twin. Puedo ayudarte con producción, recursos, capacidad, restricciones y escenarios operativos.";
+  "Esa pregunta no está relacionada con el Modelo Operacional. Puedo ayudarte con producción, recursos, capacidad, restricciones y escenarios operativos.";
 
 export const NONSENSE_MESSAGE =
   "No pude relacionar eso con información operacional válida. Probá describiendo tu operación o un objetivo concreto.";

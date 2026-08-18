@@ -5,7 +5,7 @@ import type { OperationalModel, OperationsCalendar, Order } from "@/lib/types";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 import {
   buildConstraintViewModel,
   buildTwinReadySummary,
@@ -25,6 +25,8 @@ function buildFixtureModel(overrides: Partial<OperationalModel> = {}): Operation
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "producto-x", name: "Producto X", unit: "unidades" }],
+    // 100 g/unidad === 0.1kg/unidad (mismo valor que antes vivía en el BOM).
+    presentations: [{ id: "producto-x-100g", productId: "producto-x", label: "100 g", gramsPerUnit: { value: 100, source: "reference_estimate" } }],
     materials: [{ code: "MP-X", name: "Material X", unit: "kg" }],
     inventory: [{ materialCode: "MP-X", stock: 1000, unit: "kg" }],
     resources: [
@@ -83,8 +85,8 @@ function buildOrder(overrides: Partial<Order> = {}): Order {
 }
 
 describe("formatDisplayDate / formatQty", () => {
-  it('formatea una fecha naive como "Wed 19 Aug · 14:09"', () => {
-    expect(formatDisplayDate("2026-08-19T14:09:05.000")).toBe("Wed 19 Aug · 14:09");
+  it('formatea una fecha naive como "mié 19 ago · 14:09"', () => {
+    expect(formatDisplayDate("2026-08-19T14:09:05.000")).toBe("mié 19 ago · 14:09");
   });
 
   it("formatea cantidad + unidad", () => {
@@ -121,8 +123,8 @@ describe("buildTwinReadySummary", () => {
 
   it("mensaje de Guardian en Twin Ready refleja constraints y pedidos por separado", () => {
     const summary = { totalConstraints: 2, affectedOrders: 1 };
-    expect(buildGuardianTwinReadyMessage("Laboratorio Genus", summary)).toBe(
-      "Ya entiendo cómo funciona Laboratorio Genus. Encontré 2 restricciones que pueden afectar 1 pedido.",
+    expect(buildGuardianTwinReadyMessage("Laboratorio Guardian", summary)).toBe(
+      "Ya entiendo cómo funciona Laboratorio Guardian. Encontré 2 restricciones que pueden afectar 1 pedido.",
     );
   });
 });
@@ -229,8 +231,8 @@ describe("Constraint View Model — integración con el dataset demo real", () =
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
@@ -245,7 +247,7 @@ describe("Constraint View Model — integración con el dataset demo real", () =
     const vm = buildConstraintViewModel(model, order, oc)!;
 
     expect(vm.severity).toBe("critical");
-    expect(vm.client).toBe("TCL");
+    expect(vm.client).toBe("Belleza Norte SA");
     expect(vm.productName).toBe("Shampoo Premium");
     expect(vm.material).toEqual({
       materialCode: "MP-003",
@@ -255,8 +257,8 @@ describe("Constraint View Model — integración con el dataset demo real", () =
       missingLabel: "73,5 kg",
     });
     expect(vm.deadline).toEqual({
-      completionLabel: "Wed 19 Aug · 14:09",
-      deadlineLabel: "Tue 18 Aug · 16:00",
+      completionLabel: "mié 19 ago · 14:09",
+      deadlineLabel: "mar 18 ago · 16:00",
       capacityFeasible: true,
     });
     expect(vm.bottleneck).toEqual({ process: "Elaboración", hoursLabel: "15 h" });
@@ -272,9 +274,13 @@ describe("Constraint View Model — integración con el dataset demo real", () =
     expect(buildConstraintViewModel(model, order, oc)).toBeNull();
   });
 
-  it("Twin Ready: 1 order affected sobre el dataset real completo", () => {
+  // GUARDIAN V1 (gramos por unidad) — ver el mismo comentario en
+  // command-center-view-model.test.ts: PED-1009 (crema-hidratante) pasa a
+  // tener un deadline_at_risk real una vez que la masa de Elaboración se
+  // deriva de `Presentation.gramsPerUnit` (200 g) en vez del BOM incompleto.
+  it("Twin Ready: 2 orders affected sobre el dataset real completo", () => {
     const summary = buildTwinReadySummary(allConstraints);
-    expect(summary.affectedOrders).toBe(1);
-    expect(summary.totalConstraints).toBe(2);
+    expect(summary.affectedOrders).toBe(2);
+    expect(summary.totalConstraints).toBe(3);
   });
 });

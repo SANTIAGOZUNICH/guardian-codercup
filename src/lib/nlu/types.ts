@@ -118,6 +118,33 @@ export const NluScheduleMentionSchema = z.object({
   endTime: z.string().nullable().describe("Hora de fin en formato HH:mm si se mencionó"),
 });
 
+/**
+ * Contenido por unidad (gramos) — GUARDIAN V1, decisión de dominio
+ * definitiva: SOLO gramos, nunca ml/densidad. `productName: null` cuando el
+ * texto da un gramaje sin dejar claro a qué producto corresponde (ej. una
+ * sola frase "son potes de 200g" en un contexto de un solo producto ya
+ * conocido) — quien consume esto decide si hay un único producto candidato o
+ * si hace falta preguntar.
+ */
+export const NluPresentationMentionSchema = z.object({
+  productName: z.string().nullable().describe("Nombre del producto al que corresponde este gramaje, tal como se mencionó — null si el texto no lo deja claro"),
+  gramsPerUnit: z.number().nullable().describe("Gramos de producto por unidad — null si el usuario dijo explícitamente que no lo sabe"),
+});
+
+/**
+ * Precisión progresiva (Production References por producto/presentación):
+ * una velocidad de equipo atada a un producto/presentación puntual, ej.
+ * "la llenadora 1 hace 1800 u/h para frascos de 50g". `equipmentName` y
+ * `productName` en null significan "no se pudo determinar con confianza" —
+ * nunca se adivina a qué equipo o producto corresponde un número suelto.
+ */
+export const NluCapacityVariantMentionSchema = z.object({
+  equipmentName: z.string().nullable().describe("Nombre o referencia del equipo tal como se mencionó (ej. 'Llenadora 1', 'la primera'), null si no queda claro a cuál se refiere"),
+  productName: z.string().nullable().describe("Producto o presentación al que corresponde esta velocidad, tal como se mencionó"),
+  value: z.number().describe("Velocidad numérica, en la unidad que el usuario haya dado (normalmente unidades/hora)"),
+  unit: z.string().nullable(),
+});
+
 export const NluEntitiesSchema = z.object({
   resources: z.array(NluResourceEntitySchema).default([]),
   processes: z.array(NluProcessEntitySchema).default([]),
@@ -130,6 +157,8 @@ export const NluEntitiesSchema = z.object({
   batchInfo: z.array(NluBatchInfoMentionSchema).default([]),
   staffingCount: z.number().nullable().default(null),
   schedule: NluScheduleMentionSchema.nullable().default(null),
+  presentations: z.array(NluPresentationMentionSchema).default([]),
+  capacityVariants: z.array(NluCapacityVariantMentionSchema).default([]),
 });
 
 export type NluEntities = z.infer<typeof NluEntitiesSchema>;

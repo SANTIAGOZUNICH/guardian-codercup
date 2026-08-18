@@ -19,7 +19,7 @@ export const DATA_PROVENANCE: Record<string, { provenance: DataProvenance; sourc
   // NOTA (Checkpoint 9B.2): batchSize/hoursPerBatch/ratePerHour ahora llevan
   // su propio `SourcedValue.source` por instancia (company_data vs.
   // reference_estimate) — esta tabla documenta el caso por defecto del
-  // dataset de demo (Laboratorio Genus), no una verdad global para toda
+  // dataset de demo (Laboratorio Guardian), no una verdad global para toda
   // empresa. `materialsPerUnit` no tiene provenance propio todavía (no es un
   // SourcedValue): se documenta acá como referencia hasta que exista.
   "productionProfile.materialsPerUnit": { provenance: "reference_estimate", source: "production-profiles.ts" },

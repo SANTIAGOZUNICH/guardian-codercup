@@ -38,11 +38,11 @@ export function AppShell({
   children: ReactNode;
 }) {
   const navItems: { key: AppShellNavItem; label: string; icon: ReactNode; visible: boolean }[] = [
-    { key: "command-center", label: "Command Center", icon: <Gauge size={17} />, visible: true },
-    { key: "ask-guardian", label: "Ask Guardian", icon: <MessageCircle size={17} />, visible: true },
-    { key: "operational-twin", label: "Operational Twin", icon: <Compass size={17} />, visible: true },
-    { key: "constraints", label: "Constraints", icon: <AlertTriangle size={17} />, visible: showConstraints },
-    { key: "simulations", label: "Simulations", icon: <Play size={17} />, visible: showSimulations },
+    { key: "command-center", label: "Centro de Operaciones", icon: <Gauge size={17} />, visible: true },
+    { key: "ask-guardian", label: "Preguntale a Guardian", icon: <MessageCircle size={17} />, visible: true },
+    { key: "operational-twin", label: "Modelo Operacional", icon: <Compass size={17} />, visible: true },
+    { key: "constraints", label: "Restricciones", icon: <AlertTriangle size={17} />, visible: showConstraints },
+    { key: "simulations", label: "Simulaciones", icon: <Play size={17} />, visible: showSimulations },
   ];
 
   return (
@@ -52,7 +52,7 @@ export function AppShell({
           type="button"
           onClick={() => onNavigate("command-center")}
           className="flex items-center gap-3 text-left"
-          aria-label="Go to Command Center"
+          aria-label="Ir al Centro de Operaciones"
         >
           <Guardian state="idle" size={30} className="gap-0" />
           <span className="text-sm font-semibold tracking-[0.08em] text-text-primary">GUARDIAN</span>
@@ -90,7 +90,7 @@ export function AppShell({
             <h1 className="text-lg font-semibold tracking-tight text-text-primary">{companyName}</h1>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-text-tertiary">
               <span className="h-1.5 w-1.5 rounded-full bg-accent-bright animate-pulse-soft" />
-              Operational Twin · <span className="text-accent-bright">ACTIVE</span>
+              Modelo Operacional · <span className="text-accent-bright">ACTIVO</span>
             </p>
           </div>
           <Guardian state="idle" size={44} className="gap-0" />

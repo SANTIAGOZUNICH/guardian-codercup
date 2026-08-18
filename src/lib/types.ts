@@ -15,12 +15,48 @@ export interface Order {
   quantity: number;
   deliveryDate: string; // ISO date (YYYY-MM-DD)
   priority: Priority;
+  /**
+   * `Presentation` elegida para este pedido — decide cuántos gramos de
+   * producto representa cada unidad. Opcional: cuando el producto tiene
+   * exactamente una `Presentation` declarada, `resolveOrderPresentation()` la
+   * usa igual sin necesitar este campo explícito (ver
+   * `lib/model/presentation.ts`). Nunca se "adivina" cuando hay más de una.
+   */
+  presentationId?: string;
 }
 
 export interface Product {
   id: string;
   name: string;
   unit: string;
+}
+
+/**
+ * ============================================================================
+ * PRESENTATION — contenido por unidad, en gramos (GUARDIAN V1 — Product Contract)
+ * ============================================================================
+ * GUARDIAN V1 usa GRAMOS DE PRODUCTO POR UNIDAD como único puente entre el
+ * Pedido (unidades) y la Elaboración (kg) — nunca ml, nunca densidad, nunca
+ * conversión volumen→masa (decisión de dominio definitiva, reemplaza
+ * cualquier conversación anterior sobre cubicaje).
+ *
+ * Un mismo `Product` puede tener varias `Presentation` (ej. "Crema Facial —
+ * 50 g" y "Crema Facial — 200 g") — nunca embebidas dentro de `Product`,
+ * mismo patrón que `profiles`/`materials`: un array top-level en
+ * `OperationalModel`, cada una apuntando a su `productId`.
+ *
+ * `gramsPerUnit` es un `SourcedValue<number>` — "no declarado todavía",
+ * "declarado por la empresa" y "referencia aceptada" (ej. 50 g de
+ * referencia) son tres estados distintos, nunca colapsados. Ver
+ * `resolveOrderPresentation` en `lib/model/presentation.ts` para la regla de
+ * qué `Presentation` aplica a un pedido puntual.
+ */
+export interface Presentation {
+  id: string;
+  productId: string;
+  /** Etiqueta legible, ej. "200 g". */
+  label: string;
+  gramsPerUnit: SourcedValue<number>;
 }
 
 export interface Material {
@@ -110,7 +146,7 @@ export interface SourcedValue<T> {
  *   `hours: 0` fabricado.
  *
  * Ausente (`undefined`) se comporta como "kg" — el modelado histórico de
- * Laboratorio Genus (reactores medidos en kg) sigue funcionando sin cambios;
+ * Laboratorio Guardian (reactores medidos en kg) sigue funcionando sin cambios;
  * "units" es la opción nueva que una empresa puede declarar explícitamente
  * cuando su Production Reference ya está en unidades de producto.
  */
@@ -126,6 +162,54 @@ export interface ProductionReferenceStep {
   hoursPerBatch?: SourcedValue<number>;
   /** Techo de unidades/hora específico del producto (nunca reemplaza `resource.capacity`, solo la acota — ver evaluate-scenario.ts). Solo aplica a etapas continuas. */
   ratePerHour?: SourcedValue<number>;
+  /**
+   * A qué `Presentation` corresponde `ratePerHour` — REGLA CRÍTICA — NO
+   * ESCALADO FALSO (Product Contract V1): un rate declarado para 50 g NUNCA
+   * se reutiliza silenciosamente para 200 g. Cuando está presente, el motor
+   * solo aplica `ratePerHour` si coincide con la `Presentation` resuelta del
+   * pedido (ver `resolveOrderPresentation` + `computeStep` en
+   * evaluate-scenario.ts) — si no coincide, cae de vuelta a la capacidad
+   * física cruda de la máquina (nunca inventa una reproporción). `undefined`
+   * = el rate no está atado a ninguna presentación específica (válido
+   * directo solo cuando el producto tiene una única `Presentation`
+   * declarada — si tiene varias, un rate sin `presentationId` es ambiguo y
+   * tampoco se aplica silenciosamente).
+   */
+  presentationId?: string;
+  /**
+   * ============================================================================
+   * RATE VARIANTS — precisión progresiva por producto/presentación/recurso
+   * ============================================================================
+   * `ratePerHour`/`presentationId` arriba siguen siendo el nivel "producto
+   * genérico" (Nivel 1-2 del Product Contract). `rateVariants` permite
+   * declarar valores MÁS específicos sin romper esa simplicidad — un
+   * `ProductionReferenceStep` compartido (ej. el que arma Guided Setup V2
+   * para todos los productos) puede igual traer rates distintos por
+   * producto, por presentación, o por presentación+máquina puntual. Ver
+   * `resolveEffectiveRate()` en evaluate-scenario.ts para el orden de
+   * especificidad exacto. Nunca se resuelve por escalado — cada variante es
+   * un valor declarado, nunca derivado matemáticamente de otro.
+   */
+  rateVariants?: RateVariant[];
+}
+
+/**
+ * Un valor de `ratePerHour` atado a un contexto más específico que "todo el
+ * producto". `productId`/`presentationId`/`resourceId` ausentes = ese nivel
+ * no restringe la variante (nunca se completan con un default oculto). Una
+ * variante con `presentationId` seteado siempre es más específica que una
+ * con solo `productId` — ver el ranking de especificidad en
+ * `resolveEffectiveRate()`. Se resuelve por MATCH EXACTO contra el pedido
+ * evaluado, nunca por proximidad ni interpolación.
+ */
+export interface RateVariant {
+  /** Nivel producto — aplica a cualquier presentación de este producto que no tenga una variante más específica. */
+  productId?: string;
+  /** Nivel presentación — más específico que `productId` solo. */
+  presentationId?: string;
+  /** Nivel recurso — combinable con `presentationId` o `productId` para la máxima especificidad (Nivel 4). */
+  resourceId?: string;
+  ratePerHour: SourcedValue<number>;
 }
 
 export interface MaterialRequirement {
@@ -207,6 +291,8 @@ export interface OperationalModel {
   company: Company;
   orders: Order[];
   products: Product[];
+  /** Ver `Presentation` arriba. Array top-level, nunca embebido en `Product` — mismo patrón que `profiles`. */
+  presentations: Presentation[];
   materials: Material[];
   inventory: InventoryItem[];
   resources: Resource[];
@@ -542,6 +628,14 @@ export interface Goal {
   deadline: string;
   /** Texto original tal como lo escribió el usuario, para trazabilidad ("User goal"). */
   rawText: string;
+  /**
+   * `Presentation` resuelta para este Goal — decide cuántos gramos representa
+   * cada unidad (ver `resolveOrderPresentation`). Ausente hasta que Ask
+   * Guardian la resuelve (directa si el producto tiene una única
+   * Presentation, o preguntando al usuario si hace falta) — nunca se corre
+   * la simulación con esto sin resolver cuando el producto la necesita.
+   */
+  presentationId?: string;
 }
 
 export type GoalParseError =

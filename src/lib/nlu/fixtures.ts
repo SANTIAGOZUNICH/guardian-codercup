@@ -11,7 +11,7 @@ import type { InterpretationStatus, InterpretRequest, NluIntent } from "./types"
  * un modelo bien calibrado DEBERÍA devolver; no se llama a ningún modelo
  * acá (ver fixtures.test.ts para las verificaciones que sí corren en CI sin
  * red). Deliberadamente NO optimizado solo para el dataset demo — incluye
- * frases de rubros/procesos ajenos a Laboratorio Genus para medir si la
+ * frases de rubros/procesos ajenos a Laboratorio Guardian para medir si la
  * interpretación generaliza.
  */
 export interface NluFixtureCase {
@@ -31,7 +31,7 @@ export const NLU_FIXTURE: NluFixtureCase[] = [
     id: "clean-goal-1",
     category: "clean",
     context: "ask_guardian",
-    text: "Necesito producir 30.000 shampoos para TCL antes del viernes.",
+    text: "Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes.",
     expectedStatus: "understood",
     expectedIntent: "production_goal",
   },
@@ -78,7 +78,7 @@ export const NLU_FIXTURE: NluFixtureCase[] = [
     context: "guided_setup_industry",
     text: "hacemos muebles a medida",
     expectedStatus: "understood",
-    notes: "rubro ajeno al dataset demo — mide generalización real, no memorización del caso Genus",
+    notes: "rubro ajeno al dataset demo — mide generalización real, no memorización del caso demo",
   },
   {
     id: "clean-disruption-1",

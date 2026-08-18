@@ -48,7 +48,7 @@ export function pluralizeResourceCategory(name: string): string {
 }
 
 export function buildResourceSelectionMessage(candidates: DisruptionCandidate[]): string {
-  return `Encontré ${candidates.length} ${pluralizeResourceCategory(candidates[0].name)} en el Operational Twin. ¿Cuál querés retirar del escenario?`;
+  return `Encontré ${candidates.length} ${pluralizeResourceCategory(candidates[0].name)} en el Modelo Operacional. ¿Cuál querés retirar del escenario?`;
 }
 
 export function formatDisruptionCandidateLabel(candidate: DisruptionCandidate): string {
@@ -110,15 +110,15 @@ export function buildReSimulateGuardianMessage(): string {
 }
 
 export function buildReSimulatingDisruptionLabel(resourceName: string): string {
-  return `${resourceName} unavailable`;
+  return `${resourceName} no disponible`;
 }
 
 const GOAL_STATUS_LABEL: Record<GoalOutcomeKind, string> = {
-  fully_viable: "Fully viable",
-  operationally_viable: "Operationally viable", // Checkpoint 9B.1 — materiales no evaluados, nunca "fully viable"
-  conditionally_viable: "Conditional",
-  deadline_missed: "Deadline missed",
-  infeasible: "Infeasible",
+  fully_viable: "Totalmente viable",
+  operationally_viable: "Viable operacionalmente", // Checkpoint 9B.1 — materiales no evaluados, nunca "totalmente viable"
+  conditionally_viable: "Condicional",
+  deadline_missed: "No cumple el deadline",
+  infeasible: "Inviable",
 };
 
 export interface OperationalImpactRow {
@@ -176,32 +176,32 @@ export function buildOperationalImpactView(
 
   const rows: OperationalImpactRow[] = [
     {
-      label: `Available ${processLabel.toLowerCase()} machines`,
+      label: `Máquinas de ${processLabel.toLowerCase()} disponibles`,
       before: String(machinesAvailable(model, process)),
       after: String(machinesAvailable(disruptedModel, process)),
     },
     {
-      label: `${processLabel} capacity`,
+      label: `Capacidad de ${processLabel.toLowerCase()}`,
       before: beforeRate !== null ? formatRate(beforeRate, resource.capacityUnit) : "—",
       after: afterRate !== null ? formatRate(afterRate, resource.capacityUnit) : "—",
     },
     {
-      label: "Scenarios evaluated",
+      label: "Escenarios evaluados",
       before: String(before.scenarios.length),
       after: String(after.scenarios.length),
     },
     {
-      label: "Best completion",
+      label: "Mejor finalización",
       before: beforeTop?.result.completionAt ? formatDisplayDate(beforeTop.result.completionAt) : "—",
       after: afterTop?.result.completionAt ? formatDisplayDate(afterTop.result.completionAt) : "—",
     },
     {
-      label: "Bottleneck",
+      label: "Cuello de botella",
       before: beforeBottleneck ? `${beforeBottleneck.process} · ${formatHoursShort(beforeBottleneck.hours)}` : "—",
       after: afterBottleneck ? `${afterBottleneck.process} · ${formatHoursShort(afterBottleneck.hours)}` : "—",
     },
     {
-      label: "Goal status",
+      label: "Estado del objetivo",
       before: GOAL_STATUS_LABEL[before.outcome.kind],
       after: GOAL_STATUS_LABEL[after.outcome.kind],
     },

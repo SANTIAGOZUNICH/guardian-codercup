@@ -11,6 +11,11 @@ const SEVERITY_STYLE = {
   high: "border-risk-medium/40 bg-risk-medium-soft text-risk-medium",
 } as const;
 
+const SEVERITY_LABEL = {
+  critical: "Crítico",
+  high: "Alto",
+} as const;
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
@@ -35,7 +40,7 @@ export function ConstraintCard({ vm, additionalCount }: { vm: ConstraintViewMode
               <AlertTriangle size={16} />
             </span>
             <div>
-              <p className="text-sm font-semibold text-text-primary">CONSTRAINTS DETECTED</p>
+              <p className="text-sm font-semibold text-text-primary">RESTRICCIONES DETECTADAS</p>
               <p className="text-xs text-text-tertiary">Pedido {vm.orderId}</p>
             </div>
           </div>
@@ -45,7 +50,7 @@ export function ConstraintCard({ vm, additionalCount }: { vm: ConstraintViewMode
               SEVERITY_STYLE[vm.severity],
             )}
           >
-            {vm.severity}
+            {SEVERITY_LABEL[vm.severity]}
           </span>
         </div>
 
@@ -65,21 +70,21 @@ export function ConstraintCard({ vm, additionalCount }: { vm: ConstraintViewMode
             <section className="rounded-[var(--radius-md)] border border-risk-high/20 bg-risk-high-soft/40 p-5">
               <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-risk-high">
                 <Package size={13} />
-                Material constraint
+                Restricción de materiales
               </div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
                 <Field label="Material" value={`${vm.material.materialCode} · ${vm.material.materialName}`} />
-                <Field label="Required" value={vm.material.requiredLabel} />
+                <Field label="Necesario" value={vm.material.requiredLabel} />
                 <div className="flex flex-col gap-1">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-                    Available
+                    Disponible
                   </span>
                   <span className="flex items-center gap-1.5 text-[15px] font-medium text-text-primary">
                     {vm.material.availableLabel}
                     <ProvenanceBadge kind="company_data" />
                   </span>
                 </div>
-                <Field label="Missing" value={vm.material.missingLabel} />
+                <Field label="Falta" value={vm.material.missingLabel} />
               </div>
             </section>
           )}
@@ -88,19 +93,19 @@ export function ConstraintCard({ vm, additionalCount }: { vm: ConstraintViewMode
             <section className="rounded-[var(--radius-md)] border border-risk-medium/20 bg-risk-medium-soft/40 p-5">
               <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-risk-medium">
                 <Clock size={13} />
-                Deadline constraint
+                Restricción de deadline
               </div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div className="flex flex-col gap-1">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-                    Estimated completion
+                    Finalización estimada
                   </span>
                   <span className="flex items-center gap-1.5 text-[15px] font-medium text-text-primary">
                     {vm.deadline.completionLabel}
                     <ProvenanceBadge kind="calculated" />
                   </span>
                 </div>
-                <Field label="Operational deadline" value={vm.deadline.deadlineLabel} />
+                <Field label="Deadline operacional" value={vm.deadline.deadlineLabel} />
               </div>
               {!vm.deadline.capacityFeasible && (
                 <p className="mt-4 text-xs leading-relaxed text-text-tertiary">
@@ -116,10 +121,10 @@ export function ConstraintCard({ vm, additionalCount }: { vm: ConstraintViewMode
         {vm.bottleneck && (
           <div className="mt-6 flex items-center justify-between rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] px-4 py-3">
             <span className="text-xs font-semibold uppercase tracking-[0.06em] text-text-tertiary">
-              Operational context
+              Contexto operacional
             </span>
             <span className="text-sm text-text-secondary">
-              Bottleneck: <span className="font-medium text-text-primary">{vm.bottleneck.process}</span> ·{" "}
+              Cuello de botella: <span className="font-medium text-text-primary">{vm.bottleneck.process}</span> ·{" "}
               {vm.bottleneck.hoursLabel}
             </span>
           </div>

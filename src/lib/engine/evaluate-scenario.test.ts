@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { OperationalModel, OperationsCalendar, Order, ResourceAllocation } from "@/lib/types";
-import { evaluateScenario, baselineResourceConfig, projectCompletionDate, effectiveDeadline, canEvaluateMaterials } from "./evaluate-scenario";
+import { evaluateScenario, baselineResourceConfig, projectCompletionDate, effectiveDeadline, canEvaluateMaterials, resolveEffectiveRate } from "./evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 
 const CALENDAR: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR; // lun-vie, 8h, arranca 08:00
 
@@ -28,6 +28,8 @@ function buildFixtureModel(overrides: Partial<OperationalModel> = {}): Operation
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "producto-x", name: "Producto X", unit: "unidades" }],
+    // 100 g/unidad === 0.1kg/unidad (mismo valor que antes vivía en el BOM) — preserva los cálculos de masa existentes en este archivo tras migrar a gramos.
+    presentations: [{ id: "producto-x-100g", productId: "producto-x", label: "100 g", gramsPerUnit: { value: 100, source: "reference_estimate" } }],
     materials: [{ code: "MP-X", name: "Material X", unit: "kg" }],
     inventory: [{ materialCode: "MP-X", stock: 1000, unit: "kg" }],
     resources: [
@@ -572,8 +574,8 @@ describe("evaluateScenario — integración con el dataset demo real", () => {
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
@@ -581,7 +583,7 @@ describe("evaluateScenario — integración con el dataset demo real", () => {
     resources,
   });
 
-  it("evalúa el pedido real de TCL (PED-1001) contra el baseline, con calendario lun-vie", () => {
+  it("evalúa el pedido real de Belleza Norte SA (PED-1001) contra el baseline, con calendario lun-vie", () => {
     const order = model.orders.find((o) => o.id === "PED-1001")!;
     const config = baselineResourceConfig(model, order);
     const result = evaluateScenario(model, order, config, CALENDAR, FRIDAY_0800);
@@ -599,5 +601,131 @@ describe("evaluateScenario — integración con el dataset demo real", () => {
     // false-positivo "true" con fecha estimada en domingo 16/08 — imposible, nadie trabaja ese día).
     expect(result.completionAt).toBe("2026-08-19T14:09:05.000");
     expect(result.deadlineMet).toBe(false);
+  });
+});
+
+describe("resolveEffectiveRate — precisión progresiva por producto/presentación/recurso", () => {
+  const order = (overrides: Partial<Order> = {}): Order => ({
+    id: "PED-X",
+    client: "Cliente",
+    productId: "shampoo",
+    quantity: 10000,
+    deliveryDate: "2026-12-31",
+    priority: "normal",
+    ...overrides,
+  });
+
+  it("EJEMPLO CRÍTICO — rate de 50g NUNCA se reutiliza para un pedido de 200g sin variante compatible", () => {
+    const step = {
+      process: "Envasado" as const,
+      ratePerHour: { value: 1800, source: "company_data" as const },
+      presentationId: "shampoo-50g",
+    };
+    const result = resolveEffectiveRate(step, { id: "llenadora-1" }, order({ presentationId: "shampoo-200g" }), "shampoo-200g");
+    expect(result).toBeNull(); // cae a machine.capacity cruda en el caller, nunca 1800 reproporcionado
+  });
+
+  it("Nivel 4 (presentación + recurso) gana sobre Nivel 3 (presentación, cualquier recurso)", () => {
+    const step = {
+      process: "Envasado" as const,
+      rateVariants: [
+        { presentationId: "shampoo-250g", ratePerHour: { value: 1200, source: "company_data" as const } },
+        { presentationId: "shampoo-250g", resourceId: "llenadora-1", ratePerHour: { value: 1100, source: "company_data" as const } },
+      ],
+    };
+    const result = resolveEffectiveRate(step, { id: "llenadora-1" }, order({ presentationId: "shampoo-250g" }), "shampoo-250g");
+    expect(result).toBe(1100);
+    // Otra máquina sin variante propia usa la de presentación genérica (Nivel 3).
+    const resultOtherMachine = resolveEffectiveRate(step, { id: "llenadora-2" }, order({ presentationId: "shampoo-250g" }), "shampoo-250g");
+    expect(resultOtherMachine).toBe(1200);
+  });
+
+  it("Nivel 3 (presentación) gana sobre Nivel 2 (producto sin presentación)", () => {
+    const step = {
+      process: "Envasado" as const,
+      rateVariants: [
+        { productId: "shampoo", ratePerHour: { value: 1300, source: "company_data" as const } },
+        { presentationId: "shampoo-250g", ratePerHour: { value: 1200, source: "company_data" as const } },
+      ],
+    };
+    const result = resolveEffectiveRate(step, { id: "llenadora-1" }, order({ presentationId: "shampoo-250g" }), "shampoo-250g");
+    expect(result).toBe(1200);
+  });
+
+  it("Nivel 2 (producto) se usa cuando no hay presentación resuelta ni variante de presentación", () => {
+    const step = {
+      process: "Envasado" as const,
+      rateVariants: [{ productId: "shampoo", ratePerHour: { value: 1300, source: "company_data" as const } }],
+    };
+    const result = resolveEffectiveRate(step, { id: "llenadora-1" }, order(), null);
+    expect(result).toBe(1300);
+  });
+
+  it("sin variantes ni rate genérico -> null (el caller cae a capacidad cruda, nunca inventa)", () => {
+    const step = { process: "Envasado" as const };
+    const result = resolveEffectiveRate(step, { id: "llenadora-1" }, order(), "shampoo-250g");
+    expect(result).toBeNull();
+  });
+
+  it("Company Data y Reference Estimate resuelven igual — la especificidad manda, no el origen del dato", () => {
+    const step = {
+      process: "Envasado" as const,
+      rateVariants: [{ presentationId: "shampoo-250g", ratePerHour: { value: 1100, source: "reference_estimate" as const } }],
+    };
+    const result = resolveEffectiveRate(step, { id: "llenadora-1" }, order({ presentationId: "shampoo-250g" }), "shampoo-250g");
+    expect(result).toBe(1100);
+  });
+});
+
+describe("computeStep — capacidad física desconocida (placeholder 0) nunca capa un rate ya declarado", () => {
+  it("una variante de rate declarada sin nunca fijar una capacidad genérica de la máquina igual se usa", () => {
+    const model = buildFixtureModel({
+      resources: [
+        // Llenadora con capacity: 0 -> el placeholder "todavía no se sabe" (nunca se declaró un número genérico).
+        { id: "llenadora", name: "Llenadora", type: "Máquina", process: "Envasado", quantityAvailable: 1, capacity: 0, capacityUnit: "" },
+      ],
+      profiles: [
+        {
+          productId: "producto-x",
+          productionReference: [
+            {
+              process: "Envasado",
+              rateVariants: [{ productId: "producto-x", ratePerHour: { value: 900, source: "company_data" } }],
+            },
+          ],
+          materials: [],
+        },
+      ],
+    });
+    const order = buildOrder({ quantity: 900 });
+    const config: ResourceAllocation[] = [{ resourceId: "llenadora", unitsUsed: 1 }];
+    const result = evaluateScenario(model, order, config, CALENDAR, FRIDAY_0800);
+    const envasado = result.steps.find((s) => s.process === "Envasado")!;
+    expect(envasado.blocked).toBe(false);
+    expect(envasado.hours).toBeCloseTo(1, 5); // 900 / 900 u/h
+  });
+
+  it("cuando la capacidad física SÍ es conocida, sigue acotando el rate como siempre (nunca lo ignora)", () => {
+    const model = buildFixtureModel({
+      resources: [{ id: "llenadora", name: "Llenadora", type: "Máquina", process: "Envasado", quantityAvailable: 1, capacity: 500, capacityUnit: "u/h" }],
+      profiles: [
+        {
+          productId: "producto-x",
+          productionReference: [
+            {
+              process: "Envasado",
+              rateVariants: [{ productId: "producto-x", ratePerHour: { value: 900, source: "company_data" } }],
+            },
+          ],
+          materials: [],
+        },
+      ],
+    });
+    const order = buildOrder({ quantity: 500 });
+    const config: ResourceAllocation[] = [{ resourceId: "llenadora", unitsUsed: 1 }];
+    const result = evaluateScenario(model, order, config, CALENDAR, FRIDAY_0800);
+    const envasado = result.steps.find((s) => s.process === "Envasado")!;
+    // acotado a 500 u/h reales, no a los 900 declarados en la variante -> 1h, no 0.56h
+    expect(envasado.hours).toBeCloseTo(1, 5);
   });
 });

@@ -9,10 +9,10 @@ import type { OperationalModel, Order, OrderConstraints, OrderSeverity } from "@
  * ============================================================================
  */
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
-/** "2026-08-19T14:09:05.000" (naive, wall-clock) -> "Wed 19 Aug · 14:09". */
+/** "2026-08-19T14:09:05.000" (naive, wall-clock) -> "mié 19 ago · 14:09". */
 export function formatDisplayDate(naiveIso: string): string {
   const d = new Date(naiveIso);
   const pad = (n: number) => String(n).padStart(2, "0");

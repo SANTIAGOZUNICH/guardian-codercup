@@ -4,7 +4,7 @@ import path from "node:path";
 import type { EvaluatedScenario, GoalOutcomeKind, GoalSimulationResult, OperationalModel } from "@/lib/types";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 import { parseGoalText } from "@/lib/engine/goal-parser";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import { applyDisruption } from "@/lib/engine/disruption";
@@ -26,15 +26,15 @@ describe("Disruption view model — goal real (30.000 shampoos, disrupción Llen
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
     inventory,
     resources,
   });
-  const parsed = parseGoalText("Necesito producir 30.000 shampoos para TCL antes del viernes.", {
+  const parsed = parseGoalText("Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes.", {
     model,
     snapshotAt: DEMO_SNAPSHOT_AT,
     calendar: DEFAULT_OPERATIONS_CALENDAR,
@@ -57,18 +57,18 @@ describe("Disruption view model — goal real (30.000 shampoos, disrupción Llen
     expect(view.capacityAfterLabel).toBe("1.800 unidades/hora");
   });
 
-  it("buildOperationalImpactView: goal status cambia de Conditional a Deadline missed (item 21.3, caso real)", () => {
+  it("buildOperationalImpactView: goal status cambia de Condicional a No cumple el deadline (item 21.3, caso real)", () => {
     const impact = buildOperationalImpactView(model, disruptedModel, disruption, "Llenadora 2", before, after);
     const row = (label: string) => impact.rows.find((r) => r.label.includes(label))!;
-    expect(row("Available").before).toBe("2");
-    expect(row("Available").after).toBe("1");
-    expect(row("capacity").before).toBe("3.300 unidades/hora");
-    expect(row("capacity").after).toBe("1.800 unidades/hora");
-    expect(row("Scenarios").before).toBe("6");
-    expect(row("Scenarios").after).toBe("2");
-    expect(row("Goal status").before).toBe("Conditional");
-    expect(row("Goal status").after).toBe("Deadline missed");
-    expect(impact.narrative).toMatch(/Conditional.*Deadline missed/);
+    expect(row("disponibles").before).toBe("2");
+    expect(row("disponibles").after).toBe("1");
+    expect(row("Capacidad").before).toBe("3.300 unidades/hora");
+    expect(row("Capacidad").after).toBe("1.800 unidades/hora");
+    expect(row("Escenarios").before).toBe("6");
+    expect(row("Escenarios").after).toBe("2");
+    expect(row("Estado del objetivo").before).toBe("Condicional");
+    expect(row("Estado del objetivo").after).toBe("No cumple el deadline");
+    expect(impact.narrative).toMatch(/Condicional.*No cumple el deadline/);
   });
 
   it("buildResourceSelectionMessage: pluraliza y cuenta candidatas reales", () => {
@@ -77,7 +77,7 @@ describe("Disruption view model — goal real (30.000 shampoos, disrupción Llen
       { resourceId: "res-3", name: "Llenadora 2", capacity: 1500, capacityUnit: "unidades/hora", process: "Envasado" },
     ];
     expect(buildResourceSelectionMessage(candidates)).toBe(
-      "Encontré 2 llenadoras en el Operational Twin. ¿Cuál querés retirar del escenario?",
+      "Encontré 2 llenadoras en el Modelo Operacional. ¿Cuál querés retirar del escenario?",
     );
   });
 
@@ -130,6 +130,7 @@ describe("buildOperationalImpactView — casos sintéticos (items 13/14/21)", ()
       company: { name: "Fixture", industry: "cosmeticos" },
       orders: [],
       products: [],
+      presentations: [],
       materials: [],
       inventory: [],
       resources: [

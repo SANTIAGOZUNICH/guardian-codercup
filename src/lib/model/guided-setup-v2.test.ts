@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { NluEntities } from "@/lib/nlu/types";
 import {
   blocksTouchedByExtraction,
+  buildPresentationsFromDrafts,
+  capacityVariantMentionsFromNluEntities,
   emptyGuidedSetupV2Answers,
+  ensurePresentationDrafts,
   equipmentMentionsFromNluEntities,
   formatScheduleProposal,
   markBlocksResolved,
@@ -10,9 +13,13 @@ import {
   mergeEquipmentMention,
   mergeEquipmentMentions,
   parseWorkingDaysText,
+  presentationMentionsFromNluEntities,
+  removeCapacityVariant,
   removeEquipment,
   scheduleMentionToProposal,
+  setCapacityVariant,
   setEquipmentCapacity,
+  setPresentationGrams,
   totalResolvedCount,
   type EquipmentEntryV2,
 } from "./guided-setup-v2";
@@ -29,6 +36,8 @@ function emptyEntities(overrides: Partial<NluEntities> = {}): NluEntities {
     batchInfo: [],
     staffingCount: null,
     schedule: null,
+    presentations: [],
+    capacityVariants: [],
     ...overrides,
   };
 }
@@ -262,5 +271,143 @@ describe("formatScheduleProposal — el texto mostrado SIEMPRE refleja la propue
   it("lunes a viernes 08:00-17:00 se resume como 'Lunes a viernes'", () => {
     const proposal = scheduleMentionToProposal({ workingDaysText: "lunes a viernes", startTime: "08:00", endTime: "17:00" })!;
     expect(formatScheduleProposal(proposal)).toBe("Lunes a viernes · 08:00 – 17:00");
+  });
+});
+
+describe("Presentation drafts — contenido por unidad (Guided Setup V2)", () => {
+  it("ensurePresentationDrafts crea un draft null por cada producto nuevo, nunca duplica ni pisa uno ya cargado", () => {
+    const withGrams = setPresentationGrams([], "Crema Facial", 200, "company_data");
+    const result = ensurePresentationDrafts(withGrams, ["Crema Facial", "Shampoo"]);
+    expect(result).toEqual([
+      { productName: "Crema Facial", gramsPerUnit: { value: 200, source: "company_data" } },
+      { productName: "Shampoo", gramsPerUnit: null },
+    ]);
+  });
+
+  it("setPresentationGrams agrega o actualiza por nombre de producto", () => {
+    const step1 = setPresentationGrams([], "Crema Facial", 200, "company_data");
+    expect(step1).toEqual([{ productName: "Crema Facial", gramsPerUnit: { value: 200, source: "company_data" } }]);
+    const step2 = setPresentationGrams(step1, "Crema Facial", 250, "company_data");
+    expect(step2).toHaveLength(1);
+    expect(step2[0].gramsPerUnit).toEqual({ value: 250, source: "company_data" });
+  });
+
+  it("buildPresentationsFromDrafts resuelve productId real, ignora drafts sin gramaje", () => {
+    const drafts = [
+      { productName: "Crema Facial", gramsPerUnit: { value: 200, source: "company_data" as const } },
+      { productName: "Shampoo", gramsPerUnit: null },
+    ];
+    const productIdsByName = new Map([
+      ["Crema Facial", "crema-facial"],
+      ["Shampoo", "shampoo"],
+    ]);
+    const presentations = buildPresentationsFromDrafts(drafts, productIdsByName);
+    expect(presentations).toHaveLength(1);
+    expect(presentations[0]).toMatchObject({ productId: "crema-facial", label: "200 g", gramsPerUnit: { value: 200, source: "company_data" } });
+  });
+
+  it("CASO 6 — 50g aceptado como referencia queda etiquetado reference_estimate en el draft", () => {
+    const drafts = setPresentationGrams([], "Crema Facial", 50, "reference_estimate");
+    expect(drafts[0].gramsPerUnit!.source).toBe("reference_estimate");
+  });
+});
+
+describe("presentationMentionsFromNluEntities", () => {
+  it("gramsPerUnit null (usuario dijo que no sabe) nunca se traduce a una mención", () => {
+    const result = presentationMentionsFromNluEntities({ presentations: [{ productName: "Crema Facial", gramsPerUnit: null }] }, ["Crema Facial"]);
+    expect(result).toEqual([]);
+  });
+
+  it("un único producto conocido resuelve productName aunque el texto no lo haya nombrado", () => {
+    const result = presentationMentionsFromNluEntities({ presentations: [{ productName: null, gramsPerUnit: 200 }] }, ["Crema Facial"]);
+    expect(result).toEqual([{ productName: "Crema Facial", gramsPerUnit: 200 }]);
+  });
+
+  it("con más de un producto conocido y sin productName en el texto, no se aplica (ambiguo)", () => {
+    const result = presentationMentionsFromNluEntities({ presentations: [{ productName: null, gramsPerUnit: 200 }] }, ["Crema Facial", "Shampoo"]);
+    expect(result).toEqual([]);
+  });
+});
+
+describe("Capacity variants — precisión progresiva por producto (Guided Setup V2)", () => {
+  it("setCapacityVariant agrega o actualiza por (equipo, producto), nunca duplica", () => {
+    const equipment = mergeEquipmentMention([], { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 });
+    const step1 = setCapacityVariant(equipment, "llenadora-1", "Crema", 900, "company_data");
+    expect(step1[0].capacityVariants).toEqual([{ productName: "Crema", value: { value: 900, source: "company_data" } }]);
+    const step2 = setCapacityVariant(step1, "llenadora-1", "Crema", 950, "company_data");
+    expect(step2[0].capacityVariants).toHaveLength(1);
+    expect(step2[0].capacityVariants[0].value.value).toBe(950);
+    const step3 = setCapacityVariant(step2, "llenadora-1", "Shampoo", 1200, "reference_estimate");
+    expect(step3[0].capacityVariants).toHaveLength(2);
+  });
+
+  it("removeCapacityVariant quita solo esa fila, nunca afecta la capacidad general del equipo", () => {
+    const equipment = setCapacityVariant(
+      mergeEquipmentMention([], { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 }),
+      "llenadora-1",
+      "Crema",
+      900,
+      "company_data",
+    );
+    const result = removeCapacityVariant(equipment, "llenadora-1", "Crema");
+    expect(result[0].capacityVariants).toEqual([]);
+  });
+});
+
+describe("capacityVariantMentionsFromNluEntities — 'la primera hace 1800 para 50g y 1000 para 200g'", () => {
+  const knownEquipment = [
+    { id: "llenadora-1", name: "Llenadora 1" },
+    { id: "llenadora-2", name: "Llenadora 2" },
+  ];
+  const knownProducts = ["Shampoo"];
+
+  it("resuelve equipmentName exacto y productName conocido", () => {
+    const result = capacityVariantMentionsFromNluEntities(
+      { capacityVariants: [{ equipmentName: "Llenadora 1", productName: "Shampoo", value: 1800, unit: "u/h" }] },
+      knownEquipment,
+      knownProducts,
+    );
+    expect(result).toEqual([{ equipmentId: "llenadora-1", productName: "Shampoo", value: 1800 }]);
+  });
+
+  it("dos variantes distintas para el mismo equipo (dos presentaciones/velocidades en un mensaje)", () => {
+    const result = capacityVariantMentionsFromNluEntities(
+      {
+        capacityVariants: [
+          { equipmentName: "Llenadora 1", productName: "Shampoo", value: 1800, unit: "u/h" },
+          { equipmentName: "Llenadora 1", productName: "Shampoo", value: 1000, unit: "u/h" },
+        ],
+      },
+      knownEquipment,
+      knownProducts,
+    );
+    expect(result).toHaveLength(2);
+  });
+
+  it("equipmentName que no matchea ningún equipo conocido (y hay más de uno) se descarta, nunca adivina", () => {
+    const result = capacityVariantMentionsFromNluEntities(
+      { capacityVariants: [{ equipmentName: "la tercera", productName: "Shampoo", value: 1800, unit: "u/h" }] },
+      knownEquipment,
+      knownProducts,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("equipmentName null con un único equipo conocido resuelve sin ambigüedad", () => {
+    const result = capacityVariantMentionsFromNluEntities(
+      { capacityVariants: [{ equipmentName: null, productName: "Shampoo", value: 1800, unit: "u/h" }] },
+      [knownEquipment[0]],
+      knownProducts,
+    );
+    expect(result).toEqual([{ equipmentId: "llenadora-1", productName: "Shampoo", value: 1800 }]);
+  });
+
+  it("productName que no matchea ningún producto ya declarado se descarta", () => {
+    const result = capacityVariantMentionsFromNluEntities(
+      { capacityVariants: [{ equipmentName: "Llenadora 1", productName: "Crema", value: 1800, unit: "u/h" }] },
+      knownEquipment,
+      knownProducts,
+    );
+    expect(result).toEqual([]);
   });
 });

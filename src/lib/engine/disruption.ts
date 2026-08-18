@@ -20,7 +20,7 @@ export function applyDisruption(model: OperationalModel, disruption: MachineUnav
   const resource = model.resources.find((r) => r.id === disruption.resourceId);
   if (!resource) {
     throw new Error(
-      `No existe el recurso "${disruption.resourceId}" en el Operational Twin — no se puede aplicar la disrupción.`,
+      `No existe el recurso "${disruption.resourceId}" en el Modelo Operacional — no se puede aplicar la disrupción.`,
     );
   }
 

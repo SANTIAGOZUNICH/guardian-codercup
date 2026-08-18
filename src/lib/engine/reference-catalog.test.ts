@@ -13,6 +13,7 @@ function envasadoModel(profile: ProductionProfile): OperationalModel {
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "producto-x", name: "Producto X", unit: "unidades" }],
+    presentations: [],
     materials: [],
     inventory: [],
     resources: [{ id: "llenadora", name: "Llenadora", type: "Máquina", process: "Envasado", quantityAvailable: 1, capacity: 999999, capacityUnit: "u/h" }],

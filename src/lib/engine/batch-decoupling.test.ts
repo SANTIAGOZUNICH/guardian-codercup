@@ -1,22 +1,25 @@
 import { describe, expect, it } from "vitest";
-import type { OperationalModel, Order, ProductionProfile } from "@/lib/types";
+import type { OperationalModel, Order, Presentation, ProductionProfile } from "@/lib/types";
 import { evaluateScenario, baselineResourceConfig } from "./evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 
 /**
  * ============================================================================
  * Checkpoint 9B.3 — ETAPA 1 (batch/BOM decoupling) + ETAPA 2 (no-throw)
+ * GUARDIAN V1 (Product Contract) — masa de Elaboración vía gramos/unidad,
+ * nunca vía BOM (ver evaluate-scenario.ts, computeBatchesNeeded)
  * ============================================================================
  * Tests obligatorios 1-4 del checkpoint.
  */
 const CALENDAR = DEFAULT_OPERATIONS_CALENDAR;
 const START = "2026-08-17T08:00:00"; // lunes
 
-function elaboracionModel(profile: ProductionProfile | undefined): OperationalModel {
+function elaboracionModel(profile: ProductionProfile | undefined, presentations: Presentation[] = []): OperationalModel {
   return {
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "producto-x", name: "Producto X", unit: "unidades" }],
+    presentations,
     materials: [{ code: "MP-X", name: "Material X", unit: "kg" }],
     inventory: [],
     resources: [
@@ -57,8 +60,10 @@ describe("Test 1 — batch en unidades sin BOM calcula tiempo", () => {
   });
 });
 
-describe("Test 2 — batch en kg con información suficiente calcula tiempo (compatibilidad histórica)", () => {
-  it("batchUnit 'kg' (comportamiento de Laboratorio Genus) sigue funcionando sin cambios cuando hay BOM", () => {
+describe("Test 2 — batch en kg con gramos/unidad declarados calcula tiempo (GUARDIAN V1)", () => {
+  const presentacion100g: Presentation = { id: "producto-x-100g", productId: "producto-x", label: "100 g", gramsPerUnit: { value: 100, source: "company_data" } };
+
+  it("batchUnit 'kg' calcula la masa vía Presentation (gramos/unidad) — nunca vía BOM de materiales", () => {
     const profile: ProductionProfile = {
       productId: "producto-x",
       productionReference: [
@@ -69,10 +74,10 @@ describe("Test 2 — batch en kg con información suficiente calcula tiempo (com
           hoursPerBatch: { value: 3, source: "company_data" },
         },
       ],
-      materials: [{ process: "Elaboración", materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }] }], // 1000u * 0.1kg = 100kg
+      materials: [], // deliberadamente sin BOM — la masa no depende de materiales (Product Contract V1)
     };
-    const model = elaboracionModel(profile);
-    const theOrder = order({ quantity: 1000 });
+    const model = elaboracionModel(profile, [presentacion100g]);
+    const theOrder = order({ quantity: 1000 }); // 1000u * 100g = 100kg
     const result = evaluateScenario(model, theOrder, baselineResourceConfig(model, theOrder), CALENDAR, START);
 
     expect(result.operationalFeasibility).toBe("evaluated");
@@ -82,29 +87,30 @@ describe("Test 2 — batch en kg con información suficiente calcula tiempo (com
     expect(result.completionAt).not.toBeNull();
   });
 
-  it("batchUnit ausente (undefined) se comporta igual que 'kg' — Genus no necesita declarar nada nuevo", () => {
+  it("batchUnit ausente (undefined) se comporta igual que 'kg'", () => {
     const profile: ProductionProfile = {
       productId: "producto-x",
       productionReference: [
         { process: "Elaboración", batchSize: { value: 500, source: "company_data" }, hoursPerBatch: { value: 3, source: "company_data" } },
       ],
-      materials: [{ process: "Elaboración", materialsPerUnit: [{ materialCode: "MP-X", qtyPerUnit: 0.1 }] }],
+      materials: [],
     };
-    const model = elaboracionModel(profile);
+    const model = elaboracionModel(profile, [presentacion100g]);
     const theOrder = order({ quantity: 1000 });
     const result = evaluateScenario(model, theOrder, baselineResourceConfig(model, theOrder), CALENDAR, START);
     expect(result.totalHoursNeeded).toBeCloseTo(3, 5);
   });
 
-  it("batch en kg SIN BOM sigue quedando blocked honestamente (el desacople es solo para 'units')", () => {
+  // CASO 5 del Product Contract: gramaje desconocido -> requiere aclaración/referencia, nunca un cálculo inventado.
+  it("batch en kg SIN Presentation declarada sigue quedando blocked honestamente", () => {
     const profile: ProductionProfile = {
       productId: "producto-x",
       productionReference: [
         { process: "Elaboración", batchSize: { value: 500, source: "company_data" }, batchUnit: "kg", hoursPerBatch: { value: 3, source: "company_data" } },
       ],
-      materials: [], // sin BOM -> no hay forma de convertir a kg
+      materials: [],
     };
-    const model = elaboracionModel(profile);
+    const model = elaboracionModel(profile, []); // sin Presentation -> no hay forma de convertir a kg
     const theOrder = order();
     const result = evaluateScenario(model, theOrder, baselineResourceConfig(model, theOrder), CALENDAR, START);
     expect(result.steps[0].blocked).toBe(true);

@@ -22,7 +22,7 @@ export function ConstraintScreen({
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
         <Guardian state="success" size={120} message="No detecté restricciones en los pedidos cargados." />
-        <Button onClick={onGoToCommandCenter}>Go to Command Center</Button>
+        <Button onClick={onGoToCommandCenter}>Ir al Centro de Operaciones</Button>
       </div>
     );
   }
@@ -38,7 +38,7 @@ export function ConstraintScreen({
       <Guardian state="alert" size={104} message={vm.guardianMessage} />
       <ConstraintCard vm={vm} additionalCount={affected.length - 1} />
       <Button variant="ghost" onClick={onGoToCommandCenter}>
-        Go to Command Center
+        Ir al Centro de Operaciones
       </Button>
     </div>
   );

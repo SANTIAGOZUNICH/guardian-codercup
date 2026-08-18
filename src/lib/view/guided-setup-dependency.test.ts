@@ -21,6 +21,8 @@ function emptyEntities(overrides: Partial<NluEntities> = {}): NluEntities {
     batchInfo: [],
     staffingCount: null,
     schedule: null,
+    presentations: [],
+    capacityVariants: [],
     ...overrides,
   };
 }

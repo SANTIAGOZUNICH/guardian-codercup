@@ -11,17 +11,25 @@ import { isDisruptionIntent, parseDisruptionText, type DisruptionCandidate } fro
 import { buildResourceSelectionMessage, formatDisruptionCandidateLabel } from "@/lib/view/disruption-view-model";
 import { interpretWithAI } from "@/lib/nlu/client";
 import { buildBlockedMessage, isBlockedStatus, needsConfirmationCard, AI_UNAVAILABLE_MESSAGE } from "@/lib/nlu/interpretation-view-model";
+import { askCosmeticKnowledge } from "@/lib/nlu/knowledge-client";
+import { classifyOperationalQuery, answerOperationalQuery } from "@/lib/engine/operational-query";
+import { detectConstraints } from "@/lib/engine/constraint-detection";
+import { resolveOrderPresentation } from "@/lib/model/presentation";
+import { extractGramsPerUnit, isUnsureAboutGrams } from "@/lib/engine/presentation-parser";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
-import type { Goal, MachineUnavailableDisruption, OperationalModel } from "@/lib/types";
+import type { DataOrigin, Goal, MachineUnavailableDisruption, OperationalModel, Presentation } from "@/lib/types";
 
-const CHIPS = ["Can we deliver earlier?", "Simulate a production goal", "Check available capacity"];
+const CHIPS = ["¿Llegamos antes?", "Simular un objetivo de producción", "Ver capacidad disponible"];
 
-const EXAMPLE_PLACEHOLDER = "Necesito producir 30.000 shampoos para TCL antes del viernes.";
+const EXAMPLE_PLACEHOLDER = "Necesito producir 30.000 shampoos para el viernes.";
+
+const OFF_TOPIC_MESSAGE =
+  "Esa pregunta queda fuera de lo que analiza GUARDIAN. Puedo ayudarte con producción, capacidad, procesos y consultas relacionadas con cosmética.";
 
 function errorMessage(kind: "unknown_product" | "missing_quantity" | "missing_deadline", companyName: string): string {
   switch (kind) {
     case "unknown_product":
-      return `No encontré ese producto dentro del Operational Twin de ${companyName}.`;
+      return `No encontré ese producto dentro del Modelo Operacional de ${companyName}.`;
     case "missing_quantity":
       return "No pude identificar una cantidad. Probá indicando un número, por ejemplo: 30.000 unidades.";
     case "missing_deadline":
@@ -32,9 +40,14 @@ function errorMessage(kind: "unknown_product" | "missing_quantity" | "missing_de
 function disruptionErrorMessage(kind: "unknown_resource_type"): string {
   switch (kind) {
     case "unknown_resource_type":
-      return 'No encontré esa máquina en el Operational Twin. Probá nombrando el tipo de recurso, por ejemplo "llenadora".';
+      return 'No encontré esa máquina en el Modelo Operacional. Probá nombrando el tipo de recurso, por ejemplo "llenadora".';
   }
 }
+
+/** Resolución pendiente de gramos/presentación para un Goal ya identificado (producto/cantidad/fecha), antes de poder simular. */
+type PendingGrams =
+  | { mode: "ask"; goal: Goal }
+  | { mode: "choose"; goal: Goal; candidates: Presentation[] };
 
 export function AskGuardianScreen({
   model,
@@ -50,7 +63,7 @@ export function AskGuardianScreen({
   snapshotAt: string;
   /** Goal ya simulado en esta sesión, si lo hay — habilita interpretar preguntas de disrupción sobre ese objetivo. */
   activeGoal: Goal | null;
-  onGoalReady: (goal: Goal) => void;
+  onGoalReady: (goal: Goal, newPresentation?: Presentation) => void;
   onDisruptionReady: (disruption: MachineUnavailableDisruption, resourceName: string) => void;
   onBack: () => void;
 }) {
@@ -61,6 +74,64 @@ export function AskGuardianScreen({
   const [aiPending, setAiPending] = useState(false);
   /** Interpretación de la IA a medio confirmar — nunca se aplica sin este paso (Etapa 5). */
   const [aiConfirm, setAiConfirm] = useState<{ interpretedText: string; wasDisruption: boolean } | null>(null);
+  /** Goal ya identificado (producto/cantidad/fecha) pero sin gramaje resuelto — ver Product Contract, "Ask Guardian — Goals". */
+  const [pendingGrams, setPendingGrams] = useState<PendingGrams | null>(null);
+  const [gramsDraft, setGramsDraft] = useState("");
+  const [gramsUnsure, setGramsUnsure] = useState(false);
+  /** Respuesta de conocimiento cosmético mostrada como mensaje de Guardian — nunca modifica el Twin. */
+  const [knowledgeAnswer, setKnowledgeAnswer] = useState<string | null>(null);
+
+  function resetTransientState() {
+    setError(null);
+    setAiConfirm(null);
+    setPendingGrams(null);
+    setKnowledgeAnswer(null);
+  }
+
+  /** Punto único de entrada para un Goal ya estructurado (producto/cantidad/fecha) — decide si hace falta preguntar gramaje antes de poder simular. */
+  function proceedWithGoal(goal: Goal) {
+    const resolution = resolveOrderPresentation({ id: "goal-check", client: "—", productId: goal.productId, quantity: goal.quantity, deliveryDate: goal.deadline, priority: "normal" }, model);
+    if (resolution.ok) {
+      onGoalReady({ ...goal, presentationId: resolution.presentation.id });
+      return;
+    }
+    setSelection(null);
+    setKnowledgeAnswer(null);
+    if (resolution.reason === "ambiguous") {
+      setPendingGrams({ mode: "choose", goal, candidates: resolution.candidates });
+    } else {
+      setPendingGrams({ mode: "ask", goal });
+    }
+  }
+
+  function chooseGramsPresentation(goal: Goal, presentation: Presentation) {
+    setPendingGrams(null);
+    onGoalReady({ ...goal, presentationId: presentation.id });
+  }
+
+  function submitGramsAnswer() {
+    if (!pendingGrams || pendingGrams.mode !== "ask") return;
+    if (isUnsureAboutGrams(gramsDraft)) {
+      setGramsUnsure(true);
+      return;
+    }
+    const value = extractGramsPerUnit(gramsDraft);
+    if (value === null) return;
+    applyGrams(pendingGrams.goal, value, "company_data");
+  }
+
+  function applyGrams(goal: Goal, grams: number, source: DataOrigin) {
+    const presentation: Presentation = {
+      id: `${goal.productId}-${grams}g`,
+      productId: goal.productId,
+      label: `${grams} g`,
+      gramsPerUnit: { value: grams, source },
+    };
+    setPendingGrams(null);
+    setGramsDraft("");
+    setGramsUnsure(false);
+    onGoalReady({ ...goal, presentationId: presentation.id }, presentation);
+  }
 
   function applyResolvedText(resolvedText: string, wasDisruption: boolean) {
     // Se cierra la card de confirmación en TODOS los casos, incluso si la
@@ -93,8 +164,30 @@ export function AskGuardianScreen({
       setError(errorMessage(result.error.kind, companyName));
       return;
     }
-    setSelection(null);
-    onGoalReady(result.goal);
+    proceedWithGoal(result.goal);
+  }
+
+  /**
+   * Intenta resolver como conocimiento cosmético. `fallback` decide qué
+   * mostrar si NO es conocimiento cosmético (y la llamada respondió ok):
+   * "off_topic" para el mensaje fijo fuera de alcance, o un mensaje propio
+   * cuando quien llama ya tiene uno más específico (ej. "unsupported" — ver
+   * tryAiInterpretation, un escenario operacional no soportado hoy es un
+   * mensaje más útil que el genérico fuera de alcance).
+   */
+  async function tryKnowledgeOrOffTopic(rawText: string, fallback: string | "off_topic" = "off_topic") {
+    setAiPending(true);
+    const result = await askCosmeticKnowledge(rawText);
+    setAiPending(false);
+    if (!result.ok) {
+      setError(AI_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    if (result.response.kind === "cosmetic_knowledge" && result.response.answer) {
+      setKnowledgeAnswer(result.response.answer);
+      return;
+    }
+    setError(fallback === "off_topic" ? OFF_TOPIC_MESSAGE : fallback);
   }
 
   async function tryAiInterpretation(rawText: string, wasDisruption: boolean) {
@@ -108,6 +201,25 @@ export function AskGuardianScreen({
     }
     const r = ai.response;
     if (isBlockedStatus(r.status)) {
+      // "irrelevant"/"nonsense" significa "no es un objetivo ni una disrupción" —
+      // pero puede seguir siendo una pregunta legítima de conocimiento cosmético
+      // o, si no, genuinamente fuera de alcance. Nunca se muestra el mensaje
+      // genérico de "irrelevante" sin antes chequear esto (categorías 3/4 del
+      // Product Contract).
+      if (r.status === "irrelevant" || r.status === "nonsense") {
+        await tryKnowledgeOrOffTopic(rawText);
+        return;
+      }
+      // "unsupported" también puede ser una pregunta de conocimiento mal
+      // clasificada como escenario operacional (ej. "¿con qué activo puedo
+      // reemplazar el ácido hialurónico?" — Gemini a veces lo lee como una
+      // sustitución de materia prima). Se intenta conocimiento primero; si
+      // realmente no es eso, se conserva el mensaje específico de
+      // "unsupported" (más útil que el genérico fuera de alcance).
+      if (r.status === "unsupported") {
+        await tryKnowledgeOrOffTopic(rawText, buildBlockedMessage(r));
+        return;
+      }
       setError(buildBlockedMessage(r));
       return;
     }
@@ -129,8 +241,7 @@ export function AskGuardianScreen({
 
   async function handleSubmit() {
     if (!text.trim()) return;
-    setError(null);
-    setAiConfirm(null);
+    resetTransientState();
 
     const wasDisruption = isDisruptionIntent(text);
 
@@ -157,9 +268,20 @@ export function AskGuardianScreen({
     if (result.ok) {
       setError(null);
       setSelection(null);
-      onGoalReady(result.goal);
+      proceedWithGoal(result.goal);
       return;
     }
+
+    // Categoría 2 del Product Contract — consultas sobre la operación
+    // ("¿cuál es mi cuello de botella?"), respondidas 100% con datos reales
+    // del Twin, nunca por el LLM de conocimiento ni por el parser de goals.
+    const queryKind = classifyOperationalQuery(text);
+    if (queryKind) {
+      const orderConstraints = detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt);
+      setKnowledgeAnswer(answerOperationalQuery(queryKind, text, model, orderConstraints, null));
+      return;
+    }
+
     await tryAiInterpretation(text, false);
   }
 
@@ -171,22 +293,88 @@ export function AskGuardianScreen({
     );
   }
 
+  const guardianState = pendingGrams
+    ? "listening"
+    : selection
+      ? "alert"
+      : aiPending
+        ? "analyzing"
+        : focused || text
+          ? "listening"
+          : "idle";
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
       <div className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">
-          Ask Guardian About the Future
+          Preguntale a Guardian sobre el futuro
         </p>
-        <p className="mt-2 text-sm text-text-secondary">Describe an operational goal or hypothetical scenario.</p>
+        <p className="mt-2 text-sm text-text-secondary">Contame un objetivo o un escenario hipotético de tu operación.</p>
       </div>
 
       <Guardian
-        state={selection ? "alert" : aiPending ? "analyzing" : focused || text ? "listening" : "idle"}
+        state={guardianState}
         size={100}
-        message={selection ? buildResourceSelectionMessage(selection.candidates) : aiPending ? "Estoy interpretando lo que escribiste..." : undefined}
+        message={
+          selection
+            ? buildResourceSelectionMessage(selection.candidates)
+            : pendingGrams
+              ? `¿Cuántos gramos contiene cada unidad de ${pendingGrams.goal.productName}?`
+              : aiPending
+                ? "Estoy interpretando lo que escribiste..."
+                : undefined
+        }
       />
 
-      {aiConfirm ? (
+      {pendingGrams ? (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-md">
+          {pendingGrams.mode === "choose" ? (
+            <div className="flex flex-wrap justify-center gap-3">
+              {pendingGrams.candidates.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => chooseGramsPresentation(pendingGrams.goal, c)}
+                  className="glass-panel flex min-w-[120px] flex-col items-center gap-1 rounded-[var(--radius-lg)] p-4 transition-colors hover:border-border-strong"
+                >
+                  <p className="text-sm font-semibold text-text-primary">{c.label}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="glass-panel flex flex-col gap-3 rounded-[var(--radius-lg)] p-5">
+              <div className="flex items-center gap-2">
+                <input
+                  value={gramsDraft}
+                  onChange={(e) => setGramsDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      submitGramsAnswer();
+                    }
+                  }}
+                  placeholder="Ej: 200"
+                  autoComplete="off"
+                  className="h-11 flex-1 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-3 text-sm text-text-primary outline-none placeholder:text-text-disabled"
+                />
+                <Button type="button" onClick={submitGramsAnswer} disabled={!gramsDraft.trim()}>
+                  Confirmar
+                </Button>
+              </div>
+              {gramsUnsure && (
+                <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-accent/25 bg-accent-soft/40 p-3">
+                  <p className="text-xs text-text-secondary">
+                    No hay problema. Podemos usar una presentación de referencia de <span className="text-accent-bright">50 g</span> para
+                    obtener una primera estimación y cambiarla después.
+                  </p>
+                  <Button type="button" onClick={() => applyGrams(pendingGrams.goal, 50, "reference_estimate")}>
+                    Usar 50 g como referencia
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </motion.div>
+      ) : aiConfirm ? (
         <InterpretationCard
           interpretedText={aiConfirm.interpretedText}
           onConfirm={() => applyResolvedText(aiConfirm.interpretedText, aiConfirm.wasDisruption)}
@@ -249,6 +437,12 @@ export function AskGuardianScreen({
           </button>
         </div>
 
+        {knowledgeAnswer && (
+          <p className="mt-3 whitespace-pre-line rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-4 py-3 text-sm text-text-primary">
+            Guardian: {knowledgeAnswer}
+          </p>
+        )}
+
         {error && (
           <p className="mt-3 whitespace-pre-line rounded-[var(--radius-sm)] border border-risk-high/30 bg-risk-high-soft px-4 py-3 text-sm text-risk-high">
             Guardian: {error}
@@ -260,7 +454,7 @@ export function AskGuardianScreen({
             <button
               key={chip}
               type="button"
-              onClick={() => setText(chip === "Simulate a production goal" ? EXAMPLE_PLACEHOLDER : chip)}
+              onClick={() => setText(chip === "Simular un objetivo de producción" ? EXAMPLE_PLACEHOLDER : chip)}
               className="rounded-full border border-border-default bg-white/[0.02] px-4 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-border-strong hover:bg-white/[0.05]"
             >
               {chip}
@@ -272,7 +466,7 @@ export function AskGuardianScreen({
 
       <Button variant="ghost" onClick={onBack} className="gap-2">
         <ArrowLeft size={15} />
-        Back to Command Center
+        Volver al Centro de Operaciones
       </Button>
     </div>
   );

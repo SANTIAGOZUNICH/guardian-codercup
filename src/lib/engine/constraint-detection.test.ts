@@ -6,7 +6,7 @@ import { evaluateScenario, baselineResourceConfig } from "./evaluate-scenario";
 import { deriveConstraints, computeSeverity, detectConstraints } from "./constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 
 const CALENDAR: OperationsCalendar = DEFAULT_OPERATIONS_CALENDAR;
 const FRIDAY_0800 = "2026-08-14T08:00:00"; // viernes real, verificado en Checkpoint 1
@@ -21,6 +21,8 @@ function buildFixtureModel(overrides: Partial<OperationalModel> = {}): Operation
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "producto-x", name: "Producto X", unit: "unidades" }],
+    // 100 g/unidad === 0.1kg/unidad (mismo valor que antes vivía en el BOM).
+    presentations: [{ id: "producto-x-100g", productId: "producto-x", label: "100 g", gramsPerUnit: { value: 100, source: "reference_estimate" } }],
     materials: [{ code: "MP-X", name: "Material X", unit: "kg" }],
     inventory: [{ materialCode: "MP-X", stock: 1000, unit: "kg" }],
     resources: [
@@ -324,8 +326,8 @@ describe("Constraint Detection — integración con el dataset demo real", () =>
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
@@ -337,14 +339,18 @@ describe("Constraint Detection — integración con el dataset demo real", () =>
   it("el dataset demo con DEMO_SNAPSHOT_AT es determinístico: correrlo de nuevo da exactamente el mismo resultado", () => {
     const resultsAgain = detectConstraints(model, CALENDAR, DEMO_SNAPSHOT_AT);
     expect(resultsAgain).toEqual(results);
-    // Resultado estable esperado con el dataset actual: 1 pedido afectado, 2 constraints.
+    // GUARDIAN V1 (gramos por unidad): PED-1009 (crema-hidratante) pasa a
+    // tener masa real más alta (200 g/u vía Presentation, en vez del BOM
+    // incompleto que sumaba ~109 g/u) — ver mismo comentario en
+    // command-center-view-model.test.ts. Resultado estable esperado ahora:
+    // 2 pedidos afectados, 3 constraints en total (2 de PED-1001 + 1 de PED-1009).
     const affected = results.filter((r) => r.constraints.length > 0);
-    expect(affected).toHaveLength(1);
-    expect(affected[0].orderId).toBe("PED-1001");
-    expect(affected[0].constraints).toHaveLength(2);
+    expect(affected).toHaveLength(2);
+    expect(affected.map((r) => r.orderId).sort()).toEqual(["PED-1001", "PED-1009"]);
+    expect(affected.reduce((sum, r) => sum + r.constraints.length, 0)).toBe(3);
   });
 
-  it("PED-1001 (TCL) produce exactamente 2 constraints independientes, severity critical", () => {
+  it("PED-1001 (Belleza Norte SA) produce exactamente 2 constraints independientes, severity critical", () => {
     const tcl = results.find((r) => r.orderId === "PED-1001")!;
     expect(tcl.constraints).toHaveLength(2);
     expect(tcl.constraints.map((c) => c.kind).sort()).toEqual(["deadline_at_risk", "material_shortage"]);

@@ -48,9 +48,9 @@ export interface TwinGraph {
 }
 
 export const PIPELINE_LABEL: Record<string, string> = {
-  Elaboración: "Elaboration",
-  Envasado: "Filling",
-  Codificado: "Coding",
+  Elaboración: "Elaboración",
+  Envasado: "Envasado",
+  Codificado: "Codificado",
 };
 
 const PIPELINE_ORDER = ["Elaboración", "Envasado", "Codificado"] as const;
@@ -88,10 +88,10 @@ export function buildTwinGraph(
 
   const nodes: GraphNodeV2[] = [
     // Layer 1 — Source Data
-    { id: "orders", label: "Orders", count: model.orders.length, status: "normal", shape: "circle", x: 250, y: 110, revealAt: 1 },
+    { id: "orders", label: "Pedidos", count: model.orders.length, status: "normal", shape: "circle", x: 250, y: 110, revealAt: 1 },
     {
       id: "inventory",
-      label: "Inventory",
+      label: "Inventario",
       count: model.inventory.length,
       status: hasMaterialConstraint ? "danger" : "normal",
       shape: "circle",
@@ -99,13 +99,13 @@ export function buildTwinGraph(
       y: 110,
       revealAt: 1,
     },
-    { id: "resources", label: "Resources", count: model.resources.length, status: "normal", shape: "circle", x: 750, y: 110, revealAt: 1 },
+    { id: "resources", label: "Recursos", count: model.resources.length, status: "normal", shape: "circle", x: 750, y: 110, revealAt: 1 },
 
     // Layer 2 — Operational Understanding
-    { id: "products", label: "Products", count: model.products.length, status: "normal", shape: "circle", x: 80, y: 320, revealAt: 3 },
+    { id: "products", label: "Productos", count: model.products.length, status: "normal", shape: "circle", x: 80, y: 320, revealAt: 3 },
     {
       id: "materials",
-      label: "Materials",
+      label: "Materiales",
       count: materialsInBom,
       status: hasMaterialConstraint ? "danger" : "normal",
       shape: "circle",
@@ -115,7 +115,7 @@ export function buildTwinGraph(
     },
     {
       id: "processes",
-      label: "Processes",
+      label: "Procesos",
       count: processesInProfiles,
       status: hasDeadlineConstraint ? "warning" : "normal",
       shape: "circle",
@@ -125,7 +125,7 @@ export function buildTwinGraph(
     },
     {
       id: "capacities",
-      label: "Capacities",
+      label: "Capacidades",
       count: model.resources.length,
       status: hasDeadlineConstraint ? "warning" : "normal",
       shape: "circle",
@@ -135,7 +135,7 @@ export function buildTwinGraph(
     },
     {
       id: "constraints",
-      label: "Constraints",
+      label: "Restricciones",
       count: allConstraints.length,
       status: constraintsStatus,
       shape: "circle",
@@ -199,7 +199,7 @@ export function buildTwinGraph(
           id: disruptionNodeId,
           label: resource.name,
           count: null,
-          sublabel: "UNAVAILABLE",
+          sublabel: "NO DISPONIBLE",
           status: "unavailable",
           shape: "pill",
           x: flowNode.x,

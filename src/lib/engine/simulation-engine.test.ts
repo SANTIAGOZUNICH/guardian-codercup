@@ -12,7 +12,7 @@ import {
 } from "./simulation-engine";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 import { parseGoalText } from "./goal-parser";
 import { applyDisruption } from "./disruption";
 
@@ -31,6 +31,8 @@ function buildFixtureModel(): OperationalModel {
       { id: "EXISTING-2", client: "Cliente B", productId: "producto-x", quantity: 300, deliveryDate: "2026-09-01", priority: "alta" },
     ],
     products: [{ id: "producto-x", name: "Producto X", unit: "unidades" }],
+    // 100 g/unidad === 0.1kg/unidad (mismo valor que antes vivía en el BOM).
+    presentations: [{ id: "producto-x-100g", productId: "producto-x", label: "100 g", gramsPerUnit: { value: 100, source: "reference_estimate" } }],
     materials: [{ code: "MP-X", name: "Material X", unit: "kg" }],
     inventory: [{ materialCode: "MP-X", stock: 1_000_000, unit: "kg" }],
     resources: [
@@ -385,8 +387,8 @@ describe("simulateGoal — integración con el dataset demo real", () => {
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
@@ -394,8 +396,8 @@ describe("simulateGoal — integración con el dataset demo real", () => {
     resources,
   });
 
-  it('"Necesito producir 30.000 shampoos para TCL antes del viernes." -> 6 escenarios, conditionally_viable (bloqueado por MP-003)', () => {
-    const parsed = parseGoalText("Necesito producir 30.000 shampoos para TCL antes del viernes.", {
+  it('"Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes." -> 6 escenarios, conditionally_viable (bloqueado por MP-003)', () => {
+    const parsed = parseGoalText("Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes.", {
       model,
       snapshotAt: DEMO_SNAPSHOT_AT,
       calendar: CALENDAR,

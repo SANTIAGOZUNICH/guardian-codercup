@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * GENUS DEMO PRODUCTION PROFILES — dataset de demo EXPLÍCITO, nunca global
+ * GUARDIAN DEMO PRODUCTION PROFILES — dataset de demo EXPLÍCITO, nunca global
  * ============================================================================
  * (Checkpoint 9B.2 — reemplaza el antiguo `PRODUCTION_PROFILES` que
  * `buildOperationalModel()` inyectaba a TODO Twin sin importar la empresa.)
  *
  * Estos perfiles NO provienen de ningún Excel cargado por la empresa. Son la
  * "receta operativa" (proceso + tiempos + BOM) de los 3 productos de
- * Laboratorio Genus — el dataset de demo anonimizado de GUARDIAN — y viven
+ * Laboratorio Guardian — el dataset de demo anonimizado de GUARDIAN — y viven
  * acá para que:
  *
  *   1. El motor sea determinístico y auditable (nada vive escondido dentro
@@ -17,24 +17,37 @@
  *      (`source: "reference_estimate"`) y nunca presentarlos como si fueran
  *      datos reales cargados por el laboratorio.
  *
- * AISLAMIENTO DE GENUS (requisito central de 9B.2): estos perfiles se
+ * AISLAMIENTO DE GUARDIAN (requisito central de 9B.2): estos perfiles se
  * adjuntan a un Operational Model EXCLUSIVAMENTE a través de
- * `buildGenusDemoModel()`, más abajo. `buildOperationalModel()` — el builder
+ * `buildDemoModel()`, más abajo. `buildOperationalModel()` — el builder
  * genérico que usa cualquier empresa real — NUNCA los importa ni los inyecta
  * implícitamente. Cada laboratorio nuevo empieza con `profiles: []` hasta
  * que declara los suyos.
  *
- * Si en una futura versión Laboratorio Genus carga su propia receta real,
+ * Si en una futura versión Laboratorio Guardian carga su propia receta real,
  * este archivo se reemplaza por datos cargados — no antes.
  */
 
-import type { ProductionProfile } from "@/lib/types";
+import type { Presentation, ProductionProfile } from "@/lib/types";
 import type { RawModelInput } from "@/lib/model/buildOperationalModel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
 
 export const DATA_SOURCE = "reference" as const;
 
-export const GENUS_DEMO_PRODUCTION_PROFILES: ProductionProfile[] = [
+/**
+ * Presentaciones de referencia del dataset demo (GUARDIAN V1 — gramos por
+ * unidad). Cada producto demo tiene UNA presentación — coincide con el
+ * envase que ya describían los materiales de Envasado (frasco 250ml de
+ * shampoo, pote de 200g de crema) para no cambiar el comportamiento del
+ * dataset, ahora expresado en gramos en vez de vía el BOM de materiales.
+ */
+export const DEMO_PRESENTATIONS: Presentation[] = [
+  { id: "shampoo-premium-250g", productId: "shampoo-premium", label: "250 g", gramsPerUnit: { value: 250, source: "reference_estimate" } },
+  { id: "crema-hidratante-200g", productId: "crema-hidratante", label: "200 g", gramsPerUnit: { value: 200, source: "reference_estimate" } },
+  { id: "serum-regenerador-30g", productId: "serum-regenerador", label: "30 g", gramsPerUnit: { value: 30, source: "reference_estimate" } },
+];
+
+export const DEMO_PRODUCTION_PROFILES: ProductionProfile[] = [
   {
     productId: "shampoo-premium",
     productionReference: [
@@ -160,19 +173,19 @@ export const GENUS_DEMO_PRODUCTION_PROFILES: ProductionProfile[] = [
   },
 ];
 
-export function getGenusDemoProductionProfile(productId: string): ProductionProfile | undefined {
-  return GENUS_DEMO_PRODUCTION_PROFILES.find((p) => p.productId === productId);
+export function getDemoProductionProfile(productId: string): ProductionProfile | undefined {
+  return DEMO_PRODUCTION_PROFILES.find((p) => p.productId === productId);
 }
 
 /**
  * Único punto de entrada que adjunta los perfiles de referencia de
- * Laboratorio Genus a un Operational Model. Úsalo SOLO para el botón
+ * Laboratorio Guardian a un Operational Model. Úsalo SOLO para el botón
  * "Usar datos demo" — cualquier empresa real construida desde sus propios
  * Excel (Import Data) o desde Guided Setup pasa por `buildOperationalModel()`
  * directamente y jamás recibe estos perfiles.
  */
-export function buildGenusDemoModel(input: Omit<RawModelInput, "profiles">) {
-  return buildOperationalModel({ ...input, profiles: GENUS_DEMO_PRODUCTION_PROFILES });
+export function buildDemoModel(input: Omit<RawModelInput, "profiles" | "presentations">) {
+  return buildOperationalModel({ ...input, profiles: DEMO_PRODUCTION_PROFILES, presentations: DEMO_PRESENTATIONS });
 }
 
 /**
@@ -184,7 +197,7 @@ export function buildGenusDemoModel(input: Omit<RawModelInput, "profiles">) {
  *
  * IMPORTANTE (Checkpoint 9B.2): que un texto matchee acá NUNCA implica que
  * el producto resultante tenga una ProductionProfile adjunta — eso violaría
- * el aislamiento de Genus (ver comentario arriba). Este catálogo solo resuelve
+ * el aislamiento del demo (ver comentario arriba). Este catálogo solo resuelve
  * NOMBRES, nunca datos operativos.
  */
 export interface KnownProductCatalogEntry {

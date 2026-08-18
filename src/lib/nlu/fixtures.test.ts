@@ -30,12 +30,13 @@ const CATEGORIES: NluFixtureCase["category"][] = [
 function fixtureModel(): OperationalModel {
   return {
     company: { name: "Fixture Co", industry: "cosmeticos" },
-    orders: [{ id: "PED-1", client: "TCL", productId: "shampoo-premium", quantity: 100, deliveryDate: "2026-08-20", priority: "normal" }],
+    orders: [{ id: "PED-1", client: "Belleza Norte SA", productId: "shampoo-premium", quantity: 100, deliveryDate: "2026-08-20", priority: "normal" }],
     products: [
       { id: "shampoo-premium", name: "Shampoo Premium", unit: "unidades" },
       { id: "crema-hidratante", name: "Crema Hidratante", unit: "unidades" },
       { id: "serum-regenerador", name: "Serum Regenerador", unit: "unidades" },
     ],
+    presentations: [],
     materials: [],
     inventory: [],
     resources: [

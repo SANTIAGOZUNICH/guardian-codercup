@@ -20,6 +20,7 @@ function envasadoModel(profile: ProductionProfile, inventory: OperationalModel["
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "producto-x", name: "Producto X", unit: "unidades" }],
+    presentations: [],
     materials: [{ code: "MP-X", name: "Material X", unit: "kg" }],
     inventory,
     resources: [

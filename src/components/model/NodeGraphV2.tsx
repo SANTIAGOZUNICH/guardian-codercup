@@ -71,17 +71,17 @@ export function NodeGraphV2({
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       className="w-full max-w-4xl"
       role="img"
-      aria-label="Operational Twin"
+      aria-label="Modelo Operacional"
     >
       {/* Etiquetas de capa */}
       <text x={40} y={40} fontSize={11} fontWeight={600} letterSpacing={1.5} fill="var(--text-tertiary)" style={{ textTransform: "uppercase" }}>
-        Source Data
+        Datos de origen
       </text>
       <text x={40} y={252} fontSize={11} fontWeight={600} letterSpacing={1.5} fill="var(--text-tertiary)" style={{ textTransform: "uppercase" }}>
-        Operational Understanding
+        Comprensión operacional
       </text>
       <text x={40} y={452} fontSize={11} fontWeight={600} letterSpacing={1.5} fill="var(--text-tertiary)" style={{ textTransform: "uppercase" }}>
-        Production Flow
+        Flujo de producción
       </text>
 
       {/* Edges */}

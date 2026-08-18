@@ -13,12 +13,12 @@ export function TwinCompletenessSummary({ completeness }: { completeness: TwinCo
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-text-tertiary">Known</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-text-tertiary">Lo que sé</p>
         <p className="mt-1 text-sm text-text-primary">{buildKnownSummaryLine(completeness)}</p>
       </div>
       {missingItems.length > 0 && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-text-tertiary">Missing</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-text-tertiary">Lo que falta</p>
           <ul className="mt-1 list-inside list-disc text-sm text-text-secondary">
             {missingItems.map((item, i) => (
               <li key={`${item}-${i}`}>{item}</li>
@@ -39,9 +39,9 @@ export function MissingDataModal({ completeness, onClose }: { completeness: Twin
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         className="glass-panel w-full max-w-md rounded-[var(--radius-lg)] p-7"
       >
-        <p className="text-lg font-semibold tracking-tight text-text-primary">Missing operational data</p>
+        <p className="text-lg font-semibold tracking-tight text-text-primary">Datos operacionales faltantes</p>
         <p className="mt-1 text-xs text-text-tertiary">
-          Estos datos no bloquean tu Operational Twin — podés seguir usando Command Center mientras tanto.
+          Estos datos no bloquean tu Modelo Operacional — podés seguir usando el Centro de Operaciones mientras tanto.
         </p>
         <div className="mt-5">
           <TwinCompletenessSummary completeness={completeness} />
@@ -50,7 +50,7 @@ export function MissingDataModal({ completeness, onClose }: { completeness: Twin
           onClick={onClose}
           className="mt-6 w-full rounded-[var(--radius-md)] border border-border-default py-2.5 text-sm font-medium text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary"
         >
-          Close
+          Cerrar
         </button>
       </motion.div>
     </div>

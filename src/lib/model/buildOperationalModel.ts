@@ -5,6 +5,7 @@ import type {
   OperationalModel,
   OperationalModelCounts,
   Order,
+  Presentation,
   Product,
   ProductionProfile,
   Resource,
@@ -20,12 +21,14 @@ export interface RawModelInput {
   /**
    * Production Reference + Material Formula del laboratorio (Checkpoint 9B.2).
    * Opcional y vacío por defecto — cada laboratorio declara los suyos. Este
-   * builder NUNCA inyecta un dataset ajeno (ej. Laboratorio Genus) por
+   * builder NUNCA inyecta un dataset ajeno (ej. el demo de referencia) por
    * defecto: eso violaría el aislamiento entre laboratorios. El único lugar
-   * que adjunta los perfiles de referencia de Genus es
-   * `buildGenusDemoModel()` en `@/data/production-profiles`.
+   * que adjunta los perfiles de referencia del demo es `buildDemoModel()` en
+   * `@/data/production-profiles`.
    */
   profiles?: ProductionProfile[];
+  /** Presentaciones (gramos/unidad) declaradas por el laboratorio — vacío por defecto, mismo principio que `profiles`. */
+  presentations?: Presentation[];
 }
 
 /**
@@ -43,6 +46,7 @@ export function buildOperationalModel(input: RawModelInput): OperationalModel {
     company: input.company,
     orders: input.orders,
     products,
+    presentations: input.presentations ?? [],
     materials: input.materials,
     inventory: input.inventory,
     resources: input.resources,

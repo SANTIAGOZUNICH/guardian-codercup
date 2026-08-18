@@ -5,11 +5,11 @@ import { Check } from "lucide-react";
 import type { WhyThisPlanView } from "@/lib/view/simulation-view-model";
 
 const PROVENANCE = [
-  { label: "Quantity", source: "User goal" },
-  { label: "Resource capacity", source: "Company data" },
-  { label: "Batch duration", source: "Reference profile" },
-  { label: "Completion", source: "Calculated" },
-  { label: "Recommendation", source: "Deterministic ranking" },
+  { label: "Cantidad", source: "Objetivo del usuario" },
+  { label: "Capacidad de recursos", source: "Dato de la empresa" },
+  { label: "Duración de tanda", source: "Perfil de referencia" },
+  { label: "Finalización", source: "Calculado" },
+  { label: "Recomendación", source: "Ranking determinístico" },
 ];
 
 export function WhyThisPlanModal({ view, onClose }: { view: WhyThisPlanView; onClose: () => void }) {
@@ -25,28 +25,28 @@ export function WhyThisPlanModal({ view, onClose }: { view: WhyThisPlanView; onC
         <p className="mt-1 text-xs text-text-tertiary">{view.narrativeIntro}</p>
         {view.disruptionLabel && (
           <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-risk-medium/30 bg-risk-medium-soft px-3 py-1 text-[11px] font-medium text-risk-medium">
-            Active disruption — {view.disruptionLabel}
+            Disrupción activa — {view.disruptionLabel}
           </p>
         )}
 
         <div className="mt-6 grid grid-cols-2 gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Your goal</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Tu objetivo</p>
             <p className="mt-1 text-sm text-text-primary">{view.goalSummary}</p>
-            {view.clientLabel && <p className="text-xs text-text-tertiary">Client: {view.clientLabel}</p>}
+            {view.clientLabel && <p className="text-xs text-text-tertiary">Cliente: {view.clientLabel}</p>}
             <p className="text-xs text-text-tertiary">Deadline: {view.deadlineLabel}</p>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Evaluation</p>
-            <p className="mt-1 text-sm text-text-primary">{view.evaluatedCount} scenarios evaluated</p>
-            <p className="text-xs text-text-tertiary">{view.feasibleCount} physically feasible</p>
-            <p className="text-xs text-text-tertiary">{view.meetDeadlineCount} meet deadline</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Evaluación</p>
+            <p className="mt-1 text-sm text-text-primary">{view.evaluatedCount} escenarios evaluados</p>
+            <p className="text-xs text-text-tertiary">{view.feasibleCount} físicamente viables</p>
+            <p className="text-xs text-text-tertiary">{view.meetDeadlineCount} cumplen el deadline</p>
           </div>
         </div>
 
         <div className="mt-6">
           <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-            Recommendation — Plan {view.recommendedLabel}
+            Recomendación — Plan {view.recommendedLabel}
           </p>
           <ul className="mt-2 flex flex-col gap-1.5">
             {view.reasons.map((reason) => (
@@ -66,12 +66,12 @@ export function WhyThisPlanModal({ view, onClose }: { view: WhyThisPlanView; onC
 
         <div className="mt-6 flex gap-8">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Bottleneck</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Cuello de botella</p>
             <p className="mt-1 text-sm text-text-primary">{view.bottleneckProcess}</p>
           </div>
           {view.materialBlockerLabel && (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-risk-high">Material blocker</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-risk-high">Bloqueo de materiales</p>
               <p className="mt-1 text-sm text-text-primary">{view.materialBlockerLabel}</p>
             </div>
           )}
@@ -89,7 +89,7 @@ export function WhyThisPlanModal({ view, onClose }: { view: WhyThisPlanView; onC
           onClick={onClose}
           className="mt-6 w-full rounded-[var(--radius-md)] border border-border-default py-2.5 text-sm font-medium text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary"
         >
-          Close
+          Cerrar
         </button>
       </motion.div>
     </div>

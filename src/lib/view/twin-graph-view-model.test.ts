@@ -7,6 +7,7 @@ function buildModel(): OperationalModel {
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "shampoo-premium", name: "Shampoo Premium", unit: "unidades" }],
+    presentations: [],
     materials: [],
     inventory: [],
     resources: [
@@ -52,7 +53,7 @@ describe("buildTwinGraph — activeDisruption (Checkpoint 6 closure)", () => {
     expect(satellite).toBeDefined();
     expect(satellite?.label).toBe("Llenadora 2");
     expect(satellite?.status).toBe("unavailable");
-    expect(satellite?.sublabel).toBe("UNAVAILABLE");
+    expect(satellite?.sublabel).toBe("NO DISPONIBLE");
   });
 
   it("3. Llenadora 1 permanece normal — la disrupción no crea ni afecta ningún nodo relacionado con ella", () => {

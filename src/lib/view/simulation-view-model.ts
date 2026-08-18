@@ -45,7 +45,7 @@ function formatHours(hours: number): string {
 function materialBlockerLabel(scenario: EvaluatedScenario): string | null {
   if (scenario.result.materialShortages.length === 0) return null;
   return scenario.result.materialShortages
-    .map((m) => `${m.materialCode} · Missing ${formatQty(m.missing, m.unit)}`)
+    .map((m) => `${m.materialCode} · Faltan ${formatQty(m.missing, m.unit)}`)
     .join(", ");
 }
 
@@ -66,12 +66,12 @@ export function buildBaselineView(baseline: EvaluatedScenario): BaselineView {
     // "not_evaluated" en el mismo `false`, nunca en `true` salvo "pass"
     // confirmado. La distinción visual entre "fail" y "not_evaluated" queda
     // para el checkpoint de Command Center/Ask Guardian (9B.6/9B.7); hoy es
-    // inalcanzable en la práctica porque todo profile de Genus declara BOM +
+    // inalcanzable en la práctica porque todo profile del demo declara BOM +
     // inventario completos.
     materialsAvailable: baseline.result.materialsFeasible === "pass",
     capacityFeasible: baseline.result.capacityFeasible,
     deadlineMet: baseline.result.deadlineMet,
-    completionLabel: baseline.result.completionAt ? formatDisplayDate(baseline.result.completionAt) : "Cannot be estimated",
+    completionLabel: baseline.result.completionAt ? formatDisplayDate(baseline.result.completionAt) : "No se puede estimar",
     bottleneckProcess: baseline.result.bottleneck?.process ?? "—",
     bottleneckHoursLabel: baseline.result.bottleneck ? formatHours(baseline.result.bottleneck.hours) : "sin capacidad asignada",
     materialBlockerLabel: materialBlockerLabel(baseline),
@@ -80,7 +80,7 @@ export function buildBaselineView(baseline: EvaluatedScenario): BaselineView {
 
 export interface PlanCardView {
   rankLabel: string; // "A" | "B" | "C"
-  badgeLabel: string | null; // "Recommended" | "Best Conditional Plan" | "Earliest Completion" | null
+  badgeLabel: string | null; // "Recomendado" | "Mejor alternativa condicional" | "Finalización más temprana" | null
   status: PlanStatus;
   completionLabel: string;
   deadlineLabel: string;
@@ -93,19 +93,19 @@ export interface PlanCardView {
 }
 
 const BADGE_BY_KIND: Record<GoalOutcomeKind, string | null> = {
-  fully_viable: "Recommended",
-  // Checkpoint 9B.1: distinto de "Recommended" a propósito — nunca sugiere
+  fully_viable: "Recomendado",
+  // Checkpoint 9B.1: distinto de "Recomendado" a propósito — nunca sugiere
   // que los materiales fueron confirmados. Hoy inalcanzable en la práctica
-  // (todo profile de Genus declara BOM+inventario completos); se activa
+  // (todo profile del demo declara BOM+inventario completos); se activa
   // cuando 9B.2 permita productos sin materiales conectados.
-  operationally_viable: "Operationally Viable",
-  conditionally_viable: "Best Conditional Plan",
-  deadline_missed: "Earliest Completion",
+  operationally_viable: "Viable operacionalmente",
+  conditionally_viable: "Mejor alternativa condicional",
+  deadline_missed: "Finalización más temprana",
   infeasible: null,
 };
 
 /**
- * Prefijo para "Last Simulation" en Command Center (ej. "Earliest Completion Plan A").
+ * Prefijo para "Última simulación" en Command Center (ej. "Plan A · Finalización más temprana").
  * Deriva del mismo BADGE_BY_KIND que ya usa el card destacado — antes de esto,
  * GuardianApp tenía su propio `kind === "fully_viable" ? "Recommended" : "Best
  * Conditional"` hardcodeado, que decía "Best Conditional" incluso para un
@@ -114,8 +114,7 @@ const BADGE_BY_KIND: Record<GoalOutcomeKind, string | null> = {
  * se desincronicen de nuevo.
  */
 export function resolveChosenPlanPrefix(kind: GoalOutcomeKind): string {
-  const badge = BADGE_BY_KIND[kind];
-  return badge ? badge.replace(/\s+Plan$/, "") : "Selected";
+  return BADGE_BY_KIND[kind] ?? "Seleccionado";
 }
 
 export function buildPlanCardView(
@@ -128,7 +127,7 @@ export function buildPlanCardView(
     rankLabel: String.fromCharCode(65 + index),
     badgeLabel: index === 0 ? BADGE_BY_KIND[outcomeKind] : null,
     status: scenario.status,
-    completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "Cannot be estimated",
+    completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "No se puede estimar",
     deadlineLabel,
     // Ver comentario en buildBaselineView — mismo colapso deliberado a boolean.
     materialsAvailable: scenario.result.materialsFeasible === "pass",
@@ -138,8 +137,8 @@ export function buildPlanCardView(
     bottleneckHoursLabel: scenario.result.bottleneck ? formatHours(scenario.result.bottleneck.hours) : "sin capacidad asignada",
     tradeOffLabel:
       scenario.extraResourcesUsed > 0
-        ? `Uses ${scenario.extraResourcesUsed} extra resource unit${scenario.extraResourcesUsed !== 1 ? "s" : ""} beyond the minimum.`
-        : "No extra resources required.",
+        ? `Usa ${scenario.extraResourcesUsed} unidad${scenario.extraResourcesUsed !== 1 ? "es" : ""} de recurso adicional más allá del mínimo.`
+        : "No requiere recursos adicionales.",
   };
 }
 
@@ -153,15 +152,15 @@ export function buildContextNote(scenarios: EvaluatedScenario[]): string | null 
   if (!withContention) return null;
   const n = withContention.contention.orderIds.length;
   const processes = withContention.contention.sharedProcesses.join("/");
-  return `${n} existing order${n !== 1 ? "s" : ""} use one or more of the same production processes (${processes}).`;
+  return `${n} pedido${n !== 1 ? "s" : ""} existente${n !== 1 ? "s" : ""} usa${n !== 1 ? "n" : ""} uno o más de los mismos procesos de producción (${processes}).`;
 }
 
 const HEADLINE_BY_KIND: Record<GoalOutcomeKind, string> = {
-  fully_viable: "Recommended Plans",
-  operationally_viable: "Operationally Viable — Materials Not Evaluated",
-  conditionally_viable: "No Fully Viable Plan Found",
-  deadline_missed: "No Plan Meets the Current Deadline",
-  infeasible: "No Feasible Configuration Found",
+  fully_viable: "Planes recomendados",
+  operationally_viable: "Viable operacionalmente — materiales no evaluados",
+  conditionally_viable: "No encontré un plan totalmente viable",
+  deadline_missed: "Ningún plan cumple el deadline actual",
+  infeasible: "No encontré una configuración viable",
 };
 
 export function buildOutcomeHeadline(kind: GoalOutcomeKind): string {
@@ -199,8 +198,8 @@ export function buildOutcomeGuardianMessage(result: GoalSimulationResult, disrup
 }
 
 export interface WhyThisPlanView {
-  ctaLabel: string; // "Why this plan?" | "Why this configuration?"
-  headline: string; // "Why This Plan?" | "Why This Configuration?"
+  ctaLabel: string; // "¿Por qué este plan?" | "¿Por qué esta configuración?"
+  headline: string; // "¿Por qué este plan?" | "¿Por qué esta configuración?"
   narrativeIntro: string;
   goalSummary: string;
   clientLabel: string | null;
@@ -218,12 +217,12 @@ export interface WhyThisPlanView {
 }
 
 const NARRATIVE_BY_KIND: Record<GoalOutcomeKind, string> = {
-  fully_viable: "Guardian recommends this configuration because it meets every constraint of your operational model.",
+  fully_viable: "Guardian recomienda esta configuración porque cumple todas las restricciones de tu modelo operacional.",
   operationally_viable:
-    "This configuration meets capacity and deadline requirements, but material availability has not been evaluated yet.",
-  conditionally_viable: "This is the strongest configuration if the material constraint is resolved.",
-  deadline_missed: "No available configuration meets the requested deadline. This is the earliest achievable completion.",
-  infeasible: "No configuration is physically executable with the resources currently available for this goal.",
+    "Esta configuración cumple los requisitos de capacidad y deadline, pero todavía no se evaluó la disponibilidad de materiales.",
+  conditionally_viable: "Esta es la configuración más sólida si se resuelve la restricción de materiales.",
+  deadline_missed: "Ninguna configuración disponible cumple el deadline pedido. Esta es la finalización más temprana posible.",
+  infeasible: "Ninguna configuración es físicamente ejecutable con los recursos actualmente disponibles para este objetivo.",
 };
 
 export function buildWhyThisPlanView(
@@ -238,17 +237,17 @@ export function buildWhyThisPlanView(
   const summary = buildSimulatingSummary(result);
 
   const reasons: string[] = [];
-  if (top.result.deadlineMet) reasons.push("Meets deadline");
-  if (top.result.materialsFeasible === "pass") reasons.push("Materials available");
+  if (top.result.deadlineMet) reasons.push("Cumple el deadline");
+  if (top.result.materialsFeasible === "pass") reasons.push("Materiales disponibles");
   reasons.push(
-    top.extraResourcesUsed === 0 ? "Uses existing resources without extras" : "Uses minimal additional resources",
+    top.extraResourcesUsed === 0 ? "Usa los recursos existentes sin adicionales" : "Usa recursos adicionales mínimos",
   );
 
   const dominanceNote = runnerUp ? explainDominance(top, runnerUp, "Esta configuración", "la siguiente alternativa") : null;
 
   return {
-    ctaLabel: kind === "conditionally_viable" ? "Why this configuration?" : "Why this plan?",
-    headline: kind === "conditionally_viable" ? "Why This Configuration?" : "Why This Plan?",
+    ctaLabel: kind === "conditionally_viable" ? "¿Por qué esta configuración?" : "¿Por qué este plan?",
+    headline: kind === "conditionally_viable" ? "¿Por qué esta configuración?" : "¿Por qué este plan?",
     narrativeIntro: NARRATIVE_BY_KIND[kind],
     goalSummary: `${formatQty(result.goal.quantity, "")} ${result.goal.productName}`.replace(/\s+/g, " ").trim(),
     clientLabel: result.goal.client ?? null,

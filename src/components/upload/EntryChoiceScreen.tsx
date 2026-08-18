@@ -24,7 +24,7 @@ export function EntryChoiceScreen({
       <Guardian
         state="idle"
         size={104}
-        message={`${companyName}, ¿cómo querés construir tu Operational Twin?`}
+        message={`${companyName}, ¿cómo querés construir tu Modelo Operacional?`}
       />
 
       <motion.div
@@ -39,7 +39,7 @@ export function EntryChoiceScreen({
           className="glass-panel flex flex-col items-start gap-3 rounded-[var(--radius-lg)] border border-border-default p-6 text-left transition-all duration-200 hover:border-border-strong hover:bg-white/[0.03]"
         >
           <FileSpreadsheet size={24} className="text-accent-bright" />
-          <span className="text-base font-semibold text-text-primary">Import company data</span>
+          <span className="text-base font-semibold text-text-primary">Importar datos de la empresa</span>
           <span className="text-sm text-text-tertiary">
             Cargá Pedidos, Inventario y Recursos (.xlsx) para construir el Twin desde tus datos reales.
           </span>
@@ -51,7 +51,7 @@ export function EntryChoiceScreen({
           className="glass-panel flex flex-col items-start gap-3 rounded-[var(--radius-lg)] border border-border-default p-6 text-left transition-all duration-200 hover:border-border-strong hover:bg-white/[0.03]"
         >
           <MessageCircle size={24} className="text-accent-bright" />
-          <span className="text-base font-semibold text-text-primary">Describe my operation</span>
+          <span className="text-base font-semibold text-text-primary">Contar cómo funciona mi laboratorio</span>
           <span className="text-sm text-text-tertiary">
             Contale a Guardian cómo funciona tu operación, una pregunta a la vez — sin Excel.
           </span>

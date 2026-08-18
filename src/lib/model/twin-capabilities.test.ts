@@ -4,13 +4,14 @@ import path from "node:path";
 import type { OperationalModel } from "@/lib/types";
 import { buildTwinCapabilities } from "./twin-capabilities";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 
 function emptyModel(): OperationalModel {
   return {
     company: { name: "Empresa Nueva", industry: "" },
     orders: [],
     products: [],
+    presentations: [],
     materials: [],
     inventory: [],
     resources: [],
@@ -119,13 +120,13 @@ function loadDemoFile(name: string): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-describe("buildTwinCapabilities — dataset demo real (Laboratorio Genus)", () => {
+describe("buildTwinCapabilities — dataset demo real (Laboratorio Guardian)", () => {
   it("el Twin completo (Import Data) tiene todas las capabilities en true", () => {
     const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
     const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
     const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-    const model = buildGenusDemoModel({
-      company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+    const model = buildDemoModel({
+      company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
       orders,
       productNames,
       materials,

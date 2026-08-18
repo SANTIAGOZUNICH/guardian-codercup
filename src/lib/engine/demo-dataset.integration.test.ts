@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
 import { computeModelCounts } from "@/lib/model/buildOperationalModel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 import { evaluateAllOrders } from "./shortage-engine";
 
 // Test de integración end-to-end sobre los 3 Excel reales generados por
@@ -21,8 +21,8 @@ describe("dataset demo end-to-end", () => {
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
 
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
@@ -38,12 +38,12 @@ describe("dataset demo end-to-end", () => {
     expect(counts.products).toBe(3);
   });
 
-  it("detecta el faltante real de TCL / Shampoo Premium / MP-003 sin ningún valor hardcodeado", () => {
+  it("detecta el faltante real de Belleza Norte SA / Shampoo Premium / MP-003 sin ningún valor hardcodeado", () => {
     const alerts = evaluateAllOrders(model);
     const tcl = alerts.find((a) => a.orderId === "PED-1001");
     expect(tcl).toBeDefined();
     expect(tcl).toMatchObject({
-      client: "TCL",
+      client: "Belleza Norte SA",
       productName: "Shampoo Premium",
       quantity: 20000,
       materialCode: "MP-003",

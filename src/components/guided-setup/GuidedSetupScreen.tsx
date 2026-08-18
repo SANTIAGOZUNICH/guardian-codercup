@@ -12,23 +12,32 @@ import type { NluEntities } from "@/lib/nlu/types";
 import {
   batchInfoMentionsFromNluEntities,
   blocksTouchedByExtraction,
+  capacityVariantMentionsFromNluEntities,
   emptyGuidedSetupV2Answers,
+  ensurePresentationDrafts,
   equipmentMentionsFromNluEntities,
   formatScheduleProposal,
   markBlocksResolved,
   mergeBatchInfoMention,
   mergeEquipmentMention,
   mergeEquipmentMentions,
+  presentationMentionsFromNluEntities,
+  removeCapacityVariant as removeCapacityVariantV2,
   removeEquipment,
   scheduleMentionToProposal,
+  setCapacityVariant as setCapacityVariantV2,
   setEquipmentCapacity,
+  setPresentationGrams,
   suggestedSchedule,
   totalResolvedCount,
   GUIDED_SETUP_BLOCKS,
   type EquipmentEntryV2,
   type GuidedSetupBlock,
   type GuidedSetupV2Answers,
+  type PresentationDraftV2,
 } from "@/lib/model/guided-setup-v2";
+import { extractGramsPerUnit, isUnsureAboutGrams } from "@/lib/engine/presentation-parser";
+import { REFERENCE_PRESENTATION_GRAMS } from "@/lib/model/presentation";
 import { buildModelInputsFromGuidedSetupV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
 import { findReferenceCandidates, resolveReferenceValue } from "@/lib/engine/reference-catalog";
 import { REFERENCE_CATALOG } from "@/data/reference-catalog";
@@ -55,10 +64,11 @@ function useAutofillSafeName(): string {
 const KNOWN_PROCESSES: ResourceProcess[] = ["Elaboración", "Envasado", "Codificado"];
 const BATCH_PROCESS: ResourceProcess = "Elaboración"; // única etapa por lote soportada en este vertical slice
 
-type StepV2 = "intro" | "products" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
-const STEPS_V2: StepV2[] = ["intro", "products", "equipment", "capacities", "batchTimes", "staffing", "schedule", "materials", "review"];
+type StepV2 = "intro" | "products" | "presentations" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
+const STEPS_V2: StepV2[] = ["intro", "products", "presentations", "equipment", "capacities", "batchTimes", "staffing", "schedule", "materials", "review"];
 const BLOCK_BY_STEP: Partial<Record<StepV2, GuidedSetupBlock>> = {
   products: "products",
+  presentations: "presentations",
   equipment: "equipment",
   capacities: "capacities",
   batchTimes: "batchTimes",
@@ -260,7 +270,105 @@ function ReferenceOffer({ candidate, onAccept }: { candidate: ReferenceCatalogEn
   );
 }
 
-function CapacitiesStep({ equipment, onSetCapacity }: { equipment: EquipmentEntryV2[]; onSetCapacity: (id: string, value: number, unit: string, source: "company_data" | "reference_estimate") => void }) {
+/**
+ * Precisión progresiva (Product Contract): una vez que el equipo tiene una
+ * velocidad general, se pregunta si eso cambia según producto/presentación
+ * — SOLO si el usuario dice que sí se muestra el formulario de valores
+ * específicos, nunca de entrada (progressive disclosure). "No" o no
+ * responder nunca bloquea nada: la velocidad general ya es un dato válido.
+ */
+function CapacityVariantsBlock({
+  equipment,
+  productsRaw,
+  onSetVariant,
+  onRemoveVariant,
+}: {
+  equipment: EquipmentEntryV2;
+  productsRaw: string[];
+  onSetVariant: (equipmentId: string, productName: string, value: number) => void;
+  onRemoveVariant: (equipmentId: string, productName: string) => void;
+}) {
+  const [asked, setAsked] = useState(equipment.capacityVariants.length > 0);
+  const [product, setProduct] = useState(productsRaw[0] ?? "");
+  const [value, setValue] = useState("");
+  const fieldName = useAutofillSafeName();
+
+  if (productsRaw.length === 0) return null;
+
+  if (!asked && equipment.capacityVariants.length === 0) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <p className="text-xs text-text-tertiary">¿Esa velocidad cambia mucho según el producto o la presentación?</p>
+        <Button variant="ghost" type="button" onClick={() => setAsked(true)}>
+          Sí, agregar valores específicos
+        </Button>
+        <span className="text-xs text-text-disabled">No cambia → usar como referencia general.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] p-2">
+      <div className="flex flex-wrap gap-2">
+        {equipment.capacityVariants.map((v) => (
+          <EntryChip
+            key={v.productName}
+            label={v.productName}
+            sublabel={`${v.value.value} ${equipment.capacityUnit || "u/h"}`}
+            onRemove={() => onRemoveVariant(equipment.id, v.productName)}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={product}
+          onChange={(e) => setProduct(e.target.value)}
+          className="h-9 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-xs text-text-primary outline-none"
+        >
+          {productsRaw.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+        <input
+          name={fieldName}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="u/h"
+          autoComplete="off"
+          className="h-9 w-20 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-xs text-text-primary outline-none placeholder:text-text-disabled"
+        />
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={() => {
+            const v = Number(value);
+            if (!product || !Number.isFinite(v) || v <= 0) return;
+            onSetVariant(equipment.id, product, v);
+            setValue("");
+          }}
+        >
+          Agregar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CapacitiesStep({
+  equipment,
+  productsRaw,
+  onSetCapacity,
+  onSetCapacityVariant,
+  onRemoveCapacityVariant,
+}: {
+  equipment: EquipmentEntryV2[];
+  productsRaw: string[];
+  onSetCapacity: (id: string, value: number, unit: string, source: "company_data" | "reference_estimate") => void;
+  onSetCapacityVariant: (equipmentId: string, productName: string, value: number) => void;
+  onRemoveCapacityVariant: (equipmentId: string, productName: string) => void;
+}) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [declined, setDeclined] = useState<Record<string, boolean>>({});
 
@@ -310,9 +418,116 @@ function CapacitiesStep({ equipment, onSetCapacity }: { equipment: EquipmentEntr
             {!e.capacity && declined[e.id] && candidates.length === 0 && (
               <p className="mt-2 text-xs text-text-disabled">Todavía no hay una referencia para &quot;{e.category}&quot; — queda marcado como faltante, nunca en cero.</p>
             )}
+            {(e.capacity || e.capacityVariants.length > 0 || declined[e.id]) && (
+              <CapacityVariantsBlock
+                equipment={e}
+                productsRaw={productsRaw}
+                onSetVariant={onSetCapacityVariant}
+                onRemoveVariant={onRemoveCapacityVariant}
+              />
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentaciones — contenido por unidad, en gramos (Product Contract V1).
+// Nunca ml, nunca densidad — ver lib/model/presentation.ts.
+// ---------------------------------------------------------------------------
+function PresentationRow({ draft, onSet }: { draft: PresentationDraftV2; onSet: (value: number, source: "company_data" | "reference_estimate") => void }) {
+  const [text, setText] = useState("");
+  const [declined, setDeclined] = useState(false);
+  const fieldName = useAutofillSafeName();
+
+  function submit() {
+    if (isUnsureAboutGrams(text)) {
+      setDeclined(true);
+      return;
+    }
+    const value = extractGramsPerUnit(text);
+    if (value === null) return;
+    onSet(value, "company_data");
+  }
+
+  return (
+    <div className="rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-text-primary">{draft.productName}</span>
+        {draft.gramsPerUnit ? (
+          <span className="text-xs text-text-tertiary">
+            {draft.gramsPerUnit.value} g ·{" "}
+            <span className={draft.gramsPerUnit.source === "company_data" ? "text-text-secondary" : "text-accent-bright"}>
+              {draft.gramsPerUnit.source === "company_data" ? "tu dato" : "referencia"}
+            </span>
+          </span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <input
+              name={fieldName}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder="Ej: 200"
+              autoComplete="off"
+              className="h-9 w-24 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled"
+            />
+            <Button variant="ghost" type="button" onClick={submit}>
+              Ingresar
+            </Button>
+            <Button variant="ghost" type="button" onClick={() => setDeclined(true)}>
+              No lo sé
+            </Button>
+          </div>
+        )}
+      </div>
+      {!draft.gramsPerUnit && declined && (
+        <div className="mt-2 flex flex-col gap-2 rounded-[var(--radius-sm)] border border-accent/25 bg-accent-soft/40 p-3">
+          <p className="text-xs text-text-secondary">
+            No hay problema. Para obtener una primera estimación podemos usar una presentación de referencia de{" "}
+            <span className="text-accent-bright">{REFERENCE_PRESENTATION_GRAMS} g</span> y después la reemplazás por el valor real.
+          </p>
+          <div>
+            <Button type="button" onClick={() => onSet(REFERENCE_PRESENTATION_GRAMS, "reference_estimate")}>
+              Usar {REFERENCE_PRESENTATION_GRAMS} g como referencia
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PresentationsStep({
+  productsRaw,
+  presentations,
+  onSet,
+}: {
+  productsRaw: string[];
+  presentations: PresentationDraftV2[];
+  onSet: (productName: string, value: number, source: "company_data" | "reference_estimate") => void;
+}) {
+  const drafts = ensurePresentationDrafts(presentations, productsRaw);
+
+  if (productsRaw.length === 0) {
+    return <p className="text-sm text-text-secondary">Todavía no cargaste productos — volvé al paso anterior para agregar al menos uno.</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-text-secondary">¿Cuántos gramos de producto lleva aproximadamente cada unidad?</p>
+      <div className="flex flex-col gap-3">
+        {drafts.map((draft) => (
+          <PresentationRow key={draft.productName} draft={draft} onSet={(value, source) => onSet(draft.productName, value, source)} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -434,13 +649,23 @@ export function GuidedSetupScreen({
   function applyExtraction(entities: NluEntities) {
     setAnswers((prev) => {
       const newProducts = entities.products.filter((p) => !prev.productsRaw.some((existing) => existing.toLowerCase() === p.toLowerCase()));
+      const allProductNames = [...prev.productsRaw, ...newProducts];
       const equipment = mergeEquipmentMentions(prev.equipment, equipmentMentionsFromNluEntities(entities));
       const batchInfo = batchInfoMentionsFromNluEntities(entities).reduce((acc, m) => mergeBatchInfoMention(acc, m), prev.batchInfo);
       const scheduleProposal = entities.schedule ? scheduleMentionToProposal(entities.schedule) : null;
+      const presentations = presentationMentionsFromNluEntities(entities, allProductNames).reduce(
+        (acc, m) => setPresentationGrams(acc, m.productName, m.gramsPerUnit, "company_data"),
+        prev.presentations,
+      );
+      const equipmentWithVariants = capacityVariantMentionsFromNluEntities(entities, equipment, allProductNames).reduce(
+        (acc, m) => setCapacityVariantV2(acc, m.equipmentId, m.productName, m.value, "company_data"),
+        equipment,
+      );
       return {
         ...prev,
-        productsRaw: [...prev.productsRaw, ...newProducts],
-        equipment,
+        productsRaw: allProductNames,
+        presentations,
+        equipment: equipmentWithVariants,
         batchInfo,
         staffingCount: entities.staffingCount ?? prev.staffingCount,
         schedule: scheduleProposal ?? prev.schedule,
@@ -474,6 +699,14 @@ export function GuidedSetupScreen({
     setAnswers((prev) => ({ ...prev, productsRaw: prev.productsRaw.filter((_, idx) => idx !== i) }));
   }
 
+  function setPresentation(productName: string, value: number, source: "company_data" | "reference_estimate") {
+    setAnswers((prev) => ({
+      ...prev,
+      presentations: setPresentationGrams(prev.presentations, productName, value, source),
+      resolvedBlocks: { ...prev.resolvedBlocks, presentations: true },
+    }));
+  }
+
   function addEquipment(process: ResourceProcess, category: string, name: string, qty: number) {
     setAnswers((prev) => ({
       ...prev,
@@ -487,6 +720,14 @@ export function GuidedSetupScreen({
 
   function setCapacity(id: string, value: number, unit: string, source: "company_data" | "reference_estimate") {
     setAnswers((prev) => ({ ...prev, equipment: setEquipmentCapacity(prev.equipment, id, value, unit, source), resolvedBlocks: { ...prev.resolvedBlocks, capacities: true } }));
+  }
+
+  function setCapacityVariant(equipmentId: string, productName: string, value: number) {
+    setAnswers((prev) => ({ ...prev, equipment: setCapacityVariantV2(prev.equipment, equipmentId, productName, value, "company_data") }));
+  }
+
+  function removeCapacityVariantEntry(equipmentId: string, productName: string) {
+    setAnswers((prev) => ({ ...prev, equipment: removeCapacityVariantV2(prev.equipment, equipmentId, productName) }));
   }
 
   const batchProcessPresent = answers.equipment.some((e) => e.process === BATCH_PROCESS);
@@ -524,6 +765,7 @@ export function GuidedSetupScreen({
 
   const questionLabel: Partial<Record<StepV2, string>> = {
     products: "Qué fabricás",
+    presentations: "Contenido por unidad",
     equipment: "Equipos",
     capacities: "Capacidades",
     batchTimes: "Tiempos de tanda",
@@ -589,6 +831,10 @@ export function GuidedSetupScreen({
           </div>
         )}
 
+        {step === "presentations" && (
+          <PresentationsStep productsRaw={answers.productsRaw} presentations={answers.presentations} onSet={setPresentation} />
+        )}
+
         {step === "equipment" && (
           <div className="flex flex-col gap-2">
             {isResolvedFromFreeform && answers.equipment.length > 0 && <ResolvedBadge />}
@@ -598,7 +844,13 @@ export function GuidedSetupScreen({
 
         {step === "capacities" && (
           <div className="flex flex-col gap-2">
-            <CapacitiesStep equipment={answers.equipment} onSetCapacity={setCapacity} />
+            <CapacitiesStep
+              equipment={answers.equipment}
+              productsRaw={answers.productsRaw}
+              onSetCapacity={setCapacity}
+              onSetCapacityVariant={setCapacityVariant}
+              onRemoveCapacityVariant={removeCapacityVariantEntry}
+            />
           </div>
         )}
 
@@ -695,24 +947,24 @@ export function GuidedSetupScreen({
           <div className="flex flex-col gap-4">
             <p className="text-sm text-text-secondary">Esto es lo que entendí de {companyName}:</p>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <Stat label="Products" value={summary.productsCount} />
-              <Stat label="Processes" value={summary.processesCount} />
-              <Stat label="Resources" value={summary.resourcesCount} />
-              <Stat label="Production staff" value={summary.staffCount ?? "—"} />
-              <Stat label="Company Data" value={`${summary.companyDataCount} values`} />
-              <Stat label="Reference Estimates" value={`${summary.referenceEstimateCount} values`} />
+              <Stat label="Productos" value={summary.productsCount} />
+              <Stat label="Procesos" value={summary.processesCount} />
+              <Stat label="Recursos" value={summary.resourcesCount} />
+              <Stat label="Personal de producción" value={summary.staffCount ?? "—"} />
+              <Stat label="Datos de tu empresa" value={`${summary.companyDataCount}`} />
+              <Stat label="Valores de referencia" value={`${summary.referenceEstimateCount}`} />
             </div>
-            <p className="text-xs text-text-tertiary">Materials: {summary.materialsConnected ? "Connected" : "Not connected"}</p>
+            <p className="text-xs text-text-tertiary">Materiales: {summary.materialsConnected ? "conectados" : "no conectados"}</p>
             {summary.referenceEstimateCount > 0 && (
               <div className="rounded-[var(--radius-sm)] border border-accent/25 bg-accent-soft/40 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.08em] text-accent-bright">
-                  Guardian is using {summary.referenceEstimateCount} reference estimate{summary.referenceEstimateCount !== 1 ? "s" : ""}
+                  Guardian está usando {summary.referenceEstimateCount} valor{summary.referenceEstimateCount !== 1 ? "es" : ""} de referencia
                 </p>
-                <p className="mt-1 text-xs text-text-secondary">Van a quedar identificadas como estimaciones — reemplazalas cuando tengas el dato real.</p>
+                <p className="mt-1 text-xs text-text-secondary">Van a quedar identificados como estimaciones — reemplazalos cuando tengas el dato real.</p>
               </div>
             )}
             <Button onClick={handleBuildTwin} className="mt-2">
-              Build My Operational Twin
+              Construir mi Modelo Operacional
             </Button>
           </div>
         )}
@@ -722,15 +974,15 @@ export function GuidedSetupScreen({
         <div className="flex items-center gap-3">
           <Button variant="ghost" onClick={goBack} className="gap-2">
             <ArrowLeft size={15} />
-            Back
+            Atrás
           </Button>
           <Button onClick={goNext} className="gap-2">
-            Continue
+            Continuar
             <ArrowRight size={15} />
           </Button>
           {block && !answers.resolvedBlocks[block] && step !== "intro" && (
             <button type="button" onClick={() => markResolved(block)} className="text-xs text-text-tertiary underline underline-offset-2">
-              Skip
+              Omitir
             </button>
           )}
         </div>
@@ -738,7 +990,7 @@ export function GuidedSetupScreen({
       {step === "review" && (
         <Button variant="ghost" onClick={goBack} className="gap-2">
           <ArrowLeft size={15} />
-          Back
+          Atrás
         </Button>
       )}
       <p className="text-[10px] text-text-disabled">

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { OperationalModel, ProductionProfile } from "@/lib/types";
-import { buildGenusDemoModel, GENUS_DEMO_PRODUCTION_PROFILES } from "@/data/production-profiles";
+import { buildDemoModel, DEMO_PRODUCTION_PROFILES } from "@/data/production-profiles";
 import { buildOperationalModel } from "./buildOperationalModel";
 import { evaluateAllOrders } from "@/lib/engine/shortage-engine";
 import { evaluateScenario, baselineResourceConfig } from "@/lib/engine/evaluate-scenario";
@@ -11,12 +11,12 @@ import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } 
 
 /**
  * ============================================================================
- * Genus Isolation + Product Identity — Checkpoint 9B.2 (casos A, B, K, L)
+ * Demo Isolation + Product Identity — Checkpoint 9B.2 (casos A, B, K, L)
  * ============================================================================
  * Ver el header de `@/data/production-profiles` para la razón arquitectónica:
  * `buildOperationalModel()` (path genérico, cualquier laboratorio real) NUNCA
- * debe recibir la Production Reference de Laboratorio Genus a menos que se
- * pase explícitamente vía `input.profiles`. Solo `buildGenusDemoModel()`
+ * debe recibir la Production Reference de Laboratorio Guardian a menos que se
+ * pase explícitamente vía `input.profiles`. Solo `buildDemoModel()`
  * adjunta ese dataset, y solo lo usa el botón de demo.
  */
 
@@ -26,13 +26,13 @@ function loadDemoFile(name: string): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-describe("CASO A — buildGenusDemoModel mantiene el comportamiento actual de la demo", () => {
-  it("los 3 productos y el faltante real de TCL/MP-003 siguen intactos", () => {
+describe("CASO A — buildDemoModel mantiene el comportamiento actual de la demo", () => {
+  it("los 3 productos y el faltante real de Belleza Norte SA/MP-003 siguen intactos", () => {
     const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
     const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
     const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-    const model = buildGenusDemoModel({
-      company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+    const model = buildDemoModel({
+      company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
       orders,
       productNames,
       materials,
@@ -59,7 +59,7 @@ function buildNovaProducts(): Map<string, string> {
   ]);
 }
 
-describe("CASO B — un laboratorio nuevo (Nova) nunca recibe productos ni profiles de Genus", () => {
+describe("CASO B — un laboratorio nuevo (Nova) nunca recibe productos ni profiles del demo", () => {
   it("model.products son EXCLUSIVAMENTE los de Nova; model.profiles queda vacío", () => {
     const model = buildOperationalModel({
       company: { name: "Laboratorio Nova", industry: "cosmeticos" },
@@ -72,15 +72,15 @@ describe("CASO B — un laboratorio nuevo (Nova) nunca recibe productos ni profi
 
     const productNames = model.products.map((p) => p.name).sort();
     expect(productNames).toEqual(["Crema Antiage", "Gel de Limpieza", "Protector Solar FPS 50"]);
-    // Ningún producto de Genus (Shampoo Premium / Crema Hidratante / Serum Regenerador) aparece.
+    // Ningún producto del demo (Shampoo Premium / Crema Hidratante / Serum Regenerador) aparece.
     const genusNames = new Set(["Shampoo Premium", "Crema Hidratante", "Serum Regenerador"]);
     expect(model.products.some((p) => genusNames.has(p.name))).toBe(false);
     expect(model.profiles).toEqual([]);
   });
 });
 
-describe("CASO L — buildOperationalModel() sin profiles explícitos NUNCA inyecta Genus", () => {
-  it("incluso si el productId coincide por casualidad con uno de Genus (ej. 'shampoo-premium'), no hereda su Production Reference", () => {
+describe("CASO L — buildOperationalModel() sin profiles explícitos NUNCA inyecta el demo", () => {
+  it("incluso si el productId coincide por casualidad con uno del demo (ej. 'shampoo-premium'), no hereda su Production Reference", () => {
     const model = buildOperationalModel({
       company: { name: "Otro Laboratorio", industry: "cosmeticos" },
       orders: [],
@@ -91,9 +91,9 @@ describe("CASO L — buildOperationalModel() sin profiles explícitos NUNCA inye
     });
 
     expect(model.profiles).toEqual([]);
-    // Confirma que la coincidencia de productId con Genus no es lo que evita la fuga —
-    // es que buildOperationalModel() nunca importa GENUS_DEMO_PRODUCTION_PROFILES.
-    expect(GENUS_DEMO_PRODUCTION_PROFILES.some((p) => p.productId === "shampoo-premium")).toBe(true);
+    // Confirma que la coincidencia de productId con el demo no es lo que evita la fuga —
+    // es que buildOperationalModel() nunca importa DEMO_PRODUCTION_PROFILES.
+    expect(DEMO_PRODUCTION_PROFILES.some((p) => p.productId === "shampoo-premium")).toBe(true);
   });
 
   it("pasar profiles=[] explícitamente es equivalente a omitirlo — nunca hay un default escondido", () => {

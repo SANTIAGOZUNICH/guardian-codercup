@@ -16,7 +16,7 @@ export function CapabilityBadge({ connected, className }: { connected: boolean; 
       )}
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-accent-bright" : "bg-text-disabled")} />
-      {connected ? "Active" : "Not Connected"}
+      {connected ? "Conectado" : "No conectado"}
     </span>
   );
 }

@@ -1,13 +1,12 @@
 import type {
   CapacityIssue,
   MaterialFeasibility,
-  MaterialFormulaStep,
-  MaterialRequirement,
   MaterialShortage,
   OperationalModel,
   OperationsCalendar,
   Order,
   ProductionReferenceStep,
+  RateVariant,
   Resource,
   ResourceAllocation,
   ScenarioResult,
@@ -15,6 +14,7 @@ import type {
 } from "@/lib/types";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { computeMaterialNeeds } from "./shortage-engine";
+import { computeOrderMassKg, resolveOrderPresentation } from "@/lib/model/presentation";
 
 export { DEFAULT_OPERATIONS_CALENDAR };
 
@@ -119,24 +119,27 @@ function evaluateMaterials(
 
 /**
  * ============================================================================
- * Batches necesarios para UNA etapa por lote (Checkpoint 9B.3)
+ * Batches necesarios para UNA etapa por lote (GUARDIAN V1 — Product Contract)
  * ============================================================================
  * Desacoplado de TIEMPO vs MATERIALES: cuando `batchUnit === "units"`,
- * `batchSize` ya está en unidades de producto — no hace falta ninguna
- * Material Formula para saber cuántos batches hacen falta. Solo cuando
- * `batchUnit` es "kg" (o no se declaró, comportamiento histórico) el cálculo
- * necesita convertir `quantity` a masa vía el BOM. `null` = no se puede
- * determinar con los datos disponibles — nunca 0 (instantáneo) ni un número
- * inventado.
+ * `batchSize` ya está en unidades de producto — no hace falta ningún dato de
+ * gramaje ni de materiales para saber cuántos batches hacen falta. Solo
+ * cuando `batchUnit` es "kg" (o no se declaró, comportamiento histórico) el
+ * cálculo necesita convertir `quantity` a masa — vía `massKg`
+ * (`computeOrderMassKg`, units × gramsPerUnit / 1000, la ÚNICA fórmula de
+ * masa de V1, NUNCA el BOM de materiales — materiales quedan reservados
+ * exclusivamente a MaterialFeasibility, una pregunta independiente).
+ * `null` = no se puede determinar con los datos disponibles (gramaje no
+ * resuelto, CASO 5 del Product Contract) — nunca 0 (instantáneo) ni un
+ * número inventado.
  */
-function computeBatchesNeeded(step: ProductionReferenceStep, materialsPerUnit: MaterialRequirement[], quantity: number): number | null {
+function computeBatchesNeeded(step: ProductionReferenceStep, massKg: number | null, quantity: number): number | null {
   if (!step.batchSize) return null;
   if (step.batchUnit === "units") {
     return Math.ceil(quantity / step.batchSize.value);
   }
-  const totalMass = materialsPerUnit.reduce((sum, m) => sum + m.qtyPerUnit * quantity, 0);
-  if (totalMass <= 0) return null;
-  return Math.ceil(totalMass / step.batchSize.value);
+  if (massKg === null || massKg <= 0) return null;
+  return Math.ceil(massKg / step.batchSize.value);
 }
 
 function allocationFor(resourceConfig: ResourceAllocation[], resourceId: string) {
@@ -164,13 +167,58 @@ function validMachineUnits(
   return alloc.unitsUsed;
 }
 
+/**
+ * ============================================================================
+ * resolveEffectiveRate — precisión progresiva (Product Contract, checkpoint
+ * "Production References por producto/presentación")
+ * ============================================================================
+ * Encuentra el `ratePerHour` MÁS ESPECÍFICO disponible para una máquina
+ * puntual evaluando un pedido puntual, en este orden (el primero que
+ * matchea gana, nunca se combinan ni se promedian):
+ *   1. presentación + recurso exactos       (Nivel 4)
+ *   2. presentación exacta, cualquier recurso (Nivel 3)
+ *   3. producto + recurso exactos, sin presentación (Nivel 4 sin gramaje)
+ *   4. producto exacto, cualquier recurso, sin presentación (Nivel 2)
+ *   5. `step.ratePerHour` genérico (Nivel 1, ver regla histórica de
+ *      `presentationId` en el propio step — nunca se reutiliza si no
+ *      coincide con la presentación resuelta)
+ *   6. `null` -> el caller cae a `machine.capacity` cruda.
+ * Nunca escala ni interpola entre variantes — cada nivel es un dato
+ * declarado tal cual, o no se usa.
+ */
+export function resolveEffectiveRate(
+  step: ProductionReferenceStep,
+  machine: { id: string },
+  order: Order,
+  resolvedPresentationId: string | null,
+): number | null {
+  const variants = step.rateVariants ?? [];
+  const tiers: ((v: RateVariant) => boolean)[] = [
+    (v) => v.presentationId !== undefined && v.presentationId === resolvedPresentationId && v.resourceId === machine.id,
+    (v) => v.presentationId !== undefined && v.presentationId === resolvedPresentationId && v.resourceId === undefined,
+    (v) => v.presentationId === undefined && v.productId !== undefined && v.productId === order.productId && v.resourceId === machine.id,
+    (v) => v.presentationId === undefined && v.productId !== undefined && v.productId === order.productId && v.resourceId === undefined,
+  ];
+  for (const matches of tiers) {
+    const found = variants.find(matches);
+    if (found) return found.ratePerHour.value;
+  }
+
+  // Nivel 1 — el campo histórico único, con la misma regla anti-escalado de siempre.
+  const rateApplies = step.presentationId === undefined || step.presentationId === resolvedPresentationId;
+  if (step.ratePerHour !== undefined && rateApplies) return step.ratePerHour.value;
+
+  return null;
+}
+
 function computeStep(
   model: OperationalModel,
   step: ProductionReferenceStep,
-  materials: MaterialFormulaStep | undefined,
   order: Order,
   resourceConfig: ResourceAllocation[],
   workdayHours: number,
+  massKg: number | null,
+  resolvedPresentationId: string | null,
 ): { evaluation: StepEvaluation; capacityIssues: CapacityIssue[] } {
   const stepResources = model.resources.filter((r) => r.process === step.process);
   const issues: CapacityIssue[] = [];
@@ -189,17 +237,17 @@ function computeStep(
   }
 
   const machines = stepResources.filter((r) => r.type === "Máquina");
-  const materialsPerUnit = materials?.materialsPerUnit ?? [];
   let hours: number;
 
   if (step.batchSize !== undefined) {
     // Una etapa por lote necesita hoursPerBatch (cuánto tarda un batch) Y una
     // forma de saber cuántos batches hacen falta (`computeBatchesNeeded` —
-    // desde `order.quantity` directo si `batchUnit === "units"`, o vía BOM si
-    // es masa). Si falta cualquiera de los dos, la etapa queda `blocked`
-    // honestamente — nunca `hours: 0` (una respuesta fabricada) ni un throw
-    // que tire abajo toda la simulación por un dato de referencia ausente.
-    const batchesNeeded = computeBatchesNeeded(step, materialsPerUnit, order.quantity);
+    // desde `order.quantity` directo si `batchUnit === "units"`, o vía
+    // `massKg` si es masa). Si falta cualquiera de los dos, la etapa queda
+    // `blocked` honestamente — nunca `hours: 0` (una respuesta fabricada) ni
+    // un throw que tire abajo toda la simulación por un dato de referencia
+    // ausente.
+    const batchesNeeded = computeBatchesNeeded(step, massKg, order.quantity);
     if (step.hoursPerBatch === undefined || batchesNeeded === null) {
       hours = Infinity;
     } else {
@@ -210,12 +258,29 @@ function computeStep(
       hours = batchSlots > 0 ? Math.ceil(batchesNeeded / batchSlots) * step.hoursPerBatch.value : Infinity;
     }
   } else {
+    // REGLA CRÍTICA — NO ESCALADO FALSO (Product Contract V1): un rate
+    // declarado para una presentación/producto/recurso específico NUNCA se
+    // reutiliza para un pedido incompatible. `resolveEffectiveRate()` busca
+    // el dato MÁS ESPECÍFICO disponible (presentación+recurso > presentación
+    // > producto+recurso > producto > genérico); si nada matchea, cae de
+    // vuelta a la capacidad física cruda de la máquina — un dato real ya
+    // declarado, nunca una reproporción inventada.
+    //
+    // `machine.capacity === 0` es el placeholder engine-honesto de "todavía
+    // no se sabe" (ver guided-setup-v2.ts / buildResources) — NUNCA "la
+    // capacidad real es cero". Si hay un rate resuelto (variante o genérico)
+    // pero la capacidad física cruda es ese placeholder, capar contra 0
+    // bloquearía en falso un dato que sí existe (exactamente el caso de un
+    // laboratorio que solo conoce rates por producto — Nivel 2-4 — y nunca
+    // declaró un "número genérico" de la máquina). Cuando la capacidad física
+    // SÍ es un valor real conocido, sigue acotando como siempre.
     let throughput = 0;
     for (const machine of machines) {
       const units = validMachineUnits(machine, resourceConfig, step.process, issues);
       if (units <= 0) continue;
+      const effectiveRateValue = resolveEffectiveRate(step, machine, order, resolvedPresentationId);
       const effectiveRate =
-        step.ratePerHour !== undefined ? Math.min(machine.capacity, step.ratePerHour.value) : machine.capacity;
+        effectiveRateValue !== null ? (machine.capacity > 0 ? Math.min(machine.capacity, effectiveRateValue) : effectiveRateValue) : machine.capacity;
       throughput += effectiveRate * units;
     }
     hours = throughput > 0 ? order.quantity / throughput : Infinity;
@@ -364,17 +429,21 @@ export function evaluateScenario(
     };
   }
 
+  const massKg = computeOrderMassKg(order, model);
+  const presentationResolution = resolveOrderPresentation(order, model);
+  const resolvedPresentationId = presentationResolution.ok ? presentationResolution.presentation.id : null;
+
   const steps: StepEvaluation[] = [];
   const capacityIssues: CapacityIssue[] = [];
   for (const step of profile.productionReference) {
-    const materials = profile.materials.find((m) => m.process === step.process);
     const { evaluation, capacityIssues: stepIssues } = computeStep(
       model,
       step,
-      materials,
       order,
       resourceConfig,
       calendar.workdayHours,
+      massKg,
+      resolvedPresentationId,
     );
     steps.push(evaluation);
     capacityIssues.push(...stepIssues);

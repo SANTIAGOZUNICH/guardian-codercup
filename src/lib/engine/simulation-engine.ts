@@ -71,6 +71,7 @@ export function buildHypotheticalOrder(goal: Goal): Order {
     quantity: goal.quantity,
     deliveryDate: goal.deadline,
     priority: "alta",
+    presentationId: goal.presentationId,
   };
 }
 
@@ -372,7 +373,7 @@ export function simulateGoal(
 
   const baselineConfig: ScenarioConfig = {
     id: "baseline",
-    label: "Current configuration",
+    label: "Configuración actual",
     resourceConfig: baselineResourceConfig(model, hypotheticalOrder),
   };
   const baseline = evaluate(baselineConfig);

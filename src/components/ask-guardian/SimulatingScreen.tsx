@@ -10,11 +10,11 @@ import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import type { Goal, GoalSimulationResult, OperationalModel } from "@/lib/types";
 
 const STEPS = [
-  "Evaluating operational goal...",
-  "Checking material feasibility...",
-  "Evaluating resource configurations...",
-  "Identifying bottlenecks...",
-  "Comparing feasible plans...",
+  "Evaluando el objetivo operacional...",
+  "Chequeando disponibilidad de materiales...",
+  "Evaluando configuraciones de recursos...",
+  "Identificando cuellos de botella...",
+  "Comparando planes viables...",
 ];
 
 const STEP_DELAY_MS = 380;
@@ -58,7 +58,7 @@ export function SimulatingScreen({
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
       <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">
-        {mode === "resimulation" ? "Re-Simulating Possible Futures" : "Simulating Possible Futures"}
+        {mode === "resimulation" ? "Volviendo a simular futuros posibles" : "Simulando futuros posibles"}
       </p>
       {disruptionLabel && <p className="-mt-4 text-xs text-risk-medium">{disruptionLabel}</p>}
 
@@ -85,11 +85,11 @@ export function SimulatingScreen({
           className="flex flex-col items-center gap-6"
         >
           <p className="text-sm font-medium text-text-primary">
-            <span className="text-accent-bright">{summary.evaluated}</span> scenarios evaluated ·{" "}
-            <span className="text-accent-bright">{summary.feasible}</span> operationally feasible ·{" "}
-            <span className="text-accent-bright">{summary.meetDeadline}</span> meet deadline
+            <span className="text-accent-bright">{summary.evaluated}</span> escenarios evaluados ·{" "}
+            <span className="text-accent-bright">{summary.feasible}</span> operacionalmente viables ·{" "}
+            <span className="text-accent-bright">{summary.meetDeadline}</span> cumplen el deadline
           </p>
-          <Button onClick={() => onDone(result)}>View Results</Button>
+          <Button onClick={() => onDone(result)}>Ver resultados</Button>
         </motion.div>
       )}
     </div>

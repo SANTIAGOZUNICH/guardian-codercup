@@ -23,7 +23,7 @@ function pick(arr) {
 }
 
 const CLIENTS = [
-  "TCL",
+  "Belleza Norte SA",
   "Farmacity Norte",
   "Perfumería Central",
   "Distribuidora Bella",
@@ -58,9 +58,9 @@ function pushOrder({ client, product, quantity, days, priority }) {
   });
 }
 
-// Caso deliberado de RIESGO ALTO (faltante real): TCL / Shampoo Premium / 20.000u
+// Caso deliberado de RIESGO ALTO (faltante real): Belleza Norte SA / Shampoo Premium / 20.000u
 // consume MP-003 (Fragancia Shampoo Cítrica) muy por encima del stock disponible.
-pushOrder({ client: "TCL", product: "Shampoo Premium", quantity: 20000, days: 4, priority: "alta" });
+pushOrder({ client: "Belleza Norte SA", product: "Shampoo Premium", quantity: 20000, days: 4, priority: "alta" });
 
 // Caso deliberado "en atención": Cosmética Andina / Serum Regenerador / 3.200u
 // consume MP-007 (Ácido Hialurónico) con muy poco margen sobre el stock.
@@ -70,7 +70,7 @@ pushOrder({ client: "Cosmética Andina", product: "Serum Regenerador", quantity:
 pushOrder({ client: "Farmacity Norte", product: "Crema Hidratante", quantity: 1500, days: 12, priority: "normal" });
 
 // Resto del dataset — quantities acotadas para no disparar shortages no intencionales
-// (Shampoo < 6000 salvo TCL, Serum < 2900 salvo Cosmética Andina).
+// (Shampoo < 6000 salvo Belleza Norte SA, Serum < 2900 salvo Cosmética Andina).
 for (let i = 0; i < 37; i++) {
   const product = pick(PRODUCTS);
   const client = pick(CLIENTS);

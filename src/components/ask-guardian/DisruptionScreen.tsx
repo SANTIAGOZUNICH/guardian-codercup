@@ -47,7 +47,7 @@ export function DisruptionScreen({
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
-      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">Operational Disruption</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">Disrupción operativa</p>
 
       <Guardian state="alert" size={90} message={view.guardianAlertMessage} />
 
@@ -66,11 +66,11 @@ export function DisruptionScreen({
               </div>
               {m.available ? (
                 <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-low">
-                  <Check size={13} /> Available
+                  <Check size={13} /> Disponible
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-high">
-                  <X size={13} /> Unavailable
+                  <X size={13} /> No disponible
                 </span>
               )}
             </div>
@@ -80,11 +80,11 @@ export function DisruptionScreen({
         {(view.capacityBeforeLabel || view.capacityAfterLabel) && (
           <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border-subtle pt-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Capacity before</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Capacidad antes</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{view.capacityBeforeLabel ?? "—"}</p>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Capacity after</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Capacidad después</p>
               <p className="mt-1 text-lg font-semibold text-risk-medium">{view.capacityAfterLabel ?? "—"}</p>
             </div>
           </div>
@@ -93,12 +93,12 @@ export function DisruptionScreen({
 
       <div className="flex flex-col items-center gap-3">
         <p className="text-xs text-text-tertiary">{buildReSimulateGuardianMessage()}</p>
-        <Button onClick={onReSimulate}>Re-simulate →</Button>
+        <Button onClick={onReSimulate}>Volver a simular →</Button>
       </div>
 
       <Button variant="ghost" onClick={onBack} className="gap-2">
         <ArrowLeft size={15} />
-        Back to Command Center
+        Volver al Centro de Operaciones
       </Button>
     </div>
   );

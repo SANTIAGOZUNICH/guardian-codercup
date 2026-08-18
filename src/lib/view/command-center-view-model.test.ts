@@ -4,7 +4,7 @@ import path from "node:path";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 import { buildTwinGraph } from "./twin-graph-view-model";
 import {
   buildOperationalHealth,
@@ -27,8 +27,8 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
@@ -37,19 +37,27 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
   });
   const orderConstraints = detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT);
 
+  // GUARDIAN V1 (gramos por unidad): la masa de Elaboración ahora se deriva
+  // de `Presentation.gramsPerUnit` (200 g para crema-hidratante, ver
+  // `DEMO_PRESENTATIONS`), no de la suma del BOM (que sumaba ~109 g/u,
+  // un subconteo — el BOM nunca declaraba la totalidad de la fórmula, solo
+  // los insumos con código de material). El pedido PED-1009 (Belleza Norte SA / Crema
+  // Hidratante / 5.637u / vence 2026-08-16) pasa a tener masa real más alta y
+  // aparece como un `deadline_at_risk` nuevo — un resultado más correcto que
+  // el que producía el subconteo anterior, no un valor arbitrario.
   it("1. summary con dataset demo: Operational Health real", () => {
     const health = buildOperationalHealth(model, orderConstraints);
     expect(health).toEqual({
       totalOrders: 40,
-      affectedOrders: 1,
-      totalConstraints: 2,
+      affectedOrders: 2,
+      totalConstraints: 3,
       totalProcesses: 3,
     });
   });
 
-  it("2. affected orders correcto (PED-1001, no otro)", () => {
+  it("2. affected orders correcto (PED-1001 y PED-1009)", () => {
     const health = buildOperationalHealth(model, orderConstraints);
-    expect(health.affectedOrders).toBe(1);
+    expect(health.affectedOrders).toBe(2);
   });
 
   it("selectHeroMetrics — Twin enriquecido: Pedidos/Recursos/Procesos/Restricciones, en ese orden, con datos reales", () => {
@@ -57,7 +65,7 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
       { kind: "orders", label: "Pedidos", value: 40, tone: "normal" },
       { kind: "resources", label: "Recursos", value: 7, tone: "normal" },
       { kind: "processes", label: "Procesos", value: 3, tone: "normal" },
-      { kind: "constraints", label: "Restricciones", value: 2, tone: "danger" },
+      { kind: "constraints", label: "Restricciones", value: 3, tone: "danger" },
     ]);
   });
 
@@ -70,7 +78,7 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
   it("Twin preview refleja el status real de cada capa (Understanding en danger por el material constraint)", () => {
     const graph = buildTwinGraph(model, orderConstraints);
     const preview = buildTwinPreview(graph);
-    const understanding = preview.find((l) => l.label === "Understanding")!;
+    const understanding = preview.find((l) => l.label === "Comprensión")!;
     expect(understanding.status).toBe("danger"); // Materials queda danger -> peor status de la capa
     expect(preview.map((l) => l.count)).toEqual([3, 5, 3]); // Source Data, Understanding, Production Flow
   });
@@ -82,6 +90,7 @@ describe("Command Center view model — 4. sin constraints -> empty state correc
       company: { name: "Empresa Sana", industry: "cosmeticos" },
       orders: [],
       products: [],
+      presentations: [],
       materials: [],
       inventory: [],
       resources: [],
@@ -103,6 +112,7 @@ describe("selectHeroMetrics — Twin simple (Guided Setup, sin pedidos)", () => 
         { id: "pieza-cortada", name: "Pieza cortada", unit: "unidades" },
         { id: "pieza-soldada", name: "Pieza soldada", unit: "unidades" },
       ],
+      presentations: [],
       materials: [],
       inventory: [],
       resources: [
@@ -138,6 +148,7 @@ describe("selectHeroMetrics — Twin simple (Guided Setup, sin pedidos)", () => 
       company: { name: "Empresa Nueva", industry: "" },
       orders: [],
       products: [],
+      presentations: [],
       materials: [],
       inventory: [],
       resources: [],
@@ -152,7 +163,7 @@ describe("buildMaterialIntelligence / buildSimulationBasisSummary — Visual Che
     const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
     const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
     const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-    const model = buildGenusDemoModel({ company: { name: "Laboratorio Genus", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
+    const model = buildDemoModel({ company: { name: "Laboratorio Guardian", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
     const orderConstraints = detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT);
 
     const intelligence = buildMaterialIntelligence(model, orderConstraints);
@@ -160,11 +171,11 @@ describe("buildMaterialIntelligence / buildSimulationBasisSummary — Visual Che
     expect(intelligence.materialConstraintCount).toBe(1);
   });
 
-  it("dataset demo real: Simulation Basis suma reference_estimate de los 3 productos (Genus siempre reference_estimate)", () => {
+  it("dataset demo real: Simulation Basis suma reference_estimate de los 3 productos (Guardian siempre reference_estimate)", () => {
     const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
     const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
     const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-    const model = buildGenusDemoModel({ company: { name: "Laboratorio Genus", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
+    const model = buildDemoModel({ company: { name: "Laboratorio Guardian", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
 
     const basis = buildSimulationBasisSummary(model);
     expect(basis).not.toBeNull();
@@ -177,6 +188,7 @@ describe("buildMaterialIntelligence / buildSimulationBasisSummary — Visual Che
       company: { name: "Empresa Nueva", industry: "" },
       orders: [],
       products: [],
+      presentations: [],
       materials: [],
       inventory: [],
       resources: [],
@@ -191,6 +203,7 @@ describe("buildMaterialIntelligence / buildSimulationBasisSummary — Visual Che
       company: { name: "Empresa Nueva", industry: "" },
       orders: [],
       products: [],
+      presentations: [],
       materials: [],
       inventory: [],
       resources: [],
@@ -205,7 +218,7 @@ describe("selectAskGuardianPrompts — Reference-Driven Redesign", () => {
     const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
     const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
     const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-    const model = buildGenusDemoModel({ company: { name: "Laboratorio Genus", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
+    const model = buildDemoModel({ company: { name: "Laboratorio Guardian", industry: "cosmeticos" }, orders, productNames, materials, inventory, resources });
 
     expect(selectAskGuardianPrompts(model)).toEqual([
       "¿Llego a cumplir mis pedidos?",
@@ -219,6 +232,7 @@ describe("selectAskGuardianPrompts — Reference-Driven Redesign", () => {
       company: { name: "Empresa Nueva", industry: "" },
       orders: [],
       products: [],
+      presentations: [],
       materials: [],
       inventory: [],
       resources: [],

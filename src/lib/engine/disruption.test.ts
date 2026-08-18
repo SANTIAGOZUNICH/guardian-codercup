@@ -7,6 +7,7 @@ function buildModel(): OperationalModel {
     company: { name: "Fixture Co", industry: "cosmeticos" },
     orders: [],
     products: [],
+    presentations: [],
     materials: [],
     inventory: [],
     resources: [

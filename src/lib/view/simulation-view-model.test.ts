@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import { parsePedidosWithProductNames, parseInventarioFile, parseRecursosFile } from "@/lib/parsing/parseExcel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 import { parseGoalText } from "@/lib/engine/goal-parser";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import {
@@ -24,19 +24,19 @@ function loadDemoFile(name: string): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-describe("Simulation view model — goal real de la demo (30.000 shampoos para TCL antes del viernes)", () => {
+describe("Simulation view model — goal real de la demo (30.000 shampoos para Belleza Norte SA antes del viernes)", () => {
   const { orders, productNames } = parsePedidosWithProductNames(loadDemoFile("Pedidos_Guardian_Demo.xlsx"));
   const { materials, inventory } = parseInventarioFile(loadDemoFile("Inventario_Guardian_Demo.xlsx"));
   const resources = parseRecursosFile(loadDemoFile("Recursos_Guardian_Demo.xlsx"));
-  const model = buildGenusDemoModel({
-    company: { name: "Laboratorio Genus", industry: "cosmeticos" },
+  const model = buildDemoModel({
+    company: { name: "Laboratorio Guardian", industry: "cosmeticos" },
     orders,
     productNames,
     materials,
     inventory,
     resources,
   });
-  const parsed = parseGoalText("Necesito producir 30.000 shampoos para TCL antes del viernes.", {
+  const parsed = parseGoalText("Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes.", {
     model,
     snapshotAt: DEMO_SNAPSHOT_AT,
     calendar: DEFAULT_OPERATIONS_CALENDAR,
@@ -56,10 +56,10 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para T
     expect(result.outcome.candidates.every((s) => s.status === "conditionally_viable")).toBe(true);
   });
 
-  it("buildOutcomeHeadline: nunca dice 'Recommended Plans' cuando el outcome es conditionally_viable", () => {
+  it("buildOutcomeHeadline: nunca dice 'Planes recomendados' cuando el outcome es conditionally_viable", () => {
     const headline = buildOutcomeHeadline(result.outcome.kind);
-    expect(headline).toBe("No Fully Viable Plan Found");
-    expect(headline).not.toBe("Recommended Plans");
+    expect(headline).toBe("No encontré un plan totalmente viable");
+    expect(headline).not.toBe("Planes recomendados");
   });
 
   it("buildOutcomeGuardianMessage: menciona el bloqueo de materiales, no un genérico de éxito", () => {
@@ -78,13 +78,13 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para T
     }
   });
 
-  it("buildPlanCardView del mejor candidato: badgeLabel es 'Best Conditional Plan', nunca 'Recommended', cuando el outcome no es fully_viable", () => {
+  it("buildPlanCardView del mejor candidato: badgeLabel es 'Mejor alternativa condicional', nunca 'Recomendado', cuando el outcome no es fully_viable", () => {
     const deadlineLabel = resolveGoalDeadlineLabel(result.goal, DEFAULT_OPERATIONS_CALENDAR);
     const top = result.outcome.candidates[0];
     const card = buildPlanCardView(top, 0, deadlineLabel, result.outcome.kind);
     expect(card.rankLabel).toBe("A");
-    expect(card.badgeLabel).toBe("Best Conditional Plan");
-    expect(card.badgeLabel).not.toBe("Recommended");
+    expect(card.badgeLabel).toBe("Mejor alternativa condicional");
+    expect(card.badgeLabel).not.toBe("Recomendado");
     expect(card.status).toBe("conditionally_viable");
     expect(card.materialsAvailable).toBe(false); // el faltante de MP-003 es real e independiente de la config elegida
     expect(card.materialBlockerLabel).not.toBeNull();
@@ -101,27 +101,27 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para T
   it("buildContextNote: nunca afirma impacto sobre pedidos específicos, solo comparte proceso", () => {
     const note = buildContextNote(result.scenarios);
     if (note) {
-      expect(note).toMatch(/use[ns]? one or more of the same production processes/);
-      expect(note).not.toMatch(/delay|affect|impact/i);
+      expect(note).toMatch(/usa[n]? uno o más de los mismos procesos de producción/);
+      expect(note).not.toMatch(/delay|affect|impact|atrasa|afecta|impacta/i);
     }
   });
 
-  it("buildWhyThisPlanView: ctaLabel/headline usan 'configuration' (no 'plan') cuando el outcome es conditionally_viable", () => {
+  it("buildWhyThisPlanView: ctaLabel/headline usan 'configuración' (no 'plan') cuando el outcome es conditionally_viable", () => {
     const view = buildWhyThisPlanView(result, DEFAULT_OPERATIONS_CALENDAR);
     expect(view).not.toBeNull();
     if (!view) return;
-    expect(view.ctaLabel).toBe("Why this configuration?");
-    expect(view.headline).toBe("Why This Configuration?");
+    expect(view.ctaLabel).toBe("¿Por qué esta configuración?");
+    expect(view.headline).toBe("¿Por qué esta configuración?");
     expect(view.evaluatedCount).toBe(6);
     expect(view.materialBlockerLabel).not.toBeNull();
   });
 });
 
-describe("resolveChosenPlanPrefix — Command Center 'Last Simulation' nunca dice 'Best Conditional' para un outcome que no lo es", () => {
+describe("resolveChosenPlanPrefix — Command Center 'Última simulación' nunca dice 'Mejor alternativa condicional' para un outcome que no lo es", () => {
   it("coincide con el badge real que ve el usuario en el plan card destacado", () => {
-    expect(resolveChosenPlanPrefix("fully_viable")).toBe("Recommended");
-    expect(resolveChosenPlanPrefix("conditionally_viable")).toBe("Best Conditional");
-    expect(resolveChosenPlanPrefix("deadline_missed")).toBe("Earliest Completion");
-    expect(resolveChosenPlanPrefix("infeasible")).toBe("Selected");
+    expect(resolveChosenPlanPrefix("fully_viable")).toBe("Recomendado");
+    expect(resolveChosenPlanPrefix("conditionally_viable")).toBe("Mejor alternativa condicional");
+    expect(resolveChosenPlanPrefix("deadline_missed")).toBe("Finalización más temprana");
+    expect(resolveChosenPlanPrefix("infeasible")).toBe("Seleccionado");
   });
 });

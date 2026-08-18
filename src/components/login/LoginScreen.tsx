@@ -4,26 +4,19 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/cn";
 
 export interface LoginPayload {
   email: string;
   password: string;
   companyName: string;
-  industry: string;
+  /** GUARDIAN V1 es exclusivamente para laboratorios cosméticos — nunca se le pregunta el rubro al usuario. */
+  industry: "cosmeticos";
 }
-
-const INDUSTRIES = [
-  { id: "cosmeticos", label: "Cosméticos", enabled: true },
-  { id: "alimentos", label: "Alimentos", enabled: false },
-  { id: "textil", label: "Textil", enabled: false },
-];
 
 export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [companyName, setCompanyName] = useState("Laboratorio Genus");
-  const [industry, setIndustry] = useState("cosmeticos");
+  const [companyName, setCompanyName] = useState("");
 
   const canSubmit = email.trim().length > 3 && password.length > 0 && companyName.trim().length > 0;
 
@@ -44,9 +37,9 @@ export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) =>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-text-primary">GUARDIAN</h1>
           <p className="mt-2 max-w-xs text-sm leading-relaxed text-text-secondary">
-            Build a digital model of your company.
+            Construí un modelo de tu laboratorio.
             <br />
-            Then simulate the future.
+            Después preguntale qué podría pasar.
           </p>
         </div>
 
@@ -55,7 +48,7 @@ export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) =>
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSubmit) return;
-            onSubmit({ email, password, companyName, industry });
+            onSubmit({ email, password, companyName, industry: "cosmeticos" });
           }}
         >
           <Input
@@ -77,39 +70,13 @@ export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) =>
             required
           />
           <Input
-            label="Empresa"
+            label="Laboratorio"
             type="text"
-            placeholder="Laboratorio Genus"
+            placeholder="Ej: Laboratorio Cosmético del Sur"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
             required
           />
-
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-tertiary">
-              Rubro
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {INDUSTRIES.map((opt) => (
-                <button
-                  type="button"
-                  key={opt.id}
-                  disabled={!opt.enabled}
-                  onClick={() => setIndustry(opt.id)}
-                  title={opt.enabled ? undefined : "Próximamente"}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200",
-                    industry === opt.id && opt.enabled
-                      ? "border-accent/50 bg-accent-soft text-accent-bright"
-                      : "border-border-default bg-white/[0.02] text-text-secondary",
-                    !opt.enabled && "cursor-not-allowed opacity-40",
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <Button type="submit" disabled={!canSubmit} className="mt-3 w-full">
             Ingresar

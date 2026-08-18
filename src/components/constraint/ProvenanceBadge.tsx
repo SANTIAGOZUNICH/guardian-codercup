@@ -3,9 +3,9 @@ import { cn } from "@/lib/cn";
 export type Provenance = "company_data" | "reference" | "calculated";
 
 const LABEL: Record<Provenance, string> = {
-  company_data: "Company data",
-  reference: "Reference",
-  calculated: "Calculated",
+  company_data: "Dato de la empresa",
+  reference: "Referencia",
+  calculated: "Calculado",
 };
 
 /**

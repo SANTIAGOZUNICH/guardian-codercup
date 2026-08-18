@@ -11,10 +11,10 @@ import type { TwinCompleteness } from "@/lib/types";
 export function buildKnownSummaryLine(c: TwinCompleteness): string {
   const { processes, resources, capacities, products } = c.known;
   return (
-    `${processes} Process${processes !== 1 ? "es" : ""}, ` +
-    `${resources} Resource${resources !== 1 ? "s" : ""}, ` +
-    `${capacities} Capacit${capacities !== 1 ? "ies" : "y"}, ` +
-    `${products} Product${products !== 1 ? "s" : ""}`
+    `${processes} proceso${processes !== 1 ? "s" : ""}, ` +
+    `${resources} recurso${resources !== 1 ? "s" : ""}, ` +
+    `${capacities} capacidad${capacities !== 1 ? "es" : ""}, ` +
+    `${products} producto${products !== 1 ? "s" : ""}`
   );
 }
 
@@ -23,11 +23,11 @@ export function buildMissingItemsList(c: TwinCompleteness): string[] {
   const items: string[] = [];
   const capCount = c.missing.resourceCapacities.length;
   if (capCount > 0) {
-    items.push(capCount === 1 ? "1 machine capacity" : `${capCount} machine capacities`);
+    items.push(capCount === 1 ? "1 capacidad de máquina" : `${capCount} capacidades de máquina`);
   }
-  if (c.missing.missingInventory) items.push("Raw material inventory");
-  for (const process of c.missing.unsupportedProcesses) items.push(`Unsupported process: ${process}`);
-  for (const product of c.missing.productsWithoutProfile) items.push(`Production profile for ${product}`);
+  if (c.missing.missingInventory) items.push("Inventario de materia prima");
+  for (const process of c.missing.unsupportedProcesses) items.push(`Proceso no soportado: ${process}`);
+  for (const product of c.missing.productsWithoutProfile) items.push(`Perfil de producción de ${product}`);
   return items;
 }
 
@@ -38,16 +38,16 @@ export function totalMissingCount(c: TwinCompleteness): number {
 /** Texto del elemento secundario y no bloqueante en Twin Ready (ETAPA 9). */
 export function buildMissingDataLabel(c: TwinCompleteness): string {
   const n = totalMissingCount(c);
-  return `Missing operational data · ${n} item${n !== 1 ? "s" : ""}`;
+  return `Datos operacionales faltantes · ${n} ítem${n !== 1 ? "s" : ""}`;
 }
 
 export function buildCompletenessGuardianMessage(companyName: string, c: TwinCompleteness): string {
   const n = totalMissingCount(c);
   if (n === 0) {
-    return `${companyName}, tu Operational Twin quedó completo con lo que me contaste.`;
+    return `${companyName}, tu Modelo Operacional quedó completo con lo que me contaste.`;
   }
   return (
-    `${companyName}, arranqué tu Operational Twin con lo que me contaste. ` +
+    `${companyName}, arranqué tu Modelo Operacional con lo que me contaste. ` +
     `Hay ${n} dato${n !== 1 ? "s" : ""} que todavía no tengo — podés revisarlo${n !== 1 ? "s" : ""} cuando quieras, no bloquean nada.`
   );
 }

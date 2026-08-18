@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Company } from "@/lib/types";
 import { buildModelInputsFromGuidedSetupV2, computeOperationSummary } from "./buildModelInputsFromGuidedSetupV2";
 import { buildOperationalModel } from "./buildOperationalModel";
-import { emptyGuidedSetupV2Answers, mergeEquipmentMention, type GuidedSetupV2Answers } from "./guided-setup-v2";
+import { emptyGuidedSetupV2Answers, mergeEquipmentMention, setCapacityVariant, setEquipmentCapacity, type GuidedSetupV2Answers } from "./guided-setup-v2";
 import { evaluateScenario, baselineResourceConfig } from "@/lib/engine/evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 
@@ -38,13 +38,13 @@ function novaAnswers(): GuidedSetupV2Answers {
   };
 }
 
-describe("buildModelInputsFromGuidedSetupV2 — cualquier producto, nunca limitado a Genus", () => {
+describe("buildModelInputsFromGuidedSetupV2 — cualquier producto, nunca limitado a Guardian", () => {
   it("acepta nombres de producto libres (Protector Solar FPS 50, Gel de Limpieza)", () => {
     const { input } = buildModelInputsFromGuidedSetupV2(novaAnswers(), COMPANY);
     const model = buildOperationalModel(input);
     const names = model.products.map((p) => p.name).sort();
     expect(names).toEqual(["Gel de Limpieza", "Protector Solar FPS 50"]);
-    // Ningún nombre de Genus aparece — este laboratorio nunca lo mencionó.
+    // Ningún nombre de Guardian aparece — este laboratorio nunca lo mencionó.
     expect(model.products.some((p) => p.name === "Shampoo Premium")).toBe(false);
   });
 
@@ -155,5 +155,34 @@ describe("computeOperationSummary", () => {
     expect(summary.resourcesCount).toBe(4); // 2 reactores + 2 llenadoras
     expect(summary.staffCount).toBe(10);
     expect(summary.materialsConnected).toBe(false);
+  });
+});
+
+describe("Checkpoint — Production References por producto/presentación (precisión progresiva)", () => {
+  it("dos productos con capacityVariants distintos en la misma llenadora usan cada uno su propio rate", () => {
+    const answers = novaAnswers();
+    // Capacidad física general de la llenadora — nunca reemplazada por una variante, solo acotada por ella.
+    answers.equipment = setEquipmentCapacity(answers.equipment, "llenadora-1", 2000, "u/h", "company_data");
+    // "Protector Solar FPS 50" hace 1500 u/h en Llenadora 1; "Gel de Limpieza" hace 900 u/h.
+    answers.equipment = setCapacityVariant(answers.equipment, "llenadora-1", "Protector Solar FPS 50", 1500, "company_data");
+    answers.equipment = setCapacityVariant(answers.equipment, "llenadora-1", "Gel de Limpieza", 900, "company_data");
+
+    const { input } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    const model = buildOperationalModel(input);
+    const protector = model.products.find((p) => p.name === "Protector Solar FPS 50")!;
+    const gel = model.products.find((p) => p.name === "Gel de Limpieza")!;
+
+    const orderProtector = { id: "PED-1", client: "X", productId: protector.id, quantity: 1500, deliveryDate: "2026-12-31", priority: "normal" as const };
+    const orderGel = { id: "PED-2", client: "X", productId: gel.id, quantity: 900, deliveryDate: "2026-12-31", priority: "normal" as const };
+
+    const resultProtector = evaluateScenario(model, orderProtector, baselineResourceConfig(model, orderProtector), CALENDAR, START);
+    const resultGel = evaluateScenario(model, orderGel, baselineResourceConfig(model, orderGel), CALENDAR, START);
+
+    const envasadoProtector = resultProtector.steps.find((s) => s.process === "Envasado")!;
+    const envasadoGel = resultGel.steps.find((s) => s.process === "Envasado")!;
+    // 1500 unidades a 1500 u/h con 2 llenadoras -> throughput 3000 u/h -> 0.5h
+    expect(envasadoProtector.hours).toBeCloseTo(0.5, 5);
+    // 900 unidades a 900 u/h con 2 llenadoras -> throughput 1800 u/h -> 0.5h
+    expect(envasadoGel.hours).toBeCloseTo(0.5, 5);
   });
 });

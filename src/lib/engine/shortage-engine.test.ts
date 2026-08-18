@@ -7,6 +7,7 @@ function baseModel(stockMP001: number): OperationalModel {
     company: { name: "Empresa Test", industry: "cosmeticos" },
     orders: [],
     products: [{ id: "shampoo-premium", name: "Shampoo Premium", unit: "unidades" }],
+    presentations: [],
     materials: [{ code: "MP-001", name: "Fragancia Test", unit: "kg" }],
     inventory: [{ materialCode: "MP-001", stock: stockMP001, unit: "kg" }],
     resources: [],

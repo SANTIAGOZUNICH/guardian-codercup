@@ -184,7 +184,12 @@ export function GuardianApp() {
         companyName={session.companyName}
         snapshotAt={snapshotAt}
         activeGoal={goal}
-        onGoalReady={(g) => {
+        onGoalReady={(g, newPresentation) => {
+          if (newPresentation) {
+            // El usuario declaró (o aceptó de referencia) un gramaje nuevo durante la conversación —
+            // se suma al Twin de la sesión, nunca se pierde ni se pide de nuevo (Product Contract V1).
+            setModel((prev) => (prev ? { ...prev, presentations: [...prev.presentations, newPresentation] } : prev));
+          }
           setGoal(g);
           // Un Goal nuevo arranca de un Twin limpio — cualquier disrupción anterior queda atrás.
           setDisruption(null);
@@ -227,7 +232,7 @@ export function GuardianApp() {
         goal={goal}
         snapshotAt={snapshotAt}
         mode={disruption ? "resimulation" : "simulation"}
-        disruptionLabel={disruption && disruptionResourceName ? `${disruptionResourceName} unavailable` : undefined}
+        disruptionLabel={disruption && disruptionResourceName ? `${disruptionResourceName} no disponible` : undefined}
         onDone={() => setPhase("plans")}
       />
     );
@@ -260,9 +265,9 @@ export function GuardianApp() {
           const prefix = resolveChosenPlanPrefix(result.outcome.kind);
           setLastSimulation({
             goalSummary: `${goal.quantity.toLocaleString("es-AR")} ${goal.productName}`,
-            chosenPlanLabel: `${prefix} Plan ${rankLabel}`,
+            chosenPlanLabel: `Plan ${rankLabel} · ${prefix}`,
             completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "—",
-            disruptionLabel: disruption && disruptionResourceName ? `${disruptionResourceName} unavailable` : null,
+            disruptionLabel: disruption && disruptionResourceName ? `${disruptionResourceName} no disponible` : null,
             capacityFeasible: scenario.result.capacityFeasible,
             deadlineMet: scenario.result.deadlineMet,
             materialsFeasible: scenario.result.materialsFeasible,

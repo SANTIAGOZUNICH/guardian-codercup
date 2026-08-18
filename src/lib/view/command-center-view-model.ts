@@ -182,8 +182,8 @@ export function buildTwinPreview(graph: TwinGraph): TwinPreviewLayer[] {
   const flow = graph.nodes.filter((n) => n.revealAt === 4);
 
   return [
-    { label: "Source Data", count: sourceData.length, status: worstStatus(sourceData.map((n) => n.status)) },
-    { label: "Understanding", count: understanding.length, status: worstStatus(understanding.map((n) => n.status)) },
-    { label: "Production Flow", count: flow.length, status: worstStatus(flow.map((n) => n.status)) },
+    { label: "Datos de origen", count: sourceData.length, status: worstStatus(sourceData.map((n) => n.status)) },
+    { label: "Comprensión", count: understanding.length, status: worstStatus(understanding.map((n) => n.status)) },
+    { label: "Flujo de producción", count: flow.length, status: worstStatus(flow.map((n) => n.status)) },
   ];
 }

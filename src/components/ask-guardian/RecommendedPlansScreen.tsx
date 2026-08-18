@@ -44,7 +44,7 @@ export function RecommendedPlansScreen({
   const { kind, candidates } = result.outcome;
   const deadlineLabel = resolveGoalDeadlineLabel(result.goal, DEFAULT_OPERATIONS_CALENDAR);
   const topCandidates = candidates.slice(0, 3);
-  const disruptionLabel = disruptionContext ? `${disruptionContext.resourceName} unavailable` : null;
+  const disruptionLabel = disruptionContext ? `${disruptionContext.resourceName} no disponible` : null;
   const whyView = buildWhyThisPlanView(result, DEFAULT_OPERATIONS_CALENDAR, disruptionLabel);
   const baselineView = buildBaselineView(result.baseline);
   const contextNote = buildContextNote(result.scenarios);
@@ -66,13 +66,13 @@ export function RecommendedPlansScreen({
           {buildOutcomeHeadline(kind)}
         </p>
         <p className="mt-2 max-w-md text-sm text-text-secondary">
-          {result.scenarios.length} scenarios evaluated for {result.goal.quantity.toLocaleString("es-AR")}{" "}
+          {result.scenarios.length} escenarios evaluados para {result.goal.quantity.toLocaleString("es-AR")}{" "}
           {result.goal.productName}
           {result.goal.client ? ` · ${result.goal.client}` : ""}
         </p>
         {disruptionLabel && (
           <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-risk-medium/30 bg-risk-medium-soft px-3 py-1 text-[11px] font-medium text-risk-medium">
-            Active disruption — {disruptionLabel}
+            Disrupción activa — {disruptionLabel}
           </p>
         )}
       </div>
@@ -86,15 +86,15 @@ export function RecommendedPlansScreen({
       {impactView && (
         <div className="w-full max-w-2xl rounded-[var(--radius-md)] border border-border-subtle bg-white/[0.015] px-6 py-5">
           <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-            Operational Impact
+            Impacto operacional
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] uppercase tracking-[0.06em] text-text-tertiary">
                   <th className="pb-2 font-medium" />
-                  <th className="pb-2 font-medium">Before</th>
-                  <th className="pb-2 font-medium">After</th>
+                  <th className="pb-2 font-medium">Antes</th>
+                  <th className="pb-2 font-medium">Después</th>
                 </tr>
               </thead>
               <tbody>
@@ -142,7 +142,7 @@ export function RecommendedPlansScreen({
       )}
 
       <Button variant="ghost" onClick={onBack}>
-        Back to Command Center
+        Volver al Centro de Operaciones
       </Button>
 
       {showWhy && whyView && <WhyThisPlanModal view={whyView} onClose={() => setShowWhy(false)} />}

@@ -19,7 +19,7 @@ function Fact({ label, value, ok }: { label: string; value: string; ok?: boolean
 export function PlanCard({
   view,
   onWhyThisPlan,
-  whyThisPlanLabel = "Why this plan?",
+  whyThisPlanLabel = "¿Por qué este plan?",
   onChoose,
 }: {
   view: PlanCardView;
@@ -43,13 +43,13 @@ export function PlanCard({
         </div>
         <p className="text-sm text-text-secondary">{view.completionLabel}</p>
         <p className="text-xs text-text-tertiary">
-          Bottleneck: {view.bottleneckProcess} · {view.bottleneckHoursLabel}
+          Cuello de botella: {view.bottleneckProcess} · {view.bottleneckHoursLabel}
         </p>
         <button
           onClick={onChoose}
           className="mt-1 rounded-[var(--radius-sm)] border border-border-default py-2 text-xs font-medium text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary"
         >
-          Choose this plan
+          Elegir este plan
         </button>
       </div>
     );
@@ -74,34 +74,34 @@ export function PlanCard({
         </p>
         {view.status === "fully_viable" ? (
           <span className="flex items-center gap-1 rounded-full border border-risk-low/40 bg-risk-low-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-low">
-            <Check size={11} /> Deadline met
+            <Check size={11} /> Cumple el deadline
           </span>
         ) : view.status === "conditionally_viable" ? (
           <span className="flex items-center gap-1 rounded-full border border-risk-medium/40 bg-risk-medium-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-medium">
-            <AlertTriangle size={11} /> Materials blocked
+            <AlertTriangle size={11} /> Materiales bloqueados
           </span>
         ) : (
           <span className="flex items-center gap-1 rounded-full border border-risk-high/40 bg-risk-high-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-high">
-            <X size={11} /> Deadline missed
+            <X size={11} /> No cumple el deadline
           </span>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
-        <Fact label="Completion" value={view.completionLabel} />
+        <Fact label="Finalización" value={view.completionLabel} />
         <Fact label="Deadline" value={view.deadlineLabel} />
-        <Fact label="Materials" value={view.materialsAvailable ? "Available" : "Missing"} ok={view.materialsAvailable} />
-        <Fact label="Resources" value={view.resourcesLabel} />
-        <Fact label="Bottleneck" value={`${view.bottleneckProcess} · ${view.bottleneckHoursLabel}`} />
+        <Fact label="Materiales" value={view.materialsAvailable ? "Disponibles" : "Faltan"} ok={view.materialsAvailable} />
+        <Fact label="Recursos" value={view.resourcesLabel} />
+        <Fact label="Cuello de botella" value={`${view.bottleneckProcess} · ${view.bottleneckHoursLabel}`} />
       </div>
 
       {view.materialBlockerLabel && (
         <div className="mt-5 rounded-[var(--radius-sm)] border border-risk-high/25 bg-risk-high-soft px-4 py-2.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-risk-high">Material blocker</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-risk-high">Bloqueo de materiales</span>
           <p className="text-sm text-text-primary">{view.materialBlockerLabel}</p>
         </div>
       )}
-      <p className="mt-3 text-xs text-text-tertiary">Trade-off: {view.tradeOffLabel}</p>
+      <p className="mt-3 text-xs text-text-tertiary">Compromiso: {view.tradeOffLabel}</p>
 
       <div className="mt-6 flex gap-3">
         <button
@@ -111,7 +111,7 @@ export function PlanCard({
             view.status === "fully_viable" ? "bg-accent" : "bg-risk-medium",
           )}
         >
-          Choose this plan
+          Elegir este plan
         </button>
         {onWhyThisPlan && (
           <button

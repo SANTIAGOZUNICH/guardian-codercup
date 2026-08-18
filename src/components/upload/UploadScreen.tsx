@@ -13,7 +13,7 @@ import {
   parseRecursosFile,
 } from "@/lib/parsing/parseExcel";
 import { buildOperationalModel } from "@/lib/model/buildOperationalModel";
-import { buildGenusDemoModel } from "@/data/production-profiles";
+import { buildDemoModel } from "@/data/production-profiles";
 import { formatNaive } from "@/lib/engine/evaluate-scenario";
 import { DEMO_SNAPSHOT_AT } from "@/data/operations-reference";
 import type { OperationalModel } from "@/lib/types";
@@ -49,16 +49,16 @@ export function UploadScreen({
   const allPresent = SLOTS.every((s) => files[s.key]);
 
   /**
-   * `useGenusReference` solo es true para el botón de demo (más abajo): es el
+   * `useDemoReference` solo es true para el botón de demo (más abajo): es el
    * único punto de la app que adjunta la Production Reference de Laboratorio
-   * Genus. Un Import Data real (`handleBuildFromUploads`) nunca la recibe —
+   * Guardian. Un Import Data real (`handleBuildFromUploads`) nunca la recibe —
    * cada laboratorio empieza sin Production Reference hasta declarar la suya
    * (Checkpoint 9B.2).
    */
   async function buildFromBuffers(
     buffers: Record<SlotKey, ArrayBuffer>,
     snapshotAt: string,
-    useGenusReference: boolean,
+    useDemoReference: boolean,
   ) {
     setError(null);
     setBuilding(true);
@@ -75,7 +75,7 @@ export function UploadScreen({
         inventory,
         resources,
       };
-      const model = useGenusReference ? buildGenusDemoModel(rawInput) : buildOperationalModel(rawInput);
+      const model = useDemoReference ? buildDemoModel(rawInput) : buildOperationalModel(rawInput);
       onModelReady(model, snapshotAt);
     } catch (e) {
       const message = e instanceof ExcelParseError ? e.message : "No se pudo leer alguno de los archivos.";
@@ -120,7 +120,7 @@ export function UploadScreen({
         message={
           building
             ? "Estoy leyendo tus archivos..."
-            : "Cargá Pedidos, Inventario y Recursos para construir tu Operational Model."
+            : "Cargá Pedidos, Inventario y Recursos para construir tu Modelo Operacional."
         }
       />
 
@@ -140,7 +140,7 @@ export function UploadScreen({
               className="gap-2"
             >
               <Sparkles size={16} />
-              Usar datos demo de Laboratorio Genus
+              Usar datos demo de Laboratorio Guardian
             </Button>
           </div>
 
@@ -176,7 +176,7 @@ export function UploadScreen({
                     {slot.label}
                   </span>
                   <span className="truncate text-xs text-text-tertiary max-w-full">
-                    {selected ? selected.name : "Click para seleccionar"}
+                    {selected ? selected.name : "Hacé clic para seleccionar"}
                   </span>
                 </label>
               );
@@ -194,7 +194,7 @@ export function UploadScreen({
             disabled={!allPresent || building}
             onClick={handleBuildFromUploads}
           >
-            {building ? "Construyendo..." : "Construir Operational Model"}
+            {building ? "Construyendo..." : "Construir Modelo Operacional"}
           </Button>
         </div>
       </motion.div>

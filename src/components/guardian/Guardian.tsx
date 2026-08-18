@@ -37,6 +37,18 @@ const STATE_RING_SPEED: Record<GuardianState, number> = {
   alert: 1.1,
 };
 
+/** Solo para accesibilidad (aria-label) — nunca expone el nombre técnico del estado a lectores de pantalla. */
+const STATE_ARIA_LABEL: Record<GuardianState, string> = {
+  idle: "en espera",
+  enter: "apareciendo",
+  hello: "saludando",
+  analyzing: "analizando",
+  simulating: "simulando",
+  listening: "escuchando",
+  success: "éxito",
+  alert: "alerta",
+};
+
 interface GuardianProps {
   state: GuardianState;
   size?: number;
@@ -98,7 +110,7 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
           animate={!motionSafe ? { y: 0 } : { y: [0, -5, 0] }}
           transition={{ duration: 5.5, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
         >
-          <svg viewBox="0 0 200 200" className="h-full w-full" role="img" aria-label={`Guardian — ${state}`}>
+          <svg viewBox="0 0 200 200" className="h-full w-full" role="img" aria-label={`Guardian — ${STATE_ARIA_LABEL[state]}`}>
             <defs>
               <linearGradient id={`chassis-${uid}`} x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#1b1f2b" />

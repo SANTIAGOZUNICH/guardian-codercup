@@ -1,7 +1,7 @@
-import type { Company, InventoryItem, Material, ProductionProfile, ProductionReferenceStep, Resource, TwinCompleteness } from "@/lib/types";
+import type { Company, InventoryItem, Material, Presentation, ProductionProfile, ProductionReferenceStep, RateVariant, Resource, TwinCompleteness } from "@/lib/types";
 import { slugify } from "@/lib/parsing/normalize";
 import type { RawModelInput } from "./buildOperationalModel";
-import type { GuidedSetupV2Answers } from "./guided-setup-v2";
+import { buildPresentationsFromDrafts, type GuidedSetupV2Answers } from "./guided-setup-v2";
 
 /**
  * ============================================================================
@@ -52,7 +52,45 @@ function buildResources(answers: GuidedSetupV2Answers): Resource[] {
  *   es `undefined`) — evita fijar un techo artificial por producto que no
  *   surge de ningún dato real declarado.
  */
-function buildSharedProductionReference(answers: GuidedSetupV2Answers): ProductionReferenceStep[] {
+/**
+ * Traduce `EquipmentEntryV2.capacityVariants` (precisión progresiva, ver
+ * guided-setup-v2.ts) a `RateVariant[]` reales para UN proceso — combinando
+ * todos los equipos de ese proceso. Cada variante queda atada al recurso
+ * puntual que la declaró (`resourceId: equipment.id`, Nivel 4) y, cuando el
+ * producto tiene una única `Presentation` resoluble, también a esa
+ * presentación (Nivel 4 completo); si el producto tiene 0 o >1
+ * presentaciones, queda en `productId` solamente (Nivel 2 con recurso) —
+ * nunca se adivina CUÁL presentación cuando hay más de una.
+ */
+function buildRateVariantsForProcess(
+  process: ProductionReferenceStep["process"],
+  answers: GuidedSetupV2Answers,
+  productIdsByName: Map<string, string>,
+  presentations: Presentation[],
+): RateVariant[] {
+  const variants: RateVariant[] = [];
+  for (const equipment of answers.equipment.filter((e) => e.process === process)) {
+    for (const variant of equipment.capacityVariants) {
+      const productId = productIdsByName.get(variant.productName);
+      if (!productId) continue; // nunca referencia un producto que ya no existe en la entrevista
+      const productPresentations = presentations.filter((p) => p.productId === productId);
+      const presentationId = productPresentations.length === 1 ? productPresentations[0].id : undefined;
+      variants.push({
+        productId,
+        presentationId,
+        resourceId: equipment.id,
+        ratePerHour: variant.value,
+      });
+    }
+  }
+  return variants;
+}
+
+function buildSharedProductionReference(
+  answers: GuidedSetupV2Answers,
+  productIdsByName: Map<string, string>,
+  presentations: Presentation[],
+): ProductionReferenceStep[] {
   // Un step por proceso REALMENTE reconocido (los mismos que ya tienen algún
   // equipo declarado) — nunca crea un step para un proceso sin ningún
   // recurso, ni inventa un orden que el usuario no haya dado a través de los
@@ -68,7 +106,12 @@ function buildSharedProductionReference(answers: GuidedSetupV2Answers): Producti
         ...(batch.hoursPerBatch ? { hoursPerBatch: batch.hoursPerBatch } : {}),
       });
     } else {
-      steps.push({ process });
+      // Deliberadamente sin `ratePerHour` propio (ver comentario de archivo)
+      // — cada `Resource.capacity` ya alcanza como referencia general.
+      // `rateVariants` es la única precisión adicional que este step trae:
+      // ausente/vacío cuando nadie declaró un valor por producto.
+      const rateVariants = buildRateVariantsForProcess(process, answers, productIdsByName, presentations);
+      steps.push({ process, ...(rateVariants.length > 0 ? { rateVariants } : {}) });
     }
   }
   return steps;
@@ -107,9 +150,14 @@ export function computeOperationSummary(answers: GuidedSetupV2Answers): Operatio
   let companyDataCount = 0;
   let referenceEstimateCount = 0;
   for (const e of answers.equipment) {
-    if (!e.capacity) continue;
-    if (e.capacity.source === "company_data") companyDataCount++;
-    else referenceEstimateCount++;
+    if (e.capacity) {
+      if (e.capacity.source === "company_data") companyDataCount++;
+      else referenceEstimateCount++;
+    }
+    for (const variant of e.capacityVariants) {
+      if (variant.value.source === "company_data") companyDataCount++;
+      else referenceEstimateCount++;
+    }
   }
   for (const b of answers.batchInfo) {
     for (const field of [b.batchSize, b.hoursPerBatch]) {
@@ -117,6 +165,11 @@ export function computeOperationSummary(answers: GuidedSetupV2Answers): Operatio
       if (field.source === "company_data") companyDataCount++;
       else referenceEstimateCount++;
     }
+  }
+  for (const p of answers.presentations) {
+    if (!p.gramsPerUnit) continue;
+    if (p.gramsPerUnit.source === "company_data") companyDataCount++;
+    else referenceEstimateCount++;
   }
 
   const recognizedProcesses = new Set(answers.equipment.map((e) => e.process));
@@ -138,15 +191,19 @@ export function buildModelInputsFromGuidedSetupV2(
   company: Company,
 ): { input: RawModelInput; completeness: TwinCompleteness; summary: OperationSummaryV2 } {
   const productNames = new Map<string, string>();
+  const productIdsByName = new Map<string, string>();
   const takenIds = new Set<string>();
   for (const raw of answers.productsRaw) {
     const name = raw.trim();
     if (!name) continue;
-    productNames.set(buildProductId(name, takenIds), name);
+    const id = buildProductId(name, takenIds);
+    productNames.set(id, name);
+    productIdsByName.set(name, id);
   }
 
+  const presentations: Presentation[] = buildPresentationsFromDrafts(answers.presentations, productIdsByName);
   const resources = buildResources(answers);
-  const sharedProductionReference = buildSharedProductionReference(answers);
+  const sharedProductionReference = buildSharedProductionReference(answers, productIdsByName, presentations);
 
   const profiles: ProductionProfile[] =
     sharedProductionReference.length > 0
@@ -168,6 +225,7 @@ export function buildModelInputsFromGuidedSetupV2(
     company,
     orders: [],
     productNames,
+    presentations,
     materials,
     inventory,
     resources,

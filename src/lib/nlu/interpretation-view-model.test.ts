@@ -26,6 +26,8 @@ function response(overrides: Partial<InterpretationResponse>): InterpretationRes
       batchInfo: [],
       staffingCount: null,
       schedule: null,
+      presentations: [],
+    capacityVariants: [],
     },
     clarificationQuestion: null,
     unsupportedReason: null,
