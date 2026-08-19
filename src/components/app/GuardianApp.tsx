@@ -5,6 +5,7 @@ import { LoginScreen, type LoginPayload } from "@/components/login/LoginScreen";
 import { IntakeScreen } from "@/components/intake/IntakeScreen";
 import { GuidedSetupScreen } from "@/components/guided-setup/GuidedSetupScreen";
 import { emptyGuidedSetupV2Answers, type GuidedSetupV2Answers } from "@/lib/model/guided-setup-v2";
+import { CompanyNameProvider } from "@/lib/context/CompanyNameContext";
 import { ModelBuildingScreen } from "@/components/model/ModelBuildingScreen";
 import { ConstraintScreen } from "@/components/constraint/ConstraintScreen";
 import { CommandCenter } from "@/components/command-center/CommandCenter";
@@ -69,6 +70,9 @@ export function GuardianApp() {
     setPhase("intake");
   }
 
+  // Envuelto en una función (no un componente nuevo) para poder wrappear el resultado una sola vez con
+  // CompanyNameProvider más abajo, sin tocar cada `return` individual del if-chain existente.
+  function renderPhase(): React.ReactNode {
   if (phase === "login" || !session) {
     return <LoginScreen onSubmit={handleLogin} />;
   }
@@ -270,4 +274,7 @@ export function GuardianApp() {
   }
 
   return null;
+  }
+
+  return <CompanyNameProvider value={session?.companyName ?? null}>{renderPhase()}</CompanyNameProvider>;
 }

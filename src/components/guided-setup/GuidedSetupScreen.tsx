@@ -694,7 +694,7 @@ export function GuidedSetupScreen({
         </p>
       </div>
 
-      <Guardian state="listening" size={84} />
+      <Guardian state="listening" size={84} variant="asset" />
 
       <motion.div
         key={step}

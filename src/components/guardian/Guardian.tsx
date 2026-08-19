@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { useMotionSafe } from "@/lib/useMotionSafe";
+import { useCompanyName } from "@/lib/context/CompanyNameContext";
 
 export type GuardianState =
   | "idle"
@@ -103,30 +104,47 @@ interface GuardianProps {
 function nameTagFontSize(name: string, guardianSize: number): number {
   const words = name.trim().split(/\s+/).filter(Boolean);
   const longestWord = words.reduce((max, w) => Math.max(max, w.length), 1);
-  const base = guardianSize * 0.062;
+  const base = guardianSize * 0.054;
   const scale = longestWord <= 8 ? 1 : longestWord <= 12 ? 0.82 : longestWord <= 16 ? 0.68 : 0.56;
-  return Math.max(7, Math.round(base * scale * 10) / 10);
+  return Math.max(6.5, Math.round(base * scale * 10) / 10);
 }
 
-function GuardianNameTag({ companyName, guardianSize }: { companyName: string; guardianSize: number }) {
+/**
+ * Pechera corporativa — panel matte integrado sobre el torso (nunca texto
+ * flotando encima del PNG). Ancla al CENTRO de la banda real del torso
+ * (medida con Pillow: ≈63.6%-74.5% de alto, centrada ≈51% de ancho) y crece
+ * simétricamente desde ese punto — así una o dos líneas quedan centradas en
+ * el mismo lugar del pecho en vez de empujar el layout hacia abajo. El
+ * bisel (highlight arriba, sombra abajo) es lo que la hace leer como una
+ * pieza física apoyada sobre el chassis, no un badge de UI.
+ */
+function GuardianChestPanel({ companyName, guardianSize }: { companyName: string; guardianSize: number }) {
   const fontSize = nameTagFontSize(companyName, guardianSize);
+  const paddingX = Math.max(4, guardianSize * 0.022);
+  const paddingY = Math.max(2, guardianSize * 0.011);
+  const radius = Math.max(2, guardianSize * 0.016);
+
   return (
     <div
-      className="pointer-events-none absolute flex flex-col items-center"
-      style={{ top: "63%", left: "51%", width: "34%", transform: "translateX(-50%)" }}
+      className="pointer-events-none absolute flex max-w-[30%] flex-col items-center"
+      style={{ top: "69%", left: "50.5%", transform: "translate(-50%, -50%)" }}
     >
-      <span
-        className="line-clamp-2 text-center font-semibold uppercase text-white"
+      <div
         style={{
-          fontSize,
-          lineHeight: 1.15,
-          letterSpacing: "0.05em",
-          textShadow: "0 0 6px rgba(120,170,255,0.6), 0 1px 2px rgba(0,0,0,0.8)",
+          padding: `${paddingY}px ${paddingX}px`,
+          borderRadius: radius,
+          background: "linear-gradient(180deg, #20242e 0%, #0a0b10 100%)",
+          border: "1px solid rgba(140,180,255,0.16)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -2px 3px rgba(0,0,0,0.55), 0 2px 5px rgba(0,0,0,0.45)",
         }}
       >
-        {companyName}
-      </span>
-      <span className="mt-[3px] h-px w-2/5" style={{ background: "var(--accent-bright)", opacity: 0.55 }} />
+        <span
+          className="line-clamp-2 block text-center font-semibold uppercase text-white/90"
+          style={{ fontSize, lineHeight: 1.2, letterSpacing: "0.04em" }}
+        >
+          {companyName}
+        </span>
+      </div>
     </div>
   );
 }
@@ -192,7 +210,7 @@ function GuardianAsset({
           className="pointer-events-none select-none drop-shadow-[0_18px_36px_rgba(0,0,0,0.5)]"
         />
         {/* Nombre del laboratorio — viaja con Guardian en toda pantalla post-Login que lo pase (regla global, ver Master Context). */}
-        {companyName && <GuardianNameTag companyName={companyName} guardianSize={size} />}
+        {companyName && <GuardianChestPanel companyName={companyName} guardianSize={size} />}
       </motion.div>
     </motion.div>
   );
@@ -222,11 +240,14 @@ export function Guardian({ state, size = 132, message, className, variant = "svg
   const isActive = state === "analyzing" || state === "simulating";
   const motionSafe = useMotionSafe();
   const uid = useId().replace(/[:]/g, "");
+  // Fuente global (Hotfix Personalización): un `companyName` explícito siempre gana; si no se pasa, cae al contexto de sesión.
+  const contextCompanyName = useCompanyName();
+  const effectiveCompanyName = companyName ?? contextCompanyName ?? undefined;
 
   if (variant === "asset") {
     return (
       <div className={cn("flex flex-col items-center gap-6", className)}>
-        <GuardianAsset state={state} size={size} color={color} motionSafe={motionSafe} companyName={companyName} />
+        <GuardianAsset state={state} size={size} color={color} motionSafe={motionSafe} companyName={effectiveCompanyName} />
         <GuardianMessage message={message} />
       </div>
     );

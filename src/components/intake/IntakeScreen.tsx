@@ -154,7 +154,7 @@ export function IntakeScreen({
           </p>
 
           <div className="my-6">
-            <Guardian state="listening" size={240} variant="asset" companyName={companyName} />
+            <Guardian state="listening" size={240} variant="asset" />
           </div>
 
           <div className="w-full max-w-xs rounded-[var(--radius-lg)] border border-border-default bg-bg-elevated p-4 text-left">
