@@ -74,6 +74,23 @@ const STATE_ASSET: Record<GuardianState, string> = {
 const ASSET_WIDTH = 1548;
 const ASSET_HEIGHT = 1100;
 
+/**
+ * Segundo asset real — mismo Guardian oficial, brazos flexionados sosteniendo
+ * una placa corporativa VACÍA con ambas manos (Checkpoint Name Plate Hotfix).
+ * `public/guardian/guardian-plate.png` — recorte a bounding box + limpieza de
+ * halo de fondo (alpha real pero ruidoso en el origen, ver reporte del
+ * checkpoint) vía máscara por umbral + cierre morfológico, verificado con
+ * Pillow. Coordenadas de la placa dentro de esta imagen (medidas a mano con
+ * overlay de grilla, no estimadas): rectángulo útil ≈ x 17.4%-79.0%,
+ * y 51.9%-63.3% del alto real de la imagen.
+ */
+const PLATE_ASSET_SRC = "/guardian/guardian-plate.png";
+const PLATE_ASSET_WIDTH = 808;
+const PLATE_ASSET_HEIGHT = 1400;
+
+/** Bajo este alto renderizado, el nombre en la placa deja de ser legible — Guardian se muestra sin placa (brazos abiertos, asset original) en vez de forzar texto ilegible. */
+const MIN_SIZE_FOR_PLATE = 130;
+
 interface GuardianProps {
   state: GuardianState;
   size?: number;
@@ -92,59 +109,43 @@ interface GuardianProps {
 }
 
 /**
- * Tamaño de fuente del nombre de laboratorio en el pecho — el torso del
- * asset real es angosto y curvo (medido: banda utilizable ≈18-20% del ancho
- * de la imagen, no una remera plana), así que nombres de más de una palabra
- * dependen de envolver a una segunda línea (`line-clamp-2` en el span) para
- * mantenerse legibles. Por eso el achique se calcula sobre la PALABRA más
- * larga, no sobre el largo total — "Laboratorio Guardian" envuelve en dos
- * líneas razonablemente grandes; encogerlo por sus 20 caracteres totales en
- * una sola línea lo dejaría ilegible sin necesidad.
+ * Tamaño de fuente del nombre sobre la placa — a diferencia del intento
+ * anterior (pechera pegada al torso angosto), la placa real tiene una zona
+ * ancha y despejada pensada para texto, así que priorizamos 1 línea grande
+ * para nombres cortos/medianos y solo bajamos a 2 líneas (nunca 3) para
+ * nombres largos. El achique se calcula sobre la PALABRA más larga, no el
+ * total, para no encoger "Laboratorio Genus" solo por tener 17 caracteres
+ * cuando cada palabra individual entra cómoda en una línea propia.
  */
-function nameTagFontSize(name: string, guardianSize: number): number {
+function plateFontSize(name: string, guardianSize: number): number {
   const words = name.trim().split(/\s+/).filter(Boolean);
   const longestWord = words.reduce((max, w) => Math.max(max, w.length), 1);
-  const base = guardianSize * 0.054;
-  const scale = longestWord <= 8 ? 1 : longestWord <= 12 ? 0.82 : longestWord <= 16 ? 0.68 : 0.56;
-  return Math.max(6.5, Math.round(base * scale * 10) / 10);
+  const base = guardianSize * 0.078;
+  const scale = longestWord <= 8 ? 1 : longestWord <= 12 ? 0.8 : longestWord <= 16 ? 0.65 : 0.52;
+  return Math.max(8, Math.round(base * scale * 10) / 10);
 }
 
 /**
- * Pechera corporativa — panel matte integrado sobre el torso (nunca texto
- * flotando encima del PNG). Ancla al CENTRO de la banda real del torso
- * (medida con Pillow: ≈63.6%-74.5% de alto, centrada ≈51% de ancho) y crece
- * simétricamente desde ese punto — así una o dos líneas quedan centradas en
- * el mismo lugar del pecho en vez de empujar el layout hacia abajo. El
- * bisel (highlight arriba, sombra abajo) es lo que la hace leer como una
- * pieza física apoyada sobre el chassis, no un badge de UI.
+ * Nombre sobre la placa — el PNG ya trae la placa física (bordes, bisel,
+ * detalle luminoso inferior); acá solo ubicamos el texto en su hueco vacío,
+ * medido a mano con overlay de grilla sobre `guardian-plate.png`: rectángulo
+ * útil ≈ x 17.4%-79.0%, y 51.9%-63.3% (evita el borde y la barra de acento
+ * azul inferior). Centrado y creciendo simétrico para que 1 o 2 líneas
+ * queden siempre en el mismo lugar del hueco.
  */
-function GuardianChestPanel({ companyName, guardianSize }: { companyName: string; guardianSize: number }) {
-  const fontSize = nameTagFontSize(companyName, guardianSize);
-  const paddingX = Math.max(4, guardianSize * 0.022);
-  const paddingY = Math.max(2, guardianSize * 0.011);
-  const radius = Math.max(2, guardianSize * 0.016);
-
+function GuardianPlateName({ companyName, guardianSize }: { companyName: string; guardianSize: number }) {
+  const fontSize = plateFontSize(companyName, guardianSize);
   return (
     <div
-      className="pointer-events-none absolute flex max-w-[30%] flex-col items-center"
-      style={{ top: "69%", left: "50.5%", transform: "translate(-50%, -50%)" }}
+      className="pointer-events-none absolute flex items-center justify-center"
+      style={{ top: "57.6%", left: "48.2%", width: "58%", height: "13%", transform: "translate(-50%, -50%)" }}
     >
-      <div
-        style={{
-          padding: `${paddingY}px ${paddingX}px`,
-          borderRadius: radius,
-          background: "linear-gradient(180deg, #20242e 0%, #0a0b10 100%)",
-          border: "1px solid rgba(140,180,255,0.16)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -2px 3px rgba(0,0,0,0.55), 0 2px 5px rgba(0,0,0,0.45)",
-        }}
+      <span
+        className="line-clamp-2 block text-center font-semibold uppercase text-white/95"
+        style={{ fontSize, lineHeight: 1.15, letterSpacing: "0.035em", textShadow: "0 0 8px rgba(110,165,255,0.35)" }}
       >
-        <span
-          className="line-clamp-2 block text-center font-semibold uppercase text-white/90"
-          style={{ fontSize, lineHeight: 1.2, letterSpacing: "0.04em" }}
-        >
-          {companyName}
-        </span>
-      </div>
+        {companyName}
+      </span>
     </div>
   );
 }
@@ -162,7 +163,14 @@ function GuardianAsset({
   motionSafe: boolean;
   companyName?: string;
 }) {
-  const width = Math.round((ASSET_WIDTH / ASSET_HEIGHT) * size);
+  // Con placa (brazos flexionados sosteniéndola) solo si hay nombre Y el tamaño alcanza para que se lea —
+  // por debajo de MIN_SIZE_FOR_PLATE, Guardian vuelve al asset original (brazos abiertos, sin placa) en vez
+  // de forzar texto ilegible (regla explícita del checkpoint: "Guardian pequeño → no mostrar placa").
+  const showPlate = Boolean(companyName) && size >= MIN_SIZE_FOR_PLATE;
+  const src = showPlate ? PLATE_ASSET_SRC : STATE_ASSET[state];
+  const naturalWidth = showPlate ? PLATE_ASSET_WIDTH : ASSET_WIDTH;
+  const naturalHeight = showPlate ? PLATE_ASSET_HEIGHT : ASSET_HEIGHT;
+  const width = Math.round((naturalWidth / naturalHeight) * size);
 
   return (
     <motion.div
@@ -194,23 +202,22 @@ function GuardianAsset({
         transition={{ duration: 4.5, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
       />
 
-      {/* Flotación muy sutil + micro-inclinación — nunca bounce, nunca motion de mascota */}
+      {/* Flotación muy sutil + micro-inclinación — nunca bounce, nunca motion de mascota. Guardian + placa + nombre son UNA sola capa: viajan juntos siempre. */}
       <motion.div
         className="relative"
         animate={!motionSafe ? { y: 0, rotate: 0 } : { y: [-4, 4, -4], rotate: [-1.1, 1.1, -1.1] }}
         transition={{ duration: 5.5, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
       >
         <Image
-          src={STATE_ASSET[state]}
-          alt={`Guardian — ${STATE_ARIA_LABEL[state]}`}
-          width={ASSET_WIDTH}
-          height={ASSET_HEIGHT}
+          src={src}
+          alt={showPlate ? `Guardian — ${STATE_ARIA_LABEL[state]}, sosteniendo la placa de ${companyName}` : `Guardian — ${STATE_ARIA_LABEL[state]}`}
+          width={naturalWidth}
+          height={naturalHeight}
           priority
           style={{ height: size, width: "auto" }}
           className="pointer-events-none select-none drop-shadow-[0_18px_36px_rgba(0,0,0,0.5)]"
         />
-        {/* Nombre del laboratorio — viaja con Guardian en toda pantalla post-Login que lo pase (regla global, ver Master Context). */}
-        {companyName && <GuardianChestPanel companyName={companyName} guardianSize={size} />}
+        {showPlate && companyName && <GuardianPlateName companyName={companyName} guardianSize={size} />}
       </motion.div>
     </motion.div>
   );
