@@ -73,7 +73,7 @@ export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) =>
 
           <motion.h1
             {...rise(0.08)}
-            className="mt-10 max-w-lg text-[32px] font-semibold leading-[1.2] tracking-tight text-text-primary xl:text-[42px] xl:leading-[1.15]"
+            className="mt-6 max-w-lg text-[32px] font-semibold leading-[1.2] tracking-tight text-text-primary xl:mt-8 xl:text-[42px] xl:leading-[1.15]"
           >
             Entendé tu operación.
             <br />
@@ -84,11 +84,11 @@ export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) =>
             Guardian transforma los datos de tu laboratorio en decisiones más claras.
           </motion.p>
 
-          <motion.div {...rise(0.2)} className="my-8 xl:my-10">
-            <Guardian state="idle" size={200} />
+          <motion.div {...rise(0.2)} className="my-2 xl:my-4">
+            <Guardian state="idle" size={300} variant="asset" />
           </motion.div>
 
-          <motion.div {...rise(0.3)} className="flex w-full max-w-xs flex-col gap-3 sm:max-w-sm lg:max-w-none">
+          <motion.div {...rise(0.3)} className="flex w-full max-w-xs flex-col gap-2 sm:max-w-sm lg:max-w-none">
             {BENEFITS.map(({ icon: Icon, label }) => (
               <div key={label} className="flex items-center justify-center gap-3 lg:justify-start">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-border-default bg-white/[0.03] text-accent-bright">
@@ -99,7 +99,7 @@ export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) =>
             ))}
           </motion.div>
 
-          <motion.div {...rise(0.38)} className="mt-10 hidden items-center gap-3 text-xs text-text-tertiary lg:flex">
+          <motion.div {...rise(0.38)} className="mt-6 hidden items-center gap-3 text-xs text-text-tertiary lg:flex">
             <span className="flex items-center gap-1.5">
               <ShieldCheck size={13} className="text-accent-bright" />
               Tus datos quedan en tu sesión

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { useMotionSafe } from "@/lib/useMotionSafe";
@@ -49,11 +50,98 @@ const STATE_ARIA_LABEL: Record<GuardianState, string> = {
   alert: "alerta",
 };
 
+/**
+ * Render 3D real por estado (`variant="asset"`). Hoy solo existe
+ * `guardian-idle.png` — el resto de los estados cae a esa misma imagen
+ * mientras no exista su render dedicado (nunca se inventa/filtra una imagen
+ * falsa para simular un estado). Sumar `guardian-listening.png`,
+ * `guardian-thinking.png`, etc. es, cuando existan, un cambio de una sola
+ * línea acá — cero cambios de arquitectura.
+ */
+const STATE_ASSET: Record<GuardianState, string> = {
+  idle: "/guardian/guardian-idle.png",
+  enter: "/guardian/guardian-idle.png",
+  hello: "/guardian/guardian-idle.png",
+  analyzing: "/guardian/guardian-idle.png",
+  simulating: "/guardian/guardian-idle.png",
+  listening: "/guardian/guardian-idle.png",
+  success: "/guardian/guardian-idle.png",
+  alert: "/guardian/guardian-idle.png",
+};
+
+/** Dimensiones reales de `public/guardian/guardian-idle.png` (recorte a bounding box de contenido + downscale, alpha real verificado). */
+const ASSET_WIDTH = 1548;
+const ASSET_HEIGHT = 1100;
+
 interface GuardianProps {
   state: GuardianState;
   size?: number;
   message?: string;
   className?: string;
+  /** "svg" (default) — chassis vectorial 9A/9B, usado por todas las pantallas existentes. "asset" — render 3D real (Login, Checkpoint Guardian Character Integration). */
+  variant?: "svg" | "asset";
+}
+
+function GuardianAsset({
+  state,
+  size,
+  color,
+  motionSafe,
+}: {
+  state: GuardianState;
+  size: number;
+  color: string;
+  motionSafe: boolean;
+}) {
+  const width = Math.round((ASSET_WIDTH / ASSET_HEIGHT) * size);
+
+  return (
+    <motion.div
+      className="relative flex items-end justify-center"
+      style={{ width, height: size }}
+      initial={{ opacity: 0, scale: 0.85, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* Glow ambiental — mismo lenguaje que la variante SVG, detrás de todo */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-[-20%] rounded-full blur-3xl"
+        style={{ background: color, opacity: 0.22 }}
+        animate={!motionSafe ? { opacity: 0.24 } : { opacity: [0.16, 0.28, 0.16] }}
+        transition={{ duration: 4, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
+      />
+
+      {/* Plataforma lumínica / thruster — refuerza que Guardian está suspendido, no parado */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute h-6 rounded-full blur-xl"
+        style={{
+          width: width * 0.5,
+          bottom: -8,
+          background: "radial-gradient(ellipse, var(--accent-bright) 0%, transparent 72%)",
+        }}
+        animate={!motionSafe ? { opacity: 0.5 } : { opacity: [0.3, 0.56, 0.3], scaleX: [0.94, 1, 0.94] }}
+        transition={{ duration: 4.5, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
+      />
+
+      {/* Flotación muy sutil + micro-inclinación — nunca bounce, nunca motion de mascota */}
+      <motion.div
+        animate={!motionSafe ? { y: 0, rotate: 0 } : { y: [-4, 4, -4], rotate: [-1.1, 1.1, -1.1] }}
+        transition={{ duration: 5.5, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
+      >
+        <Image
+          src={STATE_ASSET[state]}
+          alt={`Guardian — ${STATE_ARIA_LABEL[state]}`}
+          width={ASSET_WIDTH}
+          height={ASSET_HEIGHT}
+          priority
+          style={{ height: size, width: "auto" }}
+          className="pointer-events-none select-none drop-shadow-[0_18px_36px_rgba(0,0,0,0.5)]"
+        />
+      </motion.div>
+    </motion.div>
+  );
 }
 
 /**
@@ -73,13 +161,22 @@ interface GuardianProps {
  * thrusters) — lo único que cambia es la geometría dibujada adentro. API
  * pública (`state`/`size`/`message`/`className`) sin cambios.
  */
-export function Guardian({ state, size = 132, message, className }: GuardianProps) {
+export function Guardian({ state, size = 132, message, className, variant = "svg" }: GuardianProps) {
   const color = STATE_COLOR[state];
   const ringSpeed = STATE_RING_SPEED[state];
   const isAlert = state === "alert";
   const isActive = state === "analyzing" || state === "simulating";
   const motionSafe = useMotionSafe();
   const uid = useId().replace(/[:]/g, "");
+
+  if (variant === "asset") {
+    return (
+      <div className={cn("flex flex-col items-center gap-6", className)}>
+        <GuardianAsset state={state} size={size} color={color} motionSafe={motionSafe} />
+        <GuardianMessage message={message} />
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex flex-col items-center gap-6", className)}>
@@ -239,25 +336,31 @@ export function Guardian({ state, size = 132, message, className }: GuardianProp
         </motion.div>
       </motion.div>
 
-      <AnimatePresence mode="wait">
-        {message && (
-          <motion.p
-            key={message}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.4 }}
-            className="max-w-sm whitespace-pre-line text-center text-[15px] leading-relaxed text-text-secondary"
-          >
-            <span className="mr-2 text-xs font-semibold uppercase tracking-[0.1em] text-text-tertiary">
-              Guardian
-            </span>
-            <br />
-            <span className="text-text-primary">{message}</span>
-          </motion.p>
-        )}
-      </AnimatePresence>
+      <GuardianMessage message={message} />
     </div>
+  );
+}
+
+function GuardianMessage({ message }: { message?: string }) {
+  return (
+    <AnimatePresence mode="wait">
+      {message && (
+        <motion.p
+          key={message}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.4 }}
+          className="max-w-sm whitespace-pre-line text-center text-[15px] leading-relaxed text-text-secondary"
+        >
+          <span className="mr-2 text-xs font-semibold uppercase tracking-[0.1em] text-text-tertiary">
+            Guardian
+          </span>
+          <br />
+          <span className="text-text-primary">{message}</span>
+        </motion.p>
+      )}
+    </AnimatePresence>
   );
 }
 
