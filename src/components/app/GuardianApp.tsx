@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { LoginScreen, type LoginPayload } from "@/components/login/LoginScreen";
-import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
-import { EntryChoiceScreen } from "@/components/upload/EntryChoiceScreen";
-import { UploadScreen } from "@/components/upload/UploadScreen";
+import { IntakeScreen } from "@/components/intake/IntakeScreen";
 import { GuidedSetupScreen } from "@/components/guided-setup/GuidedSetupScreen";
+import { emptyGuidedSetupV2Answers, type GuidedSetupV2Answers } from "@/lib/model/guided-setup-v2";
 import { ModelBuildingScreen } from "@/components/model/ModelBuildingScreen";
 import { ConstraintScreen } from "@/components/constraint/ConstraintScreen";
 import { CommandCenter } from "@/components/command-center/CommandCenter";
@@ -39,9 +38,7 @@ export type CompanySession = {
 
 type Phase =
   | "login"
-  | "greeting"
-  | "entry-choice"
-  | "upload"
+  | "intake"
   | "guided-setup"
   | "building"
   | "constraints"
@@ -64,33 +61,21 @@ export function GuardianApp() {
   const [disruption, setDisruption] = useState<MachineUnavailableDisruption | null>(null);
   const [disruptionResourceName, setDisruptionResourceName] = useState<string | null>(null);
   const [lastSimulation, setLastSimulation] = useState<LastSimulation | null>(null);
+  /** Lo que Guardian ya entendió por texto libre en Pantalla 2 (Intake) — Guided Setup arranca desde ahí, nunca pide de nuevo lo ya contado. */
+  const [guidedSetupInitialAnswers, setGuidedSetupInitialAnswers] = useState<GuidedSetupV2Answers>(emptyGuidedSetupV2Answers());
 
   function handleLogin(payload: LoginPayload) {
     setSession({ companyName: payload.companyName, industry: payload.industry });
-    setPhase("greeting");
+    setPhase("intake");
   }
 
   if (phase === "login" || !session) {
     return <LoginScreen onSubmit={handleLogin} />;
   }
 
-  if (phase === "greeting") {
-    return <OnboardingScreen companyName={session.companyName} onContinue={() => setPhase("entry-choice")} />;
-  }
-
-  if (phase === "entry-choice") {
+  if (phase === "intake") {
     return (
-      <EntryChoiceScreen
-        companyName={session.companyName}
-        onChooseUpload={() => setPhase("upload")}
-        onChooseGuidedSetup={() => setPhase("guided-setup")}
-      />
-    );
-  }
-
-  if (phase === "upload") {
-    return (
-      <UploadScreen
+      <IntakeScreen
         companyName={session.companyName}
         industry={session.industry}
         onModelReady={(m, snapshot) => {
@@ -98,6 +83,10 @@ export function GuardianApp() {
           setSnapshotAt(snapshot);
           setTwinCompleteness(null);
           setPhase("building");
+        }}
+        onStartGuidedSetup={(initialAnswers) => {
+          setGuidedSetupInitialAnswers(initialAnswers);
+          setPhase("guided-setup");
         }}
       />
     );
@@ -108,7 +97,8 @@ export function GuardianApp() {
       <GuidedSetupScreen
         companyName={session.companyName}
         industry={session.industry}
-        onBack={() => setPhase("entry-choice")}
+        initialAnswers={guidedSetupInitialAnswers}
+        onBack={() => setPhase("intake")}
         onComplete={(input: RawModelInput, completeness: TwinCompleteness) => {
           const m = buildOperationalModel(input);
           setModel(m);

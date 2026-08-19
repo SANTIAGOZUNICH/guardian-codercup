@@ -80,6 +80,55 @@ interface GuardianProps {
   className?: string;
   /** "svg" (default) — chassis vectorial 9A/9B, usado por todas las pantallas existentes. "asset" — render 3D real (Login, Checkpoint Guardian Character Integration). */
   variant?: "svg" | "asset";
+  /**
+   * Nombre del laboratorio (Login → `companyName`) — Guardian lo muestra en
+   * el pecho, viajando con él. Regla global reusable: cada pantalla decide
+   * si lo pasa (nunca implementado por separado en cada una). Solo tiene
+   * efecto visual en `variant="asset"` — el chassis SVG no tiene todavía una
+   * zona plana equivalente donde integrarlo de forma creíble.
+   */
+  companyName?: string;
+}
+
+/**
+ * Tamaño de fuente del nombre de laboratorio en el pecho — el torso del
+ * asset real es angosto y curvo (medido: banda utilizable ≈18-20% del ancho
+ * de la imagen, no una remera plana), así que nombres de más de una palabra
+ * dependen de envolver a una segunda línea (`line-clamp-2` en el span) para
+ * mantenerse legibles. Por eso el achique se calcula sobre la PALABRA más
+ * larga, no sobre el largo total — "Laboratorio Guardian" envuelve en dos
+ * líneas razonablemente grandes; encogerlo por sus 20 caracteres totales en
+ * una sola línea lo dejaría ilegible sin necesidad.
+ */
+function nameTagFontSize(name: string, guardianSize: number): number {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const longestWord = words.reduce((max, w) => Math.max(max, w.length), 1);
+  const base = guardianSize * 0.062;
+  const scale = longestWord <= 8 ? 1 : longestWord <= 12 ? 0.82 : longestWord <= 16 ? 0.68 : 0.56;
+  return Math.max(7, Math.round(base * scale * 10) / 10);
+}
+
+function GuardianNameTag({ companyName, guardianSize }: { companyName: string; guardianSize: number }) {
+  const fontSize = nameTagFontSize(companyName, guardianSize);
+  return (
+    <div
+      className="pointer-events-none absolute flex flex-col items-center"
+      style={{ top: "63%", left: "51%", width: "34%", transform: "translateX(-50%)" }}
+    >
+      <span
+        className="line-clamp-2 text-center font-semibold uppercase text-white"
+        style={{
+          fontSize,
+          lineHeight: 1.15,
+          letterSpacing: "0.05em",
+          textShadow: "0 0 6px rgba(120,170,255,0.6), 0 1px 2px rgba(0,0,0,0.8)",
+        }}
+      >
+        {companyName}
+      </span>
+      <span className="mt-[3px] h-px w-2/5" style={{ background: "var(--accent-bright)", opacity: 0.55 }} />
+    </div>
+  );
 }
 
 function GuardianAsset({
@@ -87,11 +136,13 @@ function GuardianAsset({
   size,
   color,
   motionSafe,
+  companyName,
 }: {
   state: GuardianState;
   size: number;
   color: string;
   motionSafe: boolean;
+  companyName?: string;
 }) {
   const width = Math.round((ASSET_WIDTH / ASSET_HEIGHT) * size);
 
@@ -127,6 +178,7 @@ function GuardianAsset({
 
       {/* Flotación muy sutil + micro-inclinación — nunca bounce, nunca motion de mascota */}
       <motion.div
+        className="relative"
         animate={!motionSafe ? { y: 0, rotate: 0 } : { y: [-4, 4, -4], rotate: [-1.1, 1.1, -1.1] }}
         transition={{ duration: 5.5, repeat: motionSafe ? Infinity : 0, ease: "easeInOut" }}
       >
@@ -139,6 +191,8 @@ function GuardianAsset({
           style={{ height: size, width: "auto" }}
           className="pointer-events-none select-none drop-shadow-[0_18px_36px_rgba(0,0,0,0.5)]"
         />
+        {/* Nombre del laboratorio — viaja con Guardian en toda pantalla post-Login que lo pase (regla global, ver Master Context). */}
+        {companyName && <GuardianNameTag companyName={companyName} guardianSize={size} />}
       </motion.div>
     </motion.div>
   );
@@ -161,7 +215,7 @@ function GuardianAsset({
  * thrusters) — lo único que cambia es la geometría dibujada adentro. API
  * pública (`state`/`size`/`message`/`className`) sin cambios.
  */
-export function Guardian({ state, size = 132, message, className, variant = "svg" }: GuardianProps) {
+export function Guardian({ state, size = 132, message, className, variant = "svg", companyName }: GuardianProps) {
   const color = STATE_COLOR[state];
   const ringSpeed = STATE_RING_SPEED[state];
   const isAlert = state === "alert";
@@ -172,7 +226,7 @@ export function Guardian({ state, size = 132, message, className, variant = "svg
   if (variant === "asset") {
     return (
       <div className={cn("flex flex-col items-center gap-6", className)}>
-        <GuardianAsset state={state} size={size} color={color} motionSafe={motionSafe} />
+        <GuardianAsset state={state} size={size} color={color} motionSafe={motionSafe} companyName={companyName} />
         <GuardianMessage message={message} />
       </div>
     );

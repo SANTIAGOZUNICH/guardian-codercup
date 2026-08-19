@@ -6,23 +6,11 @@ import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { ProductsStepScreen } from "@/components/guided-setup/GuidedSetupProductsStep";
-import { InterpretationCard } from "@/components/nlu/InterpretationCard";
-import { interpretWithAI } from "@/lib/nlu/client";
-import { AI_UNAVAILABLE_MESSAGE, buildBlockedMessage, isBlockedStatus } from "@/lib/nlu/interpretation-view-model";
-import type { NluEntities } from "@/lib/nlu/types";
 import {
-  batchInfoMentionsFromNluEntities,
-  blocksTouchedByExtraction,
-  capacityVariantMentionsFromNluEntities,
   emptyGuidedSetupV2Answers,
   ensurePresentationDrafts,
-  equipmentMentionsFromNluEntities,
   formatScheduleProposal,
-  markBlocksResolved,
-  mergeBatchInfoMention,
   mergeEquipmentMention,
-  mergeEquipmentMentions,
-  presentationMentionsFromNluEntities,
   removeCapacityVariant as removeCapacityVariantV2,
   removeEquipment,
   scheduleMentionToProposal,
@@ -37,6 +25,7 @@ import {
   type GuidedSetupV2Answers,
   type PresentationDraftV2,
 } from "@/lib/model/guided-setup-v2";
+import { INTAKE_STEP_NUMBER, TOTAL_ONBOARDING_STEPS } from "@/lib/model/guided-setup-progress";
 import { extractGramsPerUnit, isUnsureAboutGrams } from "@/lib/engine/presentation-parser";
 import { REFERENCE_PRESENTATION_GRAMS } from "@/lib/model/presentation";
 import { buildModelInputsFromGuidedSetupV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
@@ -65,10 +54,8 @@ function useAutofillSafeName(): string {
 const KNOWN_PROCESSES: ResourceProcess[] = ["Elaboración", "Envasado", "Codificado"];
 const BATCH_PROCESS: ResourceProcess = "Elaboración"; // única etapa por lote soportada en este vertical slice
 
-type StepV2 = "intro" | "products" | "presentations" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
-const STEPS_V2: StepV2[] = ["intro", "products", "presentations", "equipment", "capacities", "batchTimes", "staffing", "schedule", "materials", "review"];
-/** Total real de pasos "Paso X de Y" — excluye `review` (no es una pregunta, es el resumen final antes de construir el Twin). */
-const PROGRESS_TOTAL_STEPS = STEPS_V2.length - 1;
+type StepV2 = "products" | "presentations" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
+const STEPS_V2: StepV2[] = ["products", "presentations", "equipment", "capacities", "batchTimes", "staffing", "schedule", "materials", "review"];
 const BLOCK_BY_STEP: Partial<Record<StepV2, GuidedSetupBlock>> = {
   products: "products",
   presentations: "presentations",
@@ -93,80 +80,6 @@ export function EntryChip({ label, sublabel, onRemove }: { label: string; sublab
 
 export function ResolvedBadge() {
   return <span className="rounded-full border border-accent/30 bg-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-accent-bright">Ya tengo esto</span>;
-}
-
-// ---------------------------------------------------------------------------
-// Intro — entrada libre (modo avanzado). Nunca aplica nada sin confirmación.
-// ---------------------------------------------------------------------------
-function FreeformIntro({ knownEquipmentNames, onApply }: { knownEquipmentNames: string[]; onApply: (entities: NluEntities) => void }) {
-  const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingEntities, setPendingEntities] = useState<NluEntities | null>(null);
-  const [confirmText, setConfirmText] = useState("");
-  const name = useAutofillSafeName();
-
-  async function submit() {
-    if (!draft.trim()) return;
-    setPending(true);
-    setError(null);
-    const ai = await interpretWithAI({ text: draft, context: "guided_setup_v2_freeform", knownEquipmentNames });
-    setPending(false);
-    if (!ai.ok) {
-      setError(AI_UNAVAILABLE_MESSAGE);
-      return;
-    }
-    const r = ai.response;
-    if (isBlockedStatus(r.status)) {
-      setError(buildBlockedMessage(r));
-      return;
-    }
-    setPendingEntities(r.entities);
-    setConfirmText(r.interpretedText);
-  }
-
-  if (pendingEntities) {
-    return (
-      <InterpretationCard
-        interpretedText={confirmText}
-        onConfirm={() => {
-          onApply(pendingEntities);
-          setDraft("");
-          setPendingEntities(null);
-        }}
-        onEdit={() => setPendingEntities(null)}
-      />
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-text-secondary">
-        Contame sobre tu laboratorio — podés responder una pregunta a la vez más abajo, o contarme todo de una: qué
-        fabricás, qué equipos tenés, cuánto producen, cuántas personas trabajan, el horario... Lo que sepas.
-      </p>
-      <textarea
-        name={name}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder='Ej: "Hacemos cremas y shampoo. Tenemos dos reactores de 500kg, cada batch tarda 3 horas. Llenadora 1 hace 1800 u/h. Trabajamos lunes a viernes de 8 a 17. Somos 10 personas."'
-        rows={4}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        disabled={pending}
-        className="resize-none rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-disabled disabled:opacity-50"
-      />
-      <div className="flex items-center gap-2">
-        <Button type="button" onClick={submit} disabled={pending || !draft.trim()}>
-          {pending ? "Interpretando..." : "Contar mi operación"}
-        </Button>
-        {!draft.trim() && <span className="text-xs text-text-disabled">Opcional — también podés responder bloque por bloque.</span>}
-      </div>
-      {error && <p className="whitespace-pre-line text-xs text-risk-high">{error}</p>}
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -631,51 +544,26 @@ function BatchTimesStep({
 export function GuidedSetupScreen({
   companyName,
   industry,
+  initialAnswers,
   onBack,
   onComplete,
 }: {
   companyName: string;
   industry: string;
+  /** Respuestas ya extraídas en Pantalla 2 (Intake) por texto libre — Guided Setup arranca desde ahí, nunca pide de nuevo lo que Guardian ya entendió. */
+  initialAnswers?: GuidedSetupV2Answers;
   onBack: () => void;
   onComplete: (input: RawModelInput, completeness: TwinCompleteness) => void;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
   const step = STEPS_V2[stepIndex];
-  const [answers, setAnswers] = useState<GuidedSetupV2Answers>(emptyGuidedSetupV2Answers());
+  const [answers, setAnswers] = useState<GuidedSetupV2Answers>(initialAnswers ?? emptyGuidedSetupV2Answers());
   const staffingFieldName = useAutofillSafeName();
   const [productDraft, setProductDraft] = useState("");
   const [scheduleOverride, setScheduleOverride] = useState<{ days: string; start: string; end: string } | null>(null);
 
   const block = BLOCK_BY_STEP[step];
   const isResolvedFromFreeform = block ? answers.resolvedBlocks[block] : false;
-
-  function applyExtraction(entities: NluEntities) {
-    setAnswers((prev) => {
-      const newProducts = entities.products.filter((p) => !prev.productsRaw.some((existing) => existing.toLowerCase() === p.toLowerCase()));
-      const allProductNames = [...prev.productsRaw, ...newProducts];
-      const equipment = mergeEquipmentMentions(prev.equipment, equipmentMentionsFromNluEntities(entities));
-      const batchInfo = batchInfoMentionsFromNluEntities(entities).reduce((acc, m) => mergeBatchInfoMention(acc, m), prev.batchInfo);
-      const scheduleProposal = entities.schedule ? scheduleMentionToProposal(entities.schedule) : null;
-      const presentations = presentationMentionsFromNluEntities(entities, allProductNames).reduce(
-        (acc, m) => setPresentationGrams(acc, m.productName, m.gramsPerUnit, "company_data"),
-        prev.presentations,
-      );
-      const equipmentWithVariants = capacityVariantMentionsFromNluEntities(entities, equipment, allProductNames).reduce(
-        (acc, m) => setCapacityVariantV2(acc, m.equipmentId, m.productName, m.value, "company_data"),
-        equipment,
-      );
-      return {
-        ...prev,
-        productsRaw: allProductNames,
-        presentations,
-        equipment: equipmentWithVariants,
-        batchInfo,
-        staffingCount: entities.staffingCount ?? prev.staffingCount,
-        schedule: scheduleProposal ?? prev.schedule,
-        resolvedBlocks: markBlocksResolved(prev.resolvedBlocks, blocksTouchedByExtraction(entities)),
-      };
-    });
-  }
 
   function goNext() {
     setStepIndex((i) => Math.min(i + 1, STEPS_V2.length - 1));
@@ -781,8 +669,8 @@ export function GuidedSetupScreen({
     return (
       <div className="flex flex-1 items-start justify-center px-2 py-8 lg:items-center">
         <ProductsStepScreen
-          stepIndex={stepIndex}
-          totalSteps={PROGRESS_TOTAL_STEPS}
+          currentStep={stepIndex + 1 + INTAKE_STEP_NUMBER}
+          totalSteps={TOTAL_ONBOARDING_STEPS}
           productDraft={productDraft}
           onDraftChange={setProductDraft}
           onAdd={addProduct}
@@ -802,7 +690,7 @@ export function GuidedSetupScreen({
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-text-tertiary">
-          {step === "intro" ? "Contanos sobre tu laboratorio" : step === "review" ? "Tu operación" : questionLabel[step]}
+          {step === "review" ? "Tu operación" : questionLabel[step]}
         </p>
       </div>
 
@@ -815,15 +703,6 @@ export function GuidedSetupScreen({
         transition={{ duration: 0.35 }}
         className="glass-panel w-full max-w-xl rounded-[var(--radius-lg)] p-6"
       >
-        {step === "intro" && (
-          <FreeformIntro
-            knownEquipmentNames={answers.equipment.map((e) => e.name)}
-            onApply={(entities) => {
-              applyExtraction(entities);
-            }}
-          />
-        )}
-
         {step === "presentations" && (
           <PresentationsStep productsRaw={answers.productsRaw} presentations={answers.presentations} onSet={setPresentation} />
         )}
@@ -973,7 +852,7 @@ export function GuidedSetupScreen({
             Continuar
             <ArrowRight size={15} />
           </Button>
-          {block && !answers.resolvedBlocks[block] && step !== "intro" && (
+          {block && !answers.resolvedBlocks[block] && (
             <button type="button" onClick={() => markResolved(block)} className="text-xs text-text-tertiary underline underline-offset-2">
               Omitir
             </button>

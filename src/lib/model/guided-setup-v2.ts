@@ -481,3 +481,36 @@ export function scheduleMentionToProposal(mention: { workingDaysText: string | n
   if (hours <= 0) return null;
   return { workingDays: days, workdayStart: mention.startTime, workdayHours: hours, confirmed: false };
 }
+
+/**
+ * Aplica una extracción de NLU confirmada por el usuario sobre las respuestas
+ * actuales — función pura, extraída para que tanto `IntakeScreen` (Pantalla 2,
+ * texto libre antes de entrar a Guided Setup) como `GuidedSetupScreen` (modo
+ * avanzado, respuesta libre dentro de un bloque) apliquen EXACTAMENTE la misma
+ * lógica de merge, sin dos implementaciones que puedan divergir.
+ */
+export function applyNluExtraction(prev: GuidedSetupV2Answers, entities: NluEntities): GuidedSetupV2Answers {
+  const newProducts = entities.products.filter((p) => !prev.productsRaw.some((existing) => existing.toLowerCase() === p.toLowerCase()));
+  const allProductNames = [...prev.productsRaw, ...newProducts];
+  const equipment = mergeEquipmentMentions(prev.equipment, equipmentMentionsFromNluEntities(entities));
+  const batchInfo = batchInfoMentionsFromNluEntities(entities).reduce((acc, m) => mergeBatchInfoMention(acc, m), prev.batchInfo);
+  const scheduleProposal = entities.schedule ? scheduleMentionToProposal(entities.schedule) : null;
+  const presentations = presentationMentionsFromNluEntities(entities, allProductNames).reduce(
+    (acc, m) => setPresentationGrams(acc, m.productName, m.gramsPerUnit, "company_data"),
+    prev.presentations,
+  );
+  const equipmentWithVariants = capacityVariantMentionsFromNluEntities(entities, equipment, allProductNames).reduce(
+    (acc, m) => setCapacityVariant(acc, m.equipmentId, m.productName, m.value, "company_data"),
+    equipment,
+  );
+  return {
+    ...prev,
+    productsRaw: allProductNames,
+    presentations,
+    equipment: equipmentWithVariants,
+    batchInfo,
+    staffingCount: entities.staffingCount ?? prev.staffingCount,
+    schedule: scheduleProposal ?? prev.schedule,
+    resolvedBlocks: markBlocksResolved(prev.resolvedBlocks, blocksTouchedByExtraction(entities)),
+  };
+}

@@ -114,15 +114,26 @@ El status `"unsupported"` de la IA operacional también reintenta conocimiento c
 
 Gemini INTERPRETA lenguaje natural (typos, fonética, frases coloquiales) y responde conocimiento cosmético conceptual. El Engine determinístico CALCULA — Gemini nunca hace ni estima matemática de capacidad/tiempo/fecha. Variable: `GUARDIAN_API_KEY`, server-side únicamente (`.env.local`, gitignored), nunca expuesta al browser. Si no está configurada, la app sigue funcionando en modo puramente determinístico (nunca rompe).
 
-## 18. Guided Setup
+## 18. Entry Flow — Intake (Pantalla 2) + Guided Setup
 
-Dos modos, MISMO estado y motor (`src/lib/model/guided-setup-v2.ts` + `GuidedSetupScreen.tsx`):
+**Flujo de entrada (Checkpoint 2B, 2026-08-19)**: `Login → Intake ("Contanos sobre tu laboratorio") → Guided Setup (arranca en Productos)`. `OnboardingScreen` (bienvenida sin decisión, "Hola X, soy Guardian...") y `EntryChoiceScreen` (elegir Import vs Guided Setup) se ELIMINARON del flujo y del repo (`src/components/onboarding/`, la mitad de `src/components/upload/` — carpetas vacías tras el borrado). El step `"intro"` de `GuidedSetupScreen` también se eliminó — su UI (texto libre) se mudó a Intake.
+
+`IntakeScreen` (`src/components/intake/IntakeScreen.tsx`, fase `"intake"` en `GuardianApp.tsx`) es el único punto de entrada post-Login. Tres caminos que PUEDEN combinarse:
+1. **Texto libre** — mismo NLU/Gemini que antes vivía en el step "intro" (typos incluidos). La extracción se aplica con `applyNluExtraction` (`src/lib/model/guided-setup-v2.ts`), función pura extraída para que Intake y (si algún día vuelve a hacer falta) Guided Setup compartan una sola implementación — nunca dos merges que puedan divergir.
+2. **Cargar archivos** — reusa el importador real de 3 planillas (`parseExcel.ts` + `buildOperationalModel`/`buildDemoModel`), el mismo que tenía `UploadScreen` (eliminado, su lógica vive ahora acá). Solo se ofrece `.xlsx` en 3 slots nombrados (Pedidos/Inventario/Recursos) — nunca CSV/PDF/DOCX, la app no sabe leerlos.
+3. **Preguntas guiadas** — botón "Comenzar con preguntas" navega directo a Productos (`onStartGuidedSetup(answers)`), pasando lo ya extraído por texto libre como `initialAnswers` a `GuidedSetupScreen` (nunca vuelve a preguntar lo ya entendido).
+
+**Límite real, documentado en vez de fingido**: texto libre y archivos son dos pipelines de datos estructuralmente distintos (`GuidedSetupV2Answers` vía NLU vs `RawModelInput` directo desde Excel) — no hay merge real entre ambos. Si el usuario escribe texto Y completa los 3 archivos, "Construir con estos archivos" usa EXCLUSIVAMENTE los archivos (fuente completa y autoritativa); el texto no se pierde en silencio — Intake muestra una nota explícita avisándolo y sugiriendo la opción 3 para combinar. Datos demo también pasan por `onModelReady`, nunca muestran "Laboratorio Genus" (usan el `companyName` real de la sesión).
+
+Guided Setup en sí (`src/lib/model/guided-setup-v2.ts` + `GuidedSetupScreen.tsx`), dos modos, MISMO estado y motor:
 - **NOVICE**: responde bloque por bloque — Productos → Contenido por unidad (gramos) → Flujo/Equipos → Capacidades (+ variantes por producto, progressive disclosure) → Tiempos de tanda → Personal → Horario → Materiales (opcional).
-- **ADVANCED**: describe toda la operación en un párrafo; la IA extrae lo que pueda (productos, equipos, gramajes, rates por producto/equipo, personal, horario) y marca los bloques resueltos automáticamente.
+- **ADVANCED**: ahora vive en Intake (ver arriba), no dentro de Guided Setup.
 
 "No lo sé" nunca bloquea el onboarding — ofrece una referencia cuando existe, o deja el campo como faltante explícito (nunca 0 real). La entrevista sigue compartiendo una Production Reference entre todos los productos declarados (limitación real y documentada) — `rateVariants` es la vía para que ese step compartido tenga precisión por producto/presentación/recurso sin necesitar profiles separados.
 
-**Visual — step "Productos" (Checkpoint 2A, 2026-08-19)**: único step de Guided Setup con diseño propio hasta ahora — continuación directa del lenguaje visual del Login (mismo `GuardianLogo`, mismo Guardian 3D real vía `variant="asset"`, mismo `--accent-gradient` reservado para el CTA protagonista "Continuar"). Layout de dos columnas (`ProductsStepScreen`, `src/components/guided-setup/GuidedSetupProductsStep.tsx`): izquierda con marca/promesa/Guardian/card contextual (~33%), derecha con el panel "Configuración guiada" — progreso real "Paso X de Y" (`PROGRESS_TOTAL_STEPS = STEPS_V2.length - 1`, excluye `review`), pregunta, input+chips (sin íconos por producto — chips de texto puro, nunca un catálogo cerrado), y los dos bloques de contexto sobre gramaje. El resto de los steps (`presentations`, `equipment`, `capacities`, `batchTimes`, `staffing`, `schedule`, `materials`, `review`, `intro`) sigue con el layout centrado original hasta que cada uno tenga su propio checkpoint visual — extender ese mismo patrón (un componente dedicado por step, montado condicionalmente en `GuidedSetupScreen.tsx`) en vez de rediseñar el archivo monolítico de una sola vez.
+**Progreso compartido "Paso X de Y"**: `src/lib/model/guided-setup-progress.ts` — `INTAKE_STEP_NUMBER=1` + `GUIDED_SETUP_QUESTION_STEPS=8` (products..materials, excluye review) = `TOTAL_ONBOARDING_STEPS=9`. Intake siempre es "Paso 1"; Productos calcula `currentStep = stepIndex + 1 + INTAKE_STEP_NUMBER` → "Paso 2 de 9".
+
+**Visual — step "Productos" (Checkpoint 2A, ahora Pantalla 3, 2026-08-19)**: continuación directa del lenguaje visual del Login/Intake (mismo `GuardianLogo`, mismo Guardian 3D real vía `variant="asset"`, mismo `--accent-gradient` reservado para el CTA protagonista "Continuar"). Layout de dos columnas (`ProductsStepScreen`, `src/components/guided-setup/GuidedSetupProductsStep.tsx`): izquierda con marca/promesa/Guardian/card contextual (~33%), derecha con el panel "Configuración guiada" — progreso real, pregunta, input+chips (sin íconos por producto — chips de texto puro, nunca un catálogo cerrado), y los dos bloques de contexto sobre gramaje. El resto de los steps (`presentations`, `equipment`, `capacities`, `batchTimes`, `staffing`, `schedule`, `materials`, `review`) sigue con el layout centrado original hasta que cada uno tenga su propio checkpoint visual — extender ese mismo patrón (un componente dedicado por step, montado condicionalmente en `GuidedSetupScreen.tsx`) en vez de rediseñar el archivo monolítico de una sola vez.
 
 ## 19. Reference Catalog
 
@@ -130,7 +141,7 @@ Dos modos, MISMO estado y motor (`src/lib/model/guided-setup-v2.ts` + `GuidedSet
 
 ## 20. Idioma
 
-UI 100% en español (rioplatense neutro, profesional, simple). Verificado exhaustivamente: Login, Onboarding, Guided Setup, Command Center, Constraints, Ask Guardian (+ subpantallas), Disruption, Recommended Plans, Why This Plan, labels del grafo del Twin, formateo de fechas (`dom/lun/mar/mié/jue/vie/sáb`, `ene`...`dic`).
+UI 100% en español (rioplatense neutro, profesional, simple). Verificado exhaustivamente: Login, Intake, Guided Setup, Command Center, Constraints, Ask Guardian (+ subpantallas), Disruption, Recommended Plans, Why This Plan, labels del grafo del Twin, formateo de fechas (`dom/lun/mar/mié/jue/vie/sáb`, `ene`...`dic`).
 
 ## 21. Branding
 
@@ -151,6 +162,12 @@ Oscuro, premium, tecnológico, moderadamente futurista, industrial pero claro. G
 - Movimiento controlado (entrada escalonada, sin partículas ni motion de fondo constante) — vía el hook existente `useMotionSafe`, respeta `prefers-reduced-motion`.
 - Patrón de extensión de componentes compartidos: `Input`/`Button` se extendieron de forma aditiva y retrocompatible (`icon`/`trailing` en `Input`, `variant="gradient"` en `Button`) en vez de crear variantes paralelas — este es el patrón a seguir en los próximos checkpoints de pulido visual (Guided Setup, Review, Command Center) para evitar deuda visual.
 
+**Pantalla 2 — Intake "Contanos sobre tu laboratorio" (Checkpoint 2B, 2026-08-19)**: mismo lenguaje que Login/Productos — dos columnas, `GuardianLogo`, Guardian 3D (`variant="asset"`), `--accent-gradient` reservado solo para "Comenzar con preguntas". Reemplaza a Onboarding+EntryChoice (ver sección 18).
+
+**Guardian — nombre de laboratorio en el pecho (regla global reusable, Checkpoint 2B)**: `Guardian` gana `companyName?: string` (`GuardianProps`), con efecto visual solo en `variant="asset"` — cada pantalla decide si lo pasa, nunca hay una implementación paralela por pantalla. `nameTagFontSize()` en `Guardian.tsx` calcula el tamaño de fuente sobre la PALABRA más larga (no el largo total), porque el nombre depende de envolver a 2 líneas (`line-clamp-2`) dentro de la banda real del torso — usado hoy en Intake (`size=240`), no en Login (ahí `companyName` todavía no existe al momento de loguearse) ni en Productos (fuera de alcance de este checkpoint, la capacidad ya está disponible para cuando le toque su propio checkpoint visual).
+
+**Limitación real del asset** (reportada en vez de forzada, ver Checkpoint 2B): el torso de `guardian-idle.png` es angosto, curvo y glossy — medido con Pillow, banda de contenido opaco útil ≈18-20% del ancho de la imagen a la altura del pecho, no una superficie plana tipo remera. Nombres de una palabra corta (≤8 caracteres) se leen bien en una línea; nombres más largos dependen de envolver a 2 líneas para no quedar ilegibles. No es un grabado integrado en el chassis — es una etiqueta/placa (texto blanco azulado + glow sutil + línea divisoria) anclada a la posición real del pecho, que viaja con la flotación de Guardian.
+
 ## 23. Current Architecture
 
 Basado en el código real del repo (`src/`):
@@ -158,7 +175,7 @@ Basado en el código real del repo (`src/`):
 - **Motor**: `src/lib/engine/evaluate-scenario.ts` (cálculo único), `simulation-engine.ts` (generación/ranking de escenarios), `constraint-detection.ts`, `disruption.ts` + `disruption-parser.ts`, `goal-parser.ts`, `presentation-parser.ts` (gramos en texto libre), `operational-query.ts`, `shortage-engine.ts`, `reference-catalog.ts`.
 - **NLU/IA**: `src/lib/nlu/types.ts` (schemas Zod), `prompt.ts`, `client.ts`, `knowledge-{types,prompt,client}.ts`; rutas server `src/app/api/nlu/route.ts` y `src/app/api/ask-guardian-knowledge/route.ts`.
 - **View models**: `src/lib/view/*.ts` — traducen resultados del motor a lo que la UI pinta, cero cálculo propio.
-- **UI**: `src/components/{login,onboarding,upload,guided-setup,model,command-center,constraint,ask-guardian,shell,guardian,ui}/`.
+- **UI**: `src/components/{login,intake,guided-setup,model,command-center,constraint,ask-guardian,shell,guardian,ui}/`.
 - **Datos demo**: `src/data/production-profiles.ts`, `operations-reference.ts`, `reference-catalog.ts`; generador `scripts/generate-demo-data.mjs` → `public/demo/*.xlsx`.
 
 ## 24. Current Functional State
@@ -209,7 +226,7 @@ Localmente se sigue pudiendo correr con `npm run dev` (desarrollo) o `npm run bu
 
 ## 30. Roadmap
 
-- **DONE**: Modelo de dominio (gramos/presentaciones), Motor (masa/batches/rates incluyendo precisión por producto-presentación-recurso), Guided Setup (bloques + progressive disclosure + modo avanzado), Ask Guardian (4 categorías de routing), Idioma (100% español), Branding (sin Genus visible), Production References por producto/presentación — **GUARDIAN V1 FUNCTIONAL FREEZE**. Visual Polish — Login/First Impression + Guardian Character Integration (ver sección 22) y Guided Setup → Productos (ver sección 18): checkpoints visuales cerrados hasta ahora.
+- **DONE**: Modelo de dominio (gramos/presentaciones), Motor (masa/batches/rates incluyendo precisión por producto-presentación-recurso), Guided Setup (bloques + progressive disclosure + modo avanzado), Ask Guardian (4 categorías de routing), Idioma (100% español), Branding (sin Genus visible), Production References por producto/presentación — **GUARDIAN V1 FUNCTIONAL FREEZE**. Visual Polish — Login/First Impression + Guardian Character Integration, Guided Setup → Productos, e Intake "Contanos sobre tu laboratorio" + personalización global de Guardian (ver secciones 18/22): checkpoints visuales cerrados hasta ahora. Flujo de entrada reestructurado: `Login → Intake → Productos → resto de Guided Setup` (Onboarding/EntryChoice/UploadScreen standalone eliminados, ver sección 18).
 - **NEXT**: Visual Polish / Demo Experience para el resto de las pantallas — Guided Setup (presentations, equipment, capacities, batchTimes, staffing, schedule, materials, review), Building Twin, Command Center, Simulación, Disruption. Un checkpoint por pantalla, extendiendo la dirección visual establecida (secciones 18/22), no redefiniéndola.
 - **LATER**: Profiles verdaderamente independientes por producto en Guided Setup V2 (eliminar la limitación de la sección 25); benchmark de calidad para conocimiento cosmético; distinción visual real fail vs. not_evaluated en PlanCard.
 - **CUT**: Todo lo listado en la sección 27 (Out of Scope) — no reconsiderar sin una decisión de producto explícita.

@@ -15,7 +15,7 @@ import { EntryChip, ResolvedBadge } from "@/components/guided-setup/GuidedSetupS
  * con el layout centrado existente hasta que tenga su propio checkpoint.
  */
 export function ProductsStepScreen({
-  stepIndex,
+  currentStep,
   totalSteps,
   productDraft,
   onDraftChange,
@@ -28,7 +28,7 @@ export function ProductsStepScreen({
   goBack,
   goNext,
 }: {
-  stepIndex: number;
+  currentStep: number;
   totalSteps: number;
   productDraft: string;
   onDraftChange: (v: string) => void;
@@ -41,7 +41,7 @@ export function ProductsStepScreen({
   goBack: () => void;
   goNext: () => void;
 }) {
-  const current = Math.min(stepIndex + 1, totalSteps);
+  const current = Math.min(currentStep, totalSteps);
 
   return (
     <div className="grid w-full max-w-[1240px] flex-1 grid-cols-1 items-start gap-10 px-6 py-10 lg:grid-cols-[1fr_2fr] lg:gap-12 lg:px-10">
