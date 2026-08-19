@@ -37,6 +37,8 @@ Poca información → aproximación honesta (nunca bloquea, nunca inventa). Más
 
 Materiales primas se miden en la unidad que declare cada `Material`/`InventoryItem` (típicamente kg/L/unidades) — completamente independiente del modelo de gramos por unidad de producto.
 
+**Regla conceptual — Tipo de producto vs. gramaje**: el TIPO DE PRODUCTO (ej. "Shampoo") es información general de la empresa — no lleva un gramaje fijo asociado, porque una misma empresa puede fabricar "Shampoo 200g", "Shampoo 500g" y "Shampoo 1kg" bajo el mismo tipo. `Presentation.gramsPerUnit` es información del pedido/escenario específico. Guided Setup → Productos (sección 18) por eso solo pide el nombre del tipo, nunca gramaje; el paso Contenido por unidad (Presentations) sigue siendo donde se resuelve el gramaje cuando el usuario ya lo conoce al momento del setup. Cuando no se conoce ahí tampoco, Ask Guardian ya lo pide antes de simular (sección 16, punto 1) — nunca corre una simulación con datos de masa incompletos.
+
 ## 8. Presentations
 
 `Presentation { id, productId, label, gramsPerUnit: SourcedValue<number> }` — array top-level en `OperationalModel.presentations`, nunca embebido en `Product` (mismo patrón que `profiles`). Un producto puede tener 0, 1 o varias presentaciones.
@@ -119,6 +121,8 @@ Dos modos, MISMO estado y motor (`src/lib/model/guided-setup-v2.ts` + `GuidedSet
 - **ADVANCED**: describe toda la operación en un párrafo; la IA extrae lo que pueda (productos, equipos, gramajes, rates por producto/equipo, personal, horario) y marca los bloques resueltos automáticamente.
 
 "No lo sé" nunca bloquea el onboarding — ofrece una referencia cuando existe, o deja el campo como faltante explícito (nunca 0 real). La entrevista sigue compartiendo una Production Reference entre todos los productos declarados (limitación real y documentada) — `rateVariants` es la vía para que ese step compartido tenga precisión por producto/presentación/recurso sin necesitar profiles separados.
+
+**Visual — step "Productos" (Checkpoint 2A, 2026-08-19)**: único step de Guided Setup con diseño propio hasta ahora — continuación directa del lenguaje visual del Login (mismo `GuardianLogo`, mismo Guardian 3D real vía `variant="asset"`, mismo `--accent-gradient` reservado para el CTA protagonista "Continuar"). Layout de dos columnas (`ProductsStepScreen`, `src/components/guided-setup/GuidedSetupProductsStep.tsx`): izquierda con marca/promesa/Guardian/card contextual (~33%), derecha con el panel "Configuración guiada" — progreso real "Paso X de Y" (`PROGRESS_TOTAL_STEPS = STEPS_V2.length - 1`, excluye `review`), pregunta, input+chips (sin íconos por producto — chips de texto puro, nunca un catálogo cerrado), y los dos bloques de contexto sobre gramaje. El resto de los steps (`presentations`, `equipment`, `capacities`, `batchTimes`, `staffing`, `schedule`, `materials`, `review`, `intro`) sigue con el layout centrado original hasta que cada uno tenga su propio checkpoint visual — extender ese mismo patrón (un componente dedicado por step, montado condicionalmente en `GuidedSetupScreen.tsx`) en vez de rediseñar el archivo monolítico de una sola vez.
 
 ## 19. Reference Catalog
 
@@ -205,8 +209,8 @@ Localmente se sigue pudiendo correr con `npm run dev` (desarrollo) o `npm run bu
 
 ## 30. Roadmap
 
-- **DONE**: Modelo de dominio (gramos/presentaciones), Motor (masa/batches/rates incluyendo precisión por producto-presentación-recurso), Guided Setup (bloques + progressive disclosure + modo avanzado), Ask Guardian (4 categorías de routing), Idioma (100% español), Branding (sin Genus visible), Production References por producto/presentación — **GUARDIAN V1 FUNCTIONAL FREEZE**. Visual Polish — Login/First Impression (ver sección 22): rediseño completo de `LoginScreen.tsx`, único checkpoint visual cerrado hasta ahora.
-- **NEXT**: Visual Polish / Demo Experience para el resto de las pantallas — Guided Setup, Review, Building Twin, Command Center, Simulación, Disruption. Extender la dirección visual establecida en Login (sección 22), no redefinirla.
+- **DONE**: Modelo de dominio (gramos/presentaciones), Motor (masa/batches/rates incluyendo precisión por producto-presentación-recurso), Guided Setup (bloques + progressive disclosure + modo avanzado), Ask Guardian (4 categorías de routing), Idioma (100% español), Branding (sin Genus visible), Production References por producto/presentación — **GUARDIAN V1 FUNCTIONAL FREEZE**. Visual Polish — Login/First Impression + Guardian Character Integration (ver sección 22) y Guided Setup → Productos (ver sección 18): checkpoints visuales cerrados hasta ahora.
+- **NEXT**: Visual Polish / Demo Experience para el resto de las pantallas — Guided Setup (presentations, equipment, capacities, batchTimes, staffing, schedule, materials, review), Building Twin, Command Center, Simulación, Disruption. Un checkpoint por pantalla, extendiendo la dirección visual establecida (secciones 18/22), no redefiniéndola.
 - **LATER**: Profiles verdaderamente independientes por producto en Guided Setup V2 (eliminar la limitación de la sección 25); benchmark de calidad para conocimiento cosmético; distinción visual real fail vs. not_evaluated en PlanCard.
 - **CUT**: Todo lo listado en la sección 27 (Out of Scope) — no reconsiderar sin una decisión de producto explícita.
 

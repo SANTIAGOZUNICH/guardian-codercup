@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
+import { ProductsStepScreen } from "@/components/guided-setup/GuidedSetupProductsStep";
 import { InterpretationCard } from "@/components/nlu/InterpretationCard";
 import { interpretWithAI } from "@/lib/nlu/client";
 import { AI_UNAVAILABLE_MESSAGE, buildBlockedMessage, isBlockedStatus } from "@/lib/nlu/interpretation-view-model";
@@ -66,6 +67,8 @@ const BATCH_PROCESS: ResourceProcess = "Elaboración"; // única etapa por lote 
 
 type StepV2 = "intro" | "products" | "presentations" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
 const STEPS_V2: StepV2[] = ["intro", "products", "presentations", "equipment", "capacities", "batchTimes", "staffing", "schedule", "materials", "review"];
+/** Total real de pasos "Paso X de Y" — excluye `review` (no es una pregunta, es el resumen final antes de construir el Twin). */
+const PROGRESS_TOTAL_STEPS = STEPS_V2.length - 1;
 const BLOCK_BY_STEP: Partial<Record<StepV2, GuidedSetupBlock>> = {
   products: "products",
   presentations: "presentations",
@@ -76,7 +79,7 @@ const BLOCK_BY_STEP: Partial<Record<StepV2, GuidedSetupBlock>> = {
   schedule: "schedule",
 };
 
-function EntryChip({ label, sublabel, onRemove }: { label: string; sublabel?: string; onRemove: () => void }) {
+export function EntryChip({ label, sublabel, onRemove }: { label: string; sublabel?: string; onRemove: () => void }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-border-default bg-white/[0.02] py-1.5 pl-3 pr-1.5 text-sm text-text-primary">
       {label}
@@ -88,7 +91,7 @@ function EntryChip({ label, sublabel, onRemove }: { label: string; sublabel?: st
   );
 }
 
-function ResolvedBadge() {
+export function ResolvedBadge() {
   return <span className="rounded-full border border-accent/30 bg-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-accent-bright">Ya tengo esto</span>;
 }
 
@@ -774,6 +777,27 @@ export function GuidedSetupScreen({
     materials: "Materias primas (opcional)",
   };
 
+  if (step === "products") {
+    return (
+      <div className="flex flex-1 items-start justify-center px-2 py-8 lg:items-center">
+        <ProductsStepScreen
+          stepIndex={stepIndex}
+          totalSteps={PROGRESS_TOTAL_STEPS}
+          productDraft={productDraft}
+          onDraftChange={setProductDraft}
+          onAdd={addProduct}
+          onRemove={removeProduct}
+          products={answers.productsRaw}
+          isResolvedFromFreeform={isResolvedFromFreeform ?? false}
+          canSkip={Boolean(block && !answers.resolvedBlocks[block])}
+          onSkip={() => block && markResolved(block)}
+          goBack={goBack}
+          goNext={goNext}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
@@ -798,37 +822,6 @@ export function GuidedSetupScreen({
               applyExtraction(entities);
             }}
           />
-        )}
-
-        {step === "products" && (
-          <div className="flex flex-col gap-4">
-            {isResolvedFromFreeform && answers.productsRaw.length > 0 && <ResolvedBadge />}
-            <p className="text-sm text-text-secondary">¿Qué fabrica tu laboratorio?</p>
-            <div className="flex gap-2">
-              <input
-                value={productDraft}
-                onChange={(e) => setProductDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addProduct();
-                  }
-                }}
-                placeholder="Ej: Protector Solar FPS 50"
-                autoComplete="off"
-                className="h-11 flex-1 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-3 text-sm text-text-primary outline-none placeholder:text-text-disabled"
-              />
-              <Button variant="ghost" type="button" onClick={addProduct} className="px-3">
-                <Plus size={16} />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {answers.productsRaw.map((p, i) => (
-                <EntryChip key={`${p}-${i}`} label={p} onRemove={() => removeProduct(i)} />
-              ))}
-            </div>
-            {answers.productsRaw.length === 0 && <p className="text-xs text-text-disabled">Cualquier nombre de producto sirve — nunca limitado a un catálogo cerrado.</p>}
-          </div>
         )}
 
         {step === "presentations" && (
