@@ -8,6 +8,7 @@ import {
   ensurePresentationDrafts,
   equipmentMentionsFromNluEntities,
   formatScheduleProposal,
+  addEquipmentToProcess,
   markBlocksResolved,
   mergeBatchInfoMention,
   mergeEquipmentMention,
@@ -16,6 +17,8 @@ import {
   presentationMentionsFromNluEntities,
   removeCapacityVariant,
   removeEquipment,
+  remapEquipmentProcess,
+  renameEquipmentEntry,
   scheduleMentionToProposal,
   setCapacityVariant,
   setEquipmentCapacity,
@@ -44,41 +47,41 @@ function emptyEntities(overrides: Partial<NluEntities> = {}): NluEntities {
 
 describe("mergeEquipmentMention — add-or-update por nombre, nunca duplica", () => {
   it("agrega un equipo nuevo cuando no matchea nada existente", () => {
-    const result = mergeEquipmentMention([], { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 });
+    const result = mergeEquipmentMention([], { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 1 });
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ name: "Llenadora 1", quantity: 1, category: "llenadora" });
   });
 
   it("mencionar el mismo nombre otra vez actualiza la entrada existente, no duplica", () => {
-    const first = mergeEquipmentMention([], { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 });
-    const second = mergeEquipmentMention(first, { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 3 });
+    const first = mergeEquipmentMention([], { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 1 });
+    const second = mergeEquipmentMention(first, { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 3 });
     expect(second).toHaveLength(1);
     expect(second[0].quantity).toBe(3);
   });
 
   it("sin nombre explícito, genera uno determinístico basado en la categoría", () => {
-    const result = mergeEquipmentMention([], { name: null, process: "Elaboración", category: "reactor", quantity: 2 });
+    const result = mergeEquipmentMention([], { name: null, processRaw: "Elaboración", category: "reactor", quantity: 2 });
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Reactor");
   });
 
   it("nunca muta el array original", () => {
     const original: EquipmentEntryV2[] = [];
-    mergeEquipmentMention(original, { name: "X", process: "Envasado", category: "llenadora", quantity: 1 });
+    mergeEquipmentMention(original, { name: "X", processRaw: "Envasado", category: "llenadora", quantity: 1 });
     expect(original).toEqual([]);
   });
 });
 
 describe("Test 12 — corrección de cantidad ('perdón, son dos') termina en 2, nunca en 3", () => {
   it("updatesExisting matchea el nombre exacto y reemplaza la cantidad, no la suma ni agrega un duplicado", () => {
-    const afterFirst = mergeEquipmentMention([], { name: "Llenadora", process: "Envasado", category: "llenadora", quantity: 1 });
+    const afterFirst = mergeEquipmentMention([], { name: "Llenadora", processRaw: "Envasado", category: "llenadora", quantity: 1 });
     expect(afterFirst).toHaveLength(1);
     expect(afterFirst[0].quantity).toBe(1);
 
     // "perdón, son dos" — la IA identifica que esto corrige "Llenadora", nunca crea un equipo nuevo.
     const afterCorrection = mergeEquipmentMention(afterFirst, {
       name: null,
-      process: "Envasado",
+      processRaw: "Envasado",
       category: "llenadora",
       quantity: 2,
       updatesExisting: "Llenadora",
@@ -90,9 +93,9 @@ describe("Test 12 — corrección de cantidad ('perdón, son dos') termina en 2,
   });
 
   it("una secuencia completa de 3 mensajes (declarar, corregir, corregir de nuevo) sigue resolviendo a una sola entrada", () => {
-    let equipment = mergeEquipmentMention([], { name: "Reactor 1", process: "Elaboración", category: "reactor", quantity: 1 });
-    equipment = mergeEquipmentMention(equipment, { name: null, process: "Elaboración", category: "reactor", quantity: 2, updatesExisting: "Reactor 1" });
-    equipment = mergeEquipmentMention(equipment, { name: null, process: "Elaboración", category: "reactor", quantity: 3, updatesExisting: "Reactor 1" });
+    let equipment = mergeEquipmentMention([], { name: "Reactor 1", processRaw: "Elaboración", category: "reactor", quantity: 1 });
+    equipment = mergeEquipmentMention(equipment, { name: null, processRaw: "Elaboración", category: "reactor", quantity: 2, updatesExisting: "Reactor 1" });
+    equipment = mergeEquipmentMention(equipment, { name: null, processRaw: "Elaboración", category: "reactor", quantity: 3, updatesExisting: "Reactor 1" });
     expect(equipment).toHaveLength(1);
     expect(equipment[0].quantity).toBe(3);
   });
@@ -146,8 +149,8 @@ describe("removeEquipment / setEquipmentCapacity", () => {
     const equipment = mergeEquipmentMentions(
       [],
       [
-        { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 },
-        { name: "Reactor 1", process: "Elaboración", category: "reactor", quantity: 2 },
+        { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 1 },
+        { name: "Reactor 1", processRaw: "Elaboración", category: "reactor", quantity: 2 },
       ],
     );
     const result = removeEquipment(equipment, "llenadora-1");
@@ -156,12 +159,65 @@ describe("removeEquipment / setEquipmentCapacity", () => {
   });
 
   it("setEquipmentCapacity adjunta el origen explícito (company_data o reference_estimate)", () => {
-    const equipment = mergeEquipmentMention([], { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 });
+    const equipment = mergeEquipmentMention([], { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 1 });
     const withCompanyData = setEquipmentCapacity(equipment, "llenadora-1", 1800, "u/h", "company_data");
     expect(withCompanyData[0].capacity).toEqual({ value: 1800, source: "company_data" });
 
     const withReference = setEquipmentCapacity(equipment, "llenadora-1", 1500, "u/h", "reference_estimate");
     expect(withReference[0].capacity).toEqual({ value: 1500, source: "reference_estimate" });
+  });
+});
+
+describe("Pantalla 5 — Equipos: agrupa por processesRaw (Pantalla 4), nunca por un catálogo fijo", () => {
+  it("CASO E1/E2/E3 — addEquipmentToProcess agrupa cada equipo bajo la etapa exacta declarada, sin pedir categoría", () => {
+    let equipment: EquipmentEntryV2[] = [];
+    equipment = addEquipmentToProcess(equipment, "Elaboración", "Reactor 1");
+    equipment = addEquipmentToProcess(equipment, "Elaboración", "Reactor 2");
+    equipment = addEquipmentToProcess(equipment, "Envasado", "Llenadora 1");
+
+    const elaboracion = equipment.filter((e) => e.processRaw === "Elaboración");
+    const envasado = equipment.filter((e) => e.processRaw === "Envasado");
+    expect(elaboracion.map((e) => e.name)).toEqual(["Reactor 1", "Reactor 2"]);
+    expect(envasado.map((e) => e.name)).toEqual(["Llenadora 1"]);
+  });
+
+  it("agrupa igual bajo una etapa 100% libre que no matchea ningún ResourceProcess conocido (ej. 'Pesada')", () => {
+    const equipment = addEquipmentToProcess([], "Pesada", "Balanza 1");
+    expect(equipment).toHaveLength(1);
+    expect(equipment[0].processRaw).toBe("Pesada");
+  });
+
+  it("CASO E9 — nunca inventa una capacidad: un equipo recién agregado queda con capacity null", () => {
+    const equipment = addEquipmentToProcess([], "Envasado", "Llenadora 1");
+    expect(equipment[0].capacity).toBeNull();
+  });
+
+  it("agregar sin nombre no crea una entrada vacía", () => {
+    expect(addEquipmentToProcess([], "Envasado", "   ")).toEqual([]);
+  });
+
+  it("CASO E4 — renameEquipmentEntry persiste el nuevo nombre sin tocar el id ni el resto de los equipos", () => {
+    let equipment = addEquipmentToProcess([], "Envasado", "Llenadora 1");
+    equipment = addEquipmentToProcess(equipment, "Envasado", "Pouchera 1");
+    equipment = renameEquipmentEntry(equipment, "llenadora-1", "Llenadora automática");
+    expect(equipment[0]).toMatchObject({ id: "llenadora-1", name: "Llenadora automática" });
+    expect(equipment[1].name).toBe("Pouchera 1"); // el otro equipo no se ve afectado
+  });
+
+  it("CASO E5 — eliminar un equipo no afecta al resto del mismo grupo", () => {
+    let equipment = addEquipmentToProcess([], "Elaboración", "Reactor 1");
+    equipment = addEquipmentToProcess(equipment, "Elaboración", "Reactor 2");
+    const result = removeEquipment(equipment, "reactor-1");
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Reactor 2");
+  });
+
+  it("remapEquipmentProcess reasigna el equipo al renombrar una etapa en Pantalla 4 — nunca queda huérfano", () => {
+    let equipment = addEquipmentToProcess([], "Elaboración", "Reactor 1");
+    equipment = addEquipmentToProcess(equipment, "Envasado", "Llenadora 1");
+    equipment = remapEquipmentProcess(equipment, "Elaboración", "Elaboración (mezcla)");
+    expect(equipment.find((e) => e.name === "Reactor 1")!.processRaw).toBe("Elaboración (mezcla)");
+    expect(equipment.find((e) => e.name === "Llenadora 1")!.processRaw).toBe("Envasado"); // el otro grupo no se toca
   });
 });
 
@@ -331,7 +387,7 @@ describe("presentationMentionsFromNluEntities", () => {
 
 describe("Capacity variants — precisión progresiva por producto (Guided Setup V2)", () => {
   it("setCapacityVariant agrega o actualiza por (equipo, producto), nunca duplica", () => {
-    const equipment = mergeEquipmentMention([], { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 });
+    const equipment = mergeEquipmentMention([], { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 1 });
     const step1 = setCapacityVariant(equipment, "llenadora-1", "Crema", 900, "company_data");
     expect(step1[0].capacityVariants).toEqual([{ productName: "Crema", value: { value: 900, source: "company_data" } }]);
     const step2 = setCapacityVariant(step1, "llenadora-1", "Crema", 950, "company_data");
@@ -343,7 +399,7 @@ describe("Capacity variants — precisión progresiva por producto (Guided Setup
 
   it("removeCapacityVariant quita solo esa fila, nunca afecta la capacidad general del equipo", () => {
     const equipment = setCapacityVariant(
-      mergeEquipmentMention([], { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 1 }),
+      mergeEquipmentMention([], { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 1 }),
       "llenadora-1",
       "Crema",
       900,

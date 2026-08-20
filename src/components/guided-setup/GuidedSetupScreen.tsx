@@ -7,12 +7,15 @@ import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { ProductsStepScreen } from "@/components/guided-setup/GuidedSetupProductsStep";
 import { ProcessesStepScreen } from "@/components/guided-setup/GuidedSetupProcessesStep";
+import { EquipmentStepScreen } from "@/components/guided-setup/GuidedSetupEquipmentStep";
 import {
+  addEquipmentToProcess,
   emptyGuidedSetupV2Answers,
   formatScheduleProposal,
-  mergeEquipmentMention,
+  remapEquipmentProcess,
   removeCapacityVariant as removeCapacityVariantV2,
   removeEquipment,
+  renameEquipmentEntry,
   scheduleMentionToProposal,
   setCapacityVariant as setCapacityVariantV2,
   setEquipmentCapacity,
@@ -25,6 +28,7 @@ import {
 } from "@/lib/model/guided-setup-v2";
 import { INTAKE_STEP_NUMBER, TOTAL_ONBOARDING_STEPS } from "@/lib/model/guided-setup-progress";
 import { buildModelInputsFromGuidedSetupV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
+import { normalizeProcessName } from "@/lib/model/buildModelInputsFromGuidedSetup";
 import { findReferenceCandidates, resolveReferenceValue } from "@/lib/engine/reference-catalog";
 import { REFERENCE_CATALOG } from "@/data/reference-catalog";
 import type { RawModelInput } from "@/lib/model/buildOperationalModel";
@@ -47,7 +51,6 @@ function useAutofillSafeName(): string {
   return `gsv2-${useId().replace(/[:]/g, "")}`;
 }
 
-const KNOWN_PROCESSES: ResourceProcess[] = ["Elaboración", "Envasado", "Codificado"];
 const BATCH_PROCESS: ResourceProcess = "Elaboración"; // única etapa por lote soportada en este vertical slice
 
 type StepV2 = "products" | "processes" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
@@ -79,86 +82,10 @@ export function ResolvedBadge() {
 }
 
 // ---------------------------------------------------------------------------
-// Equipment — categorías fijas (reactor, llenadora, etiquetadora,
-// codificadora, u otra) sobre los 3 procesos conocidos.
-// ---------------------------------------------------------------------------
-function EquipmentStep({ equipment, onAdd, onRemove }: { equipment: EquipmentEntryV2[]; onAdd: (process: ResourceProcess, category: string, name: string, qty: number) => void; onRemove: (id: string) => void }) {
-  const [process, setProcess] = useState<ResourceProcess>("Elaboración");
-  const [category, setCategory] = useState("");
-  const [name, setName] = useState("");
-  const [qty, setQty] = useState("1");
-  const qtyFieldName = useAutofillSafeName();
-
-  function submit() {
-    const c = category.trim();
-    const n = Number(qty);
-    if (!c || !Number.isFinite(n) || n <= 0) return;
-    onAdd(process, c.toLowerCase(), name.trim(), n);
-    setCategory("");
-    setName("");
-    setQty("1");
-  }
-
-  const flow = Array.from(new Set(equipment.map((e) => e.process)));
-
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-text-secondary">¿Qué equipos principales utilizás? (reactor, llenadora, etiquetadora, codificadora, u otro)</p>
-      {flow.length > 0 && (
-        <p className="text-xs text-text-tertiary">
-          Entendí este flujo: <span className="text-accent-bright">{flow.join(" → ")}</span>
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {equipment.map((e) => (
-          <EntryChip key={e.id} label={e.name} sublabel={`${e.process} · ×${e.quantity}`} onRemove={() => onRemove(e.id)} />
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={process}
-          onChange={(e) => setProcess(e.target.value as ResourceProcess)}
-          className="h-11 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none"
-        >
-          {KNOWN_PROCESSES.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-        <input
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          placeholder="Categoría (ej: llenadora)"
-          autoComplete="off"
-          className="h-11 w-40 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-3 text-sm text-text-primary outline-none placeholder:text-text-disabled"
-        />
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nombre (opcional)"
-          autoComplete="off"
-          className="h-11 w-40 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-3 text-sm text-text-primary outline-none placeholder:text-text-disabled"
-        />
-        <input
-          type="number"
-          name={qtyFieldName}
-          min={1}
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          placeholder="Cant."
-          autoComplete="off"
-          className="h-11 w-20 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-3 text-sm text-text-primary outline-none placeholder:text-text-disabled"
-        />
-        <Button variant="ghost" type="button" onClick={submit} className="px-3">
-          <Plus size={16} />
-        </Button>
-      </div>
-      {equipment.length === 0 && <p className="text-xs text-text-disabled">Podés continuar sin equipos si todavía no lo tenés claro.</p>}
-    </div>
-  );
-}
-
+// Nota: el step "Equipos" (Pantalla 5) es un componente dedicado —
+// `GuidedSetupEquipmentStep.tsx`, mismo patrón que Productos/Procesos. Agrupa
+// por `answers.processesRaw` (Pantalla 4 es la fuente de verdad, nunca un
+// catálogo fijo de 3 procesos) — ver `addEquipment`/`renameEquipment` más abajo.
 // ---------------------------------------------------------------------------
 // Reference offer — "No lo sé" -> catálogo, aceptación explícita.
 // ---------------------------------------------------------------------------
@@ -289,7 +216,7 @@ function CapacitiesStep({
       <p className="text-sm text-text-secondary">¿Sabés aproximadamente cuánto produce cada equipo?</p>
       {equipment.length === 0 && <p className="text-xs text-text-disabled">No hay equipos cargados todavía.</p>}
       {equipment.map((e) => {
-        const candidates = findReferenceCandidates(REFERENCE_CATALOG, { category: e.category, process: e.process, parameter: "ratePerHour" });
+        const candidates = findReferenceCandidates(REFERENCE_CATALOG, { category: e.category, process: normalizeProcessName(e.processRaw) ?? undefined, parameter: "ratePerHour" });
         return (
           <div key={e.id} className="rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] p-3">
             <div className="flex items-center justify-between gap-3">
@@ -516,15 +443,26 @@ export function GuidedSetupScreen({
   function renameProcess(i: number, name: string) {
     const v = name.trim();
     if (!v) return;
-    setAnswers((prev) => ({ ...prev, processesRaw: prev.processesRaw.map((p, idx) => (idx === i ? v : p)) }));
+    setAnswers((prev) => {
+      const oldRaw = prev.processesRaw[i];
+      return {
+        ...prev,
+        processesRaw: prev.processesRaw.map((p, idx) => (idx === i ? v : p)),
+        // El equipo ya agrupado bajo el nombre viejo (Pantalla 5) se reasigna al nuevo — nunca queda huérfano.
+        equipment: oldRaw !== undefined ? remapEquipmentProcess(prev.equipment, oldRaw, v) : prev.equipment,
+      };
+    });
   }
 
-  function addEquipment(process: ResourceProcess, category: string, name: string, qty: number) {
+  function addEquipment(processRaw: string, name: string) {
     setAnswers((prev) => ({
       ...prev,
-      equipment: mergeEquipmentMention(prev.equipment, { name: name || null, process, category, quantity: qty }),
+      equipment: addEquipmentToProcess(prev.equipment, processRaw, name),
       resolvedBlocks: { ...prev.resolvedBlocks, equipment: true },
     }));
+  }
+  function renameEquipment(id: string, name: string) {
+    setAnswers((prev) => ({ ...prev, equipment: renameEquipmentEntry(prev.equipment, id, name) }));
   }
   function removeEquipmentEntry(id: string) {
     setAnswers((prev) => ({ ...prev, equipment: removeEquipment(prev.equipment, id) }));
@@ -542,7 +480,7 @@ export function GuidedSetupScreen({
     setAnswers((prev) => ({ ...prev, equipment: removeCapacityVariantV2(prev.equipment, equipmentId, productName) }));
   }
 
-  const batchProcessPresent = answers.equipment.some((e) => e.process === BATCH_PROCESS);
+  const batchProcessPresent = answers.equipment.some((e) => normalizeProcessName(e.processRaw) === BATCH_PROCESS);
   const batchEntry = answers.batchInfo.find((b) => b.process === BATCH_PROCESS) ?? null;
 
   function setBatchField(field: "batchSize" | "hoursPerBatch", value: number, source: "company_data" | "reference_estimate") {
@@ -577,7 +515,6 @@ export function GuidedSetupScreen({
 
   const questionLabel: Partial<Record<StepV2, string>> = {
     products: "Qué fabricás",
-    equipment: "Equipos",
     capacities: "Capacidades",
     batchTimes: "Tiempos de tanda",
     staffing: "Personal",
@@ -627,6 +564,27 @@ export function GuidedSetupScreen({
     );
   }
 
+  if (step === "equipment") {
+    return (
+      <div className="flex flex-1 items-start justify-center px-2 py-8 lg:items-center">
+        <EquipmentStepScreen
+          currentStep={stepIndex + 1 + INTAKE_STEP_NUMBER}
+          totalSteps={TOTAL_ONBOARDING_STEPS}
+          processesRaw={answers.processesRaw}
+          equipment={answers.equipment}
+          onAdd={addEquipment}
+          onRemove={removeEquipmentEntry}
+          onRename={renameEquipment}
+          isResolvedFromFreeform={isResolvedFromFreeform ?? false}
+          canSkip={Boolean(block && !answers.resolvedBlocks[block])}
+          onSkip={() => block && markResolved(block)}
+          goBack={goBack}
+          goNext={goNext}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
@@ -644,13 +602,6 @@ export function GuidedSetupScreen({
         transition={{ duration: 0.35 }}
         className="glass-panel w-full max-w-xl rounded-[var(--radius-lg)] p-6"
       >
-        {step === "equipment" && (
-          <div className="flex flex-col gap-2">
-            {isResolvedFromFreeform && answers.equipment.length > 0 && <ResolvedBadge />}
-            <EquipmentStep equipment={answers.equipment} onAdd={addEquipment} onRemove={removeEquipmentEntry} />
-          </div>
-        )}
-
         {step === "capacities" && (
           <div className="flex flex-col gap-2">
             <CapacitiesStep

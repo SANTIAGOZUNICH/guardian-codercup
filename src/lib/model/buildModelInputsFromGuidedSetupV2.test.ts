@@ -14,14 +14,14 @@ function novaAnswers(): GuidedSetupV2Answers {
   let equipment = emptyGuidedSetupV2Answers().equipment;
   equipment = mergeEquipmentMention(equipment, {
     name: "Reactor 1",
-    process: "Elaboración",
+    processRaw: "Elaboración",
     category: "reactor",
     quantity: 2,
     capacity: null, // no sabe -> se resuelve por referencia
   });
   equipment = mergeEquipmentMention(equipment, {
     name: "Llenadora 1",
-    process: "Envasado",
+    processRaw: "Envasado",
     category: "llenadora",
     quantity: 2,
     capacity: null,
@@ -105,12 +105,31 @@ describe("Pantalla 4 — Procesos: processesRaw gobierna el orden real de la Pro
   });
 });
 
+describe("Pantalla 5 — Equipos: un equipo bajo una etapa no soportada nunca entra al Twin, nunca se descarta en silencio", () => {
+  it("equipo agrupado bajo 'Pesada' (no matchea ningún ResourceProcess) queda fuera de Resources, pero la etapa se reporta en unsupportedProcesses", () => {
+    let equipment = emptyGuidedSetupV2Answers().equipment;
+    equipment = mergeEquipmentMention(equipment, { name: "Reactor 1", processRaw: "Elaboración", category: "reactor", quantity: 1, capacity: null });
+    equipment = mergeEquipmentMention(equipment, { name: "Balanza 1", processRaw: "Pesada", category: "equipo", quantity: 1, capacity: null });
+
+    const answers: GuidedSetupV2Answers = {
+      ...emptyGuidedSetupV2Answers(),
+      productsRaw: ["Crema"],
+      processesRaw: ["Pesada", "Elaboración"],
+      equipment,
+    };
+
+    const { input, completeness } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    expect(input.resources.map((r) => r.name)).toEqual(["Reactor 1"]); // Balanza 1 nunca entra
+    expect(completeness.missing.unsupportedProcesses).toEqual(["Pesada"]);
+  });
+});
+
 describe("Ejemplo final del checkpoint — laboratorio chico, sin saber capacidades, usa referencias", () => {
   it("Capacity/Time/Deadline/Bottleneck AVAILABLE, Material shortages NOT_EVALUATED", () => {
     let equipment = emptyGuidedSetupV2Answers().equipment;
-    equipment = mergeEquipmentMention(equipment, { name: "Reactor 1", process: "Elaboración", category: "reactor", quantity: 2, capacity: { value: 500, unit: "kg" } });
+    equipment = mergeEquipmentMention(equipment, { name: "Reactor 1", processRaw: "Elaboración", category: "reactor", quantity: 2, capacity: { value: 500, unit: "kg" } });
     // Simula "no sé" -> referencia aceptada para la llenadora.
-    equipment = mergeEquipmentMention(equipment, { name: "Llenadora 1", process: "Envasado", category: "llenadora", quantity: 2, capacity: null });
+    equipment = mergeEquipmentMention(equipment, { name: "Llenadora 1", processRaw: "Envasado", category: "llenadora", quantity: 2, capacity: null });
     equipment = equipment.map((e) => (e.category === "llenadora" ? { ...e, capacity: { value: 1600, source: "reference_estimate" as const }, capacityUnit: "u/h" } : e));
 
     const answers: GuidedSetupV2Answers = {

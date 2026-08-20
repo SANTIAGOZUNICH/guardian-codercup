@@ -25,19 +25,33 @@ import { normalizeProcessName } from "./buildModelInputsFromGuidedSetup";
 
 const CAPACITY_UNIT_FALLBACK = "u/h";
 
+/**
+ * Un equipo agrupado bajo una etapa (`processRaw`, Pantalla 5) que no
+ * normaliza a un `ResourceProcess` real (ej. "Pesada", "Empaque") nunca
+ * entra al Twin — mismo principio que V1 (`buildModelInputsFromGuidedSetup.ts`,
+ * `if (!process) continue`): la etapa ya queda honestamente reportada en
+ * `TwinCompleteness.missing.unsupportedProcesses`, este equipo no necesita
+ * un segundo reporte.
+ */
 function buildResources(answers: GuidedSetupV2Answers): Resource[] {
-  return answers.equipment.map((e) => ({
-    id: e.id,
-    name: e.name,
-    type: "Máquina",
-    process: e.process,
-    quantityAvailable: e.quantity,
-    // Placeholder engine-honesto cuando la capacidad es desconocida — 0 nunca
-    // se lee como "el usuario dijo que es cero" (mismo principio que V1): la
-    // distinción real vive en `TwinCompleteness.missing` / `OperationSummaryV2`.
-    capacity: e.capacity?.value ?? 0,
-    capacityUnit: e.capacity ? e.capacityUnit || CAPACITY_UNIT_FALLBACK : "",
-  }));
+  const resources: Resource[] = [];
+  for (const e of answers.equipment) {
+    const process = normalizeProcessName(e.processRaw);
+    if (!process) continue;
+    resources.push({
+      id: e.id,
+      name: e.name,
+      type: "Máquina",
+      process,
+      quantityAvailable: e.quantity,
+      // Placeholder engine-honesto cuando la capacidad es desconocida — 0 nunca
+      // se lee como "el usuario dijo que es cero" (mismo principio que V1): la
+      // distinción real vive en `TwinCompleteness.missing` / `OperationSummaryV2`.
+      capacity: e.capacity?.value ?? 0,
+      capacityUnit: e.capacity ? e.capacityUnit || CAPACITY_UNIT_FALLBACK : "",
+    });
+  }
+  return resources;
 }
 
 /**
@@ -70,7 +84,7 @@ function buildRateVariantsForProcess(
   presentations: Presentation[],
 ): RateVariant[] {
   const variants: RateVariant[] = [];
-  for (const equipment of answers.equipment.filter((e) => e.process === process)) {
+  for (const equipment of answers.equipment.filter((e) => normalizeProcessName(e.processRaw) === process)) {
     for (const variant of equipment.capacityVariants) {
       const productId = productIdsByName.get(variant.productName);
       if (!productId) continue; // nunca referencia un producto que ya no existe en la entrevista
@@ -98,7 +112,9 @@ function buildRateVariantsForProcess(
  * quedó vacía o sin tocar — ej. flujo 100% freeform).
  */
 function resolveProcessOrder(answers: GuidedSetupV2Answers): ResourceProcess[] {
-  const equipmentProcesses = new Set(answers.equipment.map((e) => e.process));
+  const equipmentProcesses = new Set(
+    answers.equipment.map((e) => normalizeProcessName(e.processRaw)).filter((p): p is ResourceProcess => p !== null),
+  );
   const seen = new Set<ResourceProcess>();
   const declaredOrder: ResourceProcess[] = [];
   for (const raw of answers.processesRaw) {
@@ -197,7 +213,9 @@ export function computeOperationSummary(answers: GuidedSetupV2Answers): Operatio
     else referenceEstimateCount++;
   }
 
-  const recognizedProcesses = new Set(answers.equipment.map((e) => e.process));
+  const recognizedProcesses = new Set(
+    answers.equipment.map((e) => normalizeProcessName(e.processRaw)).filter((p): p is ResourceProcess => p !== null),
+  );
 
   return {
     productsCount: answers.productsRaw.length,
@@ -262,7 +280,7 @@ export function buildModelInputsFromGuidedSetupV2(
 
   const completeness: TwinCompleteness = {
     known: {
-      processes: new Set(answers.equipment.map((e) => e.process)).size,
+      processes: new Set(answers.equipment.map((e) => normalizeProcessName(e.processRaw)).filter((p): p is ResourceProcess => p !== null)).size,
       resources: answers.equipment.length,
       capacities: answers.equipment.length - resourceCapacitiesMissing.length,
       products: productNames.size,

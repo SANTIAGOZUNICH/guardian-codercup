@@ -21,10 +21,19 @@ export type GuidedSetupBlock = "products" | "presentations" | "flow" | "equipmen
 export const GUIDED_SETUP_BLOCKS: GuidedSetupBlock[] = ["products", "presentations", "flow", "equipment", "capacities", "batchTimes", "staffing", "schedule"];
 
 export interface EquipmentEntryV2 {
-  /** slugify(name) — estable, usado para merge-by-name y como key de UI. */
+  /** slugify(name) — estable, usado para merge-by-name y como key de UI. Nunca se recalcula al renombrar (ver renameEquipmentEntry). */
   id: string;
   name: string;
-  process: ResourceProcess;
+  /**
+   * Etapa EXACTA de `GuidedSetupV2Answers.processesRaw` bajo la que el
+   * usuario agrupó este equipo en Pantalla 5 (Equipos) — texto libre, fuente
+   * de verdad para agrupar/mostrar, igual principio que Pantalla 4. Nunca se
+   * fuerza a un `ResourceProcess` acá: `normalizeProcessName(processRaw)` se
+   * resuelve recién al construir el Twin (`buildModelInputsFromGuidedSetupV2.ts`)
+   * — un equipo bajo una etapa no soportada simplemente no entra al Twin,
+   * mismo principio que `TwinCompleteness.missing.unsupportedProcesses`.
+   */
+  processRaw: string;
   /** Categoría libre (reactor, llenadora, etiquetadora, codificadora, ...) — matchea `ReferenceCatalogEntry.category` cuando es posible. */
   category: string;
   quantity: number;
@@ -219,7 +228,8 @@ export function suggestedSchedule(): Omit<ScheduleAnswerV2, "confirmed"> {
 export interface EquipmentMention {
   /** Nombre específico si se dio, o null si solo se describió la categoría (ej. "una llenadora"). */
   name: string | null;
-  process: ResourceProcess;
+  /** Etapa exacta de `processesRaw` (o el `ResourceProcess` canónico cuando viene de NLU) — ver `EquipmentEntryV2.processRaw`. */
+  processRaw: string;
   category: string;
   quantity: number;
   capacity?: { value: number; unit: string } | null;
@@ -268,7 +278,7 @@ export function mergeEquipmentMention(existing: EquipmentEntryV2[], mention: Equ
     next[matchIndex] = {
       ...current,
       quantity: mention.quantity > 0 ? mention.quantity : current.quantity,
-      process: mention.process ?? current.process,
+      processRaw: mention.processRaw || current.processRaw,
       category: mention.category || current.category,
       capacity: capacity ?? current.capacity,
       capacityUnit: mention.capacity?.unit ?? current.capacityUnit,
@@ -280,7 +290,7 @@ export function mergeEquipmentMention(existing: EquipmentEntryV2[], mention: Equ
   const entry: EquipmentEntryV2 = {
     id: normalizedKey(name),
     name,
-    process: mention.process,
+    processRaw: mention.processRaw,
     category: mention.category,
     quantity: mention.quantity > 0 ? mention.quantity : 1,
     capacity,
@@ -309,7 +319,7 @@ export function equipmentMentionsFromNluEntities(entities: NluEntities): Equipme
     if (!item.category || !item.process) continue;
     out.push({
       name: item.name,
-      process: item.process,
+      processRaw: item.process,
       category: item.category.trim().toLowerCase(),
       quantity: item.quantity ?? 1,
       capacity: item.capacityValue !== null ? { value: item.capacityValue, unit: item.capacityUnit ?? "" } : null,
@@ -321,6 +331,46 @@ export function equipmentMentionsFromNluEntities(entities: NluEntities): Equipme
 
 export function removeEquipment(existing: EquipmentEntryV2[], id: string): EquipmentEntryV2[] {
   return existing.filter((e) => e.id !== id);
+}
+
+/**
+ * Categoría best-effort por keyword sobre el NOMBRE del equipo — nunca un
+ * campo que el usuario tenga que llenar en Pantalla 5 (la pregunta ahí es
+ * solo "¿qué equipos tenés?", ver GuidedSetupEquipmentStep.tsx). Alimenta
+ * `findReferenceCandidates()` en el step de Capacidades (siguiente pantalla)
+ * para que "No lo sé" siga pudiendo ofrecer una referencia; si nada matchea,
+ * "equipo" es un category genérico honesto — nunca fuerza reactor/llenadora.
+ */
+const CATEGORY_KEYWORDS: { pattern: RegExp; category: string }[] = [
+  { pattern: /reactor|mezcla|homogeneiz/i, category: "reactor" },
+  { pattern: /llenad|dosific|pouch/i, category: "llenadora" },
+  { pattern: /etiquet/i, category: "etiquetadora" },
+  { pattern: /codific|marc|impres/i, category: "codificadora" },
+];
+function guessEquipmentCategory(name: string): string {
+  for (const { pattern, category } of CATEGORY_KEYWORDS) {
+    if (pattern.test(name)) return category;
+  }
+  return "equipo";
+}
+
+/** Alta rápida de Pantalla 5 — solo nombre + etapa, sin pedir categoría/capacidad (ver docstring de guessEquipmentCategory). */
+export function addEquipmentToProcess(existing: EquipmentEntryV2[], processRaw: string, name: string): EquipmentEntryV2[] {
+  const trimmed = name.trim();
+  if (!trimmed) return existing;
+  return mergeEquipmentMention(existing, { name: trimmed, processRaw, category: guessEquipmentCategory(trimmed), quantity: 1 });
+}
+
+/** Renombra un equipo por id — el id (slug del nombre original) queda estable, nunca se recalcula. */
+export function renameEquipmentEntry(existing: EquipmentEntryV2[], id: string, name: string): EquipmentEntryV2[] {
+  const trimmed = name.trim();
+  if (!trimmed) return existing;
+  return existing.map((e) => (e.id === id ? { ...e, name: trimmed } : e));
+}
+
+/** Al renombrar una etapa en Pantalla 4, reasigna el equipo ya agrupado bajo el nombre viejo — preserva processId/processName → equipment[] a través de un rename. */
+export function remapEquipmentProcess(existing: EquipmentEntryV2[], oldRaw: string, newRaw: string): EquipmentEntryV2[] {
+  return existing.map((e) => (e.processRaw === oldRaw ? { ...e, processRaw: newRaw } : e));
 }
 
 /**
