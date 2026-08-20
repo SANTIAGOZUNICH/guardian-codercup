@@ -35,10 +35,10 @@ export function PlanCard({
       <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-border-subtle bg-white/[0.015] p-5">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-text-primary">Plan {view.rankLabel}</span>
-          {view.status === "fully_viable" || view.status === "conditionally_viable" ? (
-            <Check size={14} className="text-risk-low" />
-          ) : (
+          {view.status === "deadline_missed" || view.status === "infeasible" ? (
             <X size={14} className="text-risk-high" />
+          ) : (
+            <Check size={14} className="text-risk-low" />
           )}
         </div>
         <p className="text-sm text-text-secondary">{view.completionLabel}</p>
@@ -55,24 +55,24 @@ export function PlanCard({
     );
   }
 
-  const accentBorder = view.status === "fully_viable" ? "border-accent/40" : "border-risk-medium/40";
-  const accentGlow =
-    view.status === "fully_viable" ? "shadow-[0_0_60px_-16px_var(--accent-glow)]" : "shadow-[0_0_60px_-20px_rgba(224,166,64,0.35)]";
-  const accentBg =
-    view.status === "fully_viable"
-      ? "bg-[linear-gradient(160deg,var(--accent-soft),transparent_55%)]"
-      : "bg-[linear-gradient(160deg,var(--risk-medium-soft),transparent_55%)]";
+  // "fully_viable" y "operationally_viable" comparten el mismo tono de confianza: ambos cumplen
+  // capacidad+deadline realmente — la única diferencia es si los materiales están confirmados o
+  // simplemente no evaluados (nunca mostrado como un problema, ver Materials Simulation Rule).
+  const isConfident = view.status === "fully_viable" || view.status === "operationally_viable";
+  const accentBorder = isConfident ? "border-accent/40" : "border-risk-medium/40";
+  const accentGlow = isConfident ? "shadow-[0_0_60px_-16px_var(--accent-glow)]" : "shadow-[0_0_60px_-20px_rgba(224,166,64,0.35)]";
+  const accentBg = isConfident
+    ? "bg-[linear-gradient(160deg,var(--accent-soft),transparent_55%)]"
+    : "bg-[linear-gradient(160deg,var(--risk-medium-soft),transparent_55%)]";
 
   return (
     <div className={cn("rounded-[var(--radius-lg)] border-2 p-7", accentBorder, accentGlow, accentBg)}>
       <div className="mb-6 flex items-center justify-between">
         <p className="text-lg font-semibold tracking-tight text-text-primary">
           Plan {view.rankLabel}{" "}
-          <span className={view.status === "fully_viable" ? "text-accent-bright" : "text-risk-medium"}>
-            — {view.badgeLabel}
-          </span>
+          <span className={isConfident ? "text-accent-bright" : "text-risk-medium"}>— {view.badgeLabel}</span>
         </p>
-        {view.status === "fully_viable" ? (
+        {isConfident ? (
           <span className="flex items-center gap-1 rounded-full border border-risk-low/40 bg-risk-low-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-risk-low">
             <Check size={11} /> Cumple el deadline
           </span>
@@ -90,7 +90,10 @@ export function PlanCard({
       <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
         <Fact label="Finalización" value={view.completionLabel} />
         <Fact label="Deadline" value={view.deadlineLabel} />
-        <Fact label="Materiales" value={view.materialsAvailable ? "Disponibles" : "Faltan"} ok={view.materialsAvailable} />
+        {/* Materials Simulation Rule: ausencia de datos (not_evaluated) nunca se muestra — ni como "Faltan", ni de ninguna otra forma. */}
+        {view.materialsStatus !== "not_evaluated" && (
+          <Fact label="Materiales" value={view.materialsStatus === "pass" ? "Disponibles" : "Faltan"} ok={view.materialsStatus === "pass"} />
+        )}
         <Fact label="Recursos" value={view.resourcesLabel} />
         <Fact label="Cuello de botella" value={`${view.bottleneckProcess} · ${view.bottleneckHoursLabel}`} />
       </div>
@@ -108,7 +111,7 @@ export function PlanCard({
           onClick={onChoose}
           className={cn(
             "flex-1 rounded-[var(--radius-md)] py-3 text-sm font-medium text-white transition-opacity hover:opacity-90",
-            view.status === "fully_viable" ? "bg-accent" : "bg-risk-medium",
+            isConfident ? "bg-accent" : "bg-risk-medium",
           )}
         >
           Elegir este plan

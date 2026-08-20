@@ -3,6 +3,7 @@ import type {
   Goal,
   GoalOutcomeKind,
   GoalSimulationResult,
+  MaterialFeasibility,
   OperationsCalendar,
   PlanStatus,
 } from "@/lib/types";
@@ -50,7 +51,8 @@ function materialBlockerLabel(scenario: EvaluatedScenario): string | null {
 }
 
 export interface BaselineView {
-  materialsAvailable: boolean;
+  /** Tri-state real — "not_evaluated" nunca se colapsa a "faltan" (Checkpoint Materials Simulation Rule): la UI decide no mostrar nada de materiales en ese caso, nunca un ❌ fabricado. */
+  materialsStatus: MaterialFeasibility;
   capacityFeasible: boolean;
   deadlineMet: boolean;
   completionLabel: string;
@@ -61,14 +63,7 @@ export interface BaselineView {
 
 export function buildBaselineView(baseline: EvaluatedScenario): BaselineView {
   return {
-    // Checkpoint 9B.1: `materialsAvailable` sigue siendo boolean acá para no
-    // tocar la UI existente todavía (BaselineCard.tsx) — colapsa "fail" y
-    // "not_evaluated" en el mismo `false`, nunca en `true` salvo "pass"
-    // confirmado. La distinción visual entre "fail" y "not_evaluated" queda
-    // para el checkpoint de Command Center/Ask Guardian (9B.6/9B.7); hoy es
-    // inalcanzable en la práctica porque todo profile del demo declara BOM +
-    // inventario completos.
-    materialsAvailable: baseline.result.materialsFeasible === "pass",
+    materialsStatus: baseline.result.materialsFeasible,
     capacityFeasible: baseline.result.capacityFeasible,
     deadlineMet: baseline.result.deadlineMet,
     completionLabel: baseline.result.completionAt ? formatDisplayDate(baseline.result.completionAt) : "No se puede estimar",
@@ -84,7 +79,8 @@ export interface PlanCardView {
   status: PlanStatus;
   completionLabel: string;
   deadlineLabel: string;
-  materialsAvailable: boolean;
+  /** Tri-state real — ver comentario en `BaselineView.materialsStatus`. */
+  materialsStatus: MaterialFeasibility;
   materialBlockerLabel: string | null;
   resourcesLabel: string;
   bottleneckProcess: string;
@@ -94,10 +90,11 @@ export interface PlanCardView {
 
 const BADGE_BY_KIND: Record<GoalOutcomeKind, string | null> = {
   fully_viable: "Recomendado",
-  // Checkpoint 9B.1: distinto de "Recomendado" a propósito — nunca sugiere
-  // que los materiales fueron confirmados. Hoy inalcanzable en la práctica
-  // (todo profile del demo declara BOM+inventario completos); se activa
-  // cuando 9B.2 permita productos sin materiales conectados.
+  // Distinto de "Recomendado" a propósito — nunca sugiere que los materiales
+  // fueron confirmados. Nunca menciona la palabra "material" (Materials
+  // Simulation Rule): ausencia de datos de materia prima nunca se comunica
+  // como un problema — simplemente no se afirma "Recomendado" con la misma
+  // confianza que cuando sí están confirmados.
   operationally_viable: "Viable operacionalmente",
   conditionally_viable: "Mejor alternativa condicional",
   deadline_missed: "Finalización más temprana",
@@ -129,8 +126,7 @@ export function buildPlanCardView(
     status: scenario.status,
     completionLabel: scenario.result.completionAt ? formatDisplayDate(scenario.result.completionAt) : "No se puede estimar",
     deadlineLabel,
-    // Ver comentario en buildBaselineView — mismo colapso deliberado a boolean.
-    materialsAvailable: scenario.result.materialsFeasible === "pass",
+    materialsStatus: scenario.result.materialsFeasible,
     materialBlockerLabel: materialBlockerLabel(scenario),
     resourcesLabel: scenario.config.label,
     bottleneckProcess: scenario.result.bottleneck?.process ?? "—",
@@ -157,7 +153,8 @@ export function buildContextNote(scenarios: EvaluatedScenario[]): string | null 
 
 const HEADLINE_BY_KIND: Record<GoalOutcomeKind, string> = {
   fully_viable: "Planes recomendados",
-  operationally_viable: "Viable operacionalmente — materiales no evaluados",
+  // Materials Simulation Rule: ausencia de datos de materiales nunca se menciona en el resultado principal — ver sección 10/26 del Master Context.
+  operationally_viable: "Planes disponibles",
   conditionally_viable: "No encontré un plan totalmente viable",
   deadline_missed: "Ningún plan cumple el deadline actual",
   infeasible: "No encontré una configuración viable",
@@ -181,7 +178,7 @@ export function buildOutcomeGuardianMessage(result: GoalSimulationResult, disrup
     case "fully_viable":
       return `Encontré una configuración que cumple el objetivo completo: materiales, capacidad y el deadline para ${goal.quantity.toLocaleString("es-AR")} ${goal.productName}.`;
     case "operationally_viable":
-      return `Encontré una configuración que cumple capacidad y deadline para ${goal.quantity.toLocaleString("es-AR")} ${goal.productName}, pero todavía no tengo información de materiales para confirmar disponibilidad.`;
+      return `Encontré una configuración que cumple capacidad y deadline para ${goal.quantity.toLocaleString("es-AR")} ${goal.productName}.`;
     case "conditionally_viable": {
       const blocker = candidates[0] ? materialBlockerLabel(candidates[0]) : null;
       return blocker
@@ -218,8 +215,7 @@ export interface WhyThisPlanView {
 
 const NARRATIVE_BY_KIND: Record<GoalOutcomeKind, string> = {
   fully_viable: "Guardian recomienda esta configuración porque cumple todas las restricciones de tu modelo operacional.",
-  operationally_viable:
-    "Esta configuración cumple los requisitos de capacidad y deadline, pero todavía no se evaluó la disponibilidad de materiales.",
+  operationally_viable: "Esta configuración cumple los requisitos de capacidad y deadline de tu modelo operacional.",
   conditionally_viable: "Esta es la configuración más sólida si se resuelve la restricción de materiales.",
   deadline_missed: "Ninguna configuración disponible cumple el deadline pedido. Esta es la finalización más temprana posible.",
   infeasible: "Ninguna configuración es físicamente ejecutable con los recursos actualmente disponibles para este objetivo.",

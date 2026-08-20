@@ -344,11 +344,10 @@ function LastSimulationStrip({ data }: { data: LastSimulation }) {
       <div className="hidden items-center gap-5 md:flex">
         <InlineCheck ok={data.capacityFeasible} label="Capacidad" value={data.capacityFeasible ? "OK" : "FALTA"} />
         <InlineCheck ok={data.deadlineMet} label="Fecha" value={data.deadlineMet ? "OK" : "FALTA"} />
-        <InlineCheck
-          ok={data.materialsFeasible === "not_evaluated" ? null : data.materialsFeasible === "pass"}
-          label="Materiales"
-          value={MATERIALS_LABEL[data.materialsFeasible]}
-        />
+        {/* Materials Simulation Rule: ausencia de datos (not_evaluated) nunca se muestra, ni siquiera en tono neutral. */}
+        {data.materialsFeasible !== "not_evaluated" && (
+          <InlineCheck ok={data.materialsFeasible === "pass"} label="Materiales" value={MATERIALS_LABEL[data.materialsFeasible]} />
+        )}
       </div>
       <Button variant="ghost" className="shrink-0">
         Ver resultados

@@ -1,7 +1,8 @@
-import type { Company, InventoryItem, Material, Presentation, ProductionProfile, ProductionReferenceStep, RateVariant, Resource, TwinCompleteness } from "@/lib/types";
+import type { Company, InventoryItem, Material, Presentation, ProductionProfile, ProductionReferenceStep, RateVariant, Resource, ResourceProcess, TwinCompleteness } from "@/lib/types";
 import { slugify } from "@/lib/parsing/normalize";
 import type { RawModelInput } from "./buildOperationalModel";
 import { buildPresentationsFromDrafts, type GuidedSetupV2Answers } from "./guided-setup-v2";
+import { normalizeProcessName } from "./buildModelInputsFromGuidedSetup";
 
 /**
  * ============================================================================
@@ -86,6 +87,31 @@ function buildRateVariantsForProcess(
   return variants;
 }
 
+/**
+ * Orden real del flujo: prioriza lo que el usuario declaró explícitamente en
+ * Pantalla 4 (Procesos) — `processesRaw`, normalizado vía `normalizeProcessName`
+ * (mismo matching por keyword que Guided Setup V1, nunca fuerza un match) —
+ * y solo entre los procesos que además tienen algún equipo real declarado
+ * (nunca crea un step sin recursos). Cualquier proceso con equipo pero sin
+ * declaración explícita de orden cae al final, en el orden en que se cargó
+ * el equipo (comportamiento histórico, cero regresión cuando Pantalla 4
+ * quedó vacía o sin tocar — ej. flujo 100% freeform).
+ */
+function resolveProcessOrder(answers: GuidedSetupV2Answers): ResourceProcess[] {
+  const equipmentProcesses = new Set(answers.equipment.map((e) => e.process));
+  const seen = new Set<ResourceProcess>();
+  const declaredOrder: ResourceProcess[] = [];
+  for (const raw of answers.processesRaw) {
+    const normalized = normalizeProcessName(raw);
+    if (normalized && equipmentProcesses.has(normalized) && !seen.has(normalized)) {
+      seen.add(normalized);
+      declaredOrder.push(normalized);
+    }
+  }
+  const remaining = Array.from(equipmentProcesses).filter((p) => !seen.has(p));
+  return [...declaredOrder, ...remaining];
+}
+
 function buildSharedProductionReference(
   answers: GuidedSetupV2Answers,
   productIdsByName: Map<string, string>,
@@ -93,9 +119,8 @@ function buildSharedProductionReference(
 ): ProductionReferenceStep[] {
   // Un step por proceso REALMENTE reconocido (los mismos que ya tienen algún
   // equipo declarado) — nunca crea un step para un proceso sin ningún
-  // recurso, ni inventa un orden que el usuario no haya dado a través de los
-  // equipos que efectivamente cargó.
-  const recognizedProcessesInOrder = Array.from(new Set(answers.equipment.map((e) => e.process)));
+  // recurso. El ORDEN prioriza lo declarado en Pantalla 4 (ver resolveProcessOrder).
+  const recognizedProcessesInOrder = resolveProcessOrder(answers);
   const steps: ProductionReferenceStep[] = [];
   for (const process of recognizedProcessesInOrder) {
     const batch = answers.batchInfo.find((b) => b.process === process);
@@ -220,6 +245,9 @@ export function buildModelInputsFromGuidedSetupV2(
     : [];
 
   const resourceCapacitiesMissing = answers.equipment.filter((e) => !e.capacity).map((e) => e.name);
+  // Honesto: un proceso declarado en Pantalla 4 que no matchea ningún ResourceProcess soportado
+  // (Elaboración/Envasado/Codificado) se reporta tal cual, nunca se descarta en silencio.
+  const unsupportedProcesses = answers.processesRaw.filter((raw) => normalizeProcessName(raw) === null);
 
   const input: RawModelInput = {
     company,
@@ -242,7 +270,7 @@ export function buildModelInputsFromGuidedSetupV2(
     missing: {
       resourceCapacities: resourceCapacitiesMissing,
       missingInventory: !answers.materialsIncluded,
-      unsupportedProcesses: [],
+      unsupportedProcesses,
       productsWithoutProfile: [],
     },
   };

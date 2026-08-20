@@ -76,6 +76,35 @@ describe("buildModelInputsFromGuidedSetupV2 — Production Reference real por pr
   });
 });
 
+describe("Pantalla 4 — Procesos: processesRaw gobierna el orden real de la Production Reference", () => {
+  it("orden invertido en processesRaw (Envasado antes que Elaboración) se refleja en el orden de los steps", () => {
+    const answers: GuidedSetupV2Answers = { ...novaAnswers(), processesRaw: ["Envasado", "Elaboración"] };
+    const { input } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    const model = buildOperationalModel(input);
+    expect(model.profiles[0].productionReference.map((s) => s.process)).toEqual(["Envasado", "Elaboración"]);
+  });
+
+  it("processesRaw vacío cae al orden histórico por equipo — cero regresión para el flujo 100% freeform", () => {
+    const answers: GuidedSetupV2Answers = { ...novaAnswers(), processesRaw: [] };
+    const { input } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    const model = buildOperationalModel(input);
+    expect(model.profiles[0].productionReference.map((s) => s.process)).toEqual(["Elaboración", "Envasado"]);
+  });
+
+  it("un proceso libre que no matchea ningún ResourceProcess soportado se reporta honestamente, nunca se descarta en silencio", () => {
+    const answers: GuidedSetupV2Answers = { ...novaAnswers(), processesRaw: ["Elaboración", "Pasteurización", "Envasado"] };
+    const { completeness } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    expect(completeness.missing.unsupportedProcesses).toEqual(["Pasteurización"]);
+  });
+
+  it("un proceso declarado sin ningún equipo cargado no genera un step vacío", () => {
+    const answers: GuidedSetupV2Answers = { ...novaAnswers(), processesRaw: ["Elaboración", "Codificado", "Envasado"] };
+    const { input } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    const model = buildOperationalModel(input);
+    expect(model.profiles[0].productionReference.map((s) => s.process)).toEqual(["Elaboración", "Envasado"]);
+  });
+});
+
 describe("Ejemplo final del checkpoint — laboratorio chico, sin saber capacidades, usa referencias", () => {
   it("Capacity/Time/Deadline/Bottleneck AVAILABLE, Material shortages NOT_EVALUATED", () => {
     let equipment = emptyGuidedSetupV2Answers().equipment;

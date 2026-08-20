@@ -70,10 +70,10 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para B
 
   it("buildBaselineView: refleja el faltante real de materiales en la config actual", () => {
     const baseline = buildBaselineView(result.baseline);
-    expect(baseline.materialsAvailable).toBe(result.baseline.result.materialsFeasible === "pass");
+    expect(baseline.materialsStatus).toBe(result.baseline.result.materialsFeasible);
     expect(baseline.capacityFeasible).toBe(result.baseline.result.capacityFeasible);
     expect(baseline.deadlineMet).toBe(result.baseline.result.deadlineMet);
-    if (!baseline.materialsAvailable) {
+    if (baseline.materialsStatus === "fail") {
       expect(baseline.materialBlockerLabel).not.toBeNull();
     }
   });
@@ -86,7 +86,7 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para B
     expect(card.badgeLabel).toBe("Mejor alternativa condicional");
     expect(card.badgeLabel).not.toBe("Recomendado");
     expect(card.status).toBe("conditionally_viable");
-    expect(card.materialsAvailable).toBe(false); // el faltante de MP-003 es real e independiente de la config elegida
+    expect(card.materialsStatus).toBe("fail"); // el faltante de MP-003 es real e independiente de la config elegida
     expect(card.materialBlockerLabel).not.toBeNull();
     expect(card.resourcesLabel.length).toBeGreaterThan(0);
   });
@@ -123,5 +123,23 @@ describe("resolveChosenPlanPrefix — Command Center 'Última simulación' nunca
     expect(resolveChosenPlanPrefix("conditionally_viable")).toBe("Mejor alternativa condicional");
     expect(resolveChosenPlanPrefix("deadline_missed")).toBe("Finalización más temprana");
     expect(resolveChosenPlanPrefix("infeasible")).toBe("Seleccionado");
+  });
+});
+
+describe("Materials Simulation Rule — ausencia de datos de materiales nunca se menciona en el resultado principal", () => {
+  it("buildOutcomeHeadline('operationally_viable') nunca menciona materiales", () => {
+    const headline = buildOutcomeHeadline("operationally_viable");
+    expect(headline).not.toMatch(/materia/i);
+    expect(headline.length).toBeGreaterThan(0);
+  });
+
+  it("buildOutcomeGuardianMessage: caso operationally_viable reporta capacidad/deadline, nunca la ausencia de materiales", () => {
+    const goal = { intent: "production_goal", productId: "shampoo", productName: "Shampoo", quantity: 2000, deadline: "2026-08-21", rawText: "" } as unknown as Parameters<typeof buildOutcomeGuardianMessage>[0]["goal"];
+    const result = { goal, outcome: { kind: "operationally_viable", candidates: [] } } as unknown as Parameters<typeof buildOutcomeGuardianMessage>[0];
+    const message = buildOutcomeGuardianMessage(result);
+    expect(message).toMatch(/2\.000/);
+    expect(message).toMatch(/Shampoo/);
+    expect(message).not.toMatch(/materia/i);
+    expect(message).not.toMatch(/no tengo información|todavía no/i);
   });
 });

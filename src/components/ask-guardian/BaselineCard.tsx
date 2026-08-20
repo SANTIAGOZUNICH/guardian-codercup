@@ -15,10 +15,13 @@ export function BaselineCard({ view }: { view: BaselineView }) {
         Configuración actual
       </p>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-        <div className="flex items-center gap-2">
-          <Mark ok={view.materialsAvailable} />
-          <span className="text-sm text-text-secondary">Materiales</span>
-        </div>
+        {/* Materials Simulation Rule: ausencia de datos (not_evaluated) nunca se muestra acá. */}
+        {view.materialsStatus !== "not_evaluated" && (
+          <div className="flex items-center gap-2">
+            <Mark ok={view.materialsStatus === "pass"} />
+            <span className="text-sm text-text-secondary">Materiales</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <Mark ok={view.capacityFeasible} />
           <span className="text-sm text-text-secondary">Capacidad</span>
