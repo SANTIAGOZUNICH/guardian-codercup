@@ -76,6 +76,13 @@ describe("findReferenceCandidates", () => {
   it("query vacía devuelve todo el catálogo pasado, tal cual", () => {
     expect(findReferenceCandidates(REFERENCE_CATALOG, {})).toHaveLength(REFERENCE_CATALOG.length);
   });
+
+  it("Pantalla 6 — reactor + Elaboración + batchSize matchea la referencia real en kg (reactor-batch-size-kg)", () => {
+    const candidates = findReferenceCandidates(REFERENCE_CATALOG, { category: "reactor", process: "Elaboración", parameter: "batchSize" });
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].id).toBe("reactor-batch-size-kg");
+    expect(candidates[0].batchUnit).toBe("kg");
+  });
 });
 
 describe("Test 5 — reference disponible pero no aceptada NO entra al modelo", () => {

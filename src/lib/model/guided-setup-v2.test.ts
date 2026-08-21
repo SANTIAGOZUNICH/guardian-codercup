@@ -294,6 +294,11 @@ describe("mergeBatchInfoMention — un solo step por proceso, siempre company_da
     expect(second[0].batchSize).toEqual({ value: 500, source: "company_data" }); // se conserva
     expect(second[0].hoursPerBatch).toEqual({ value: 3, source: "company_data" }); // se agrega
   });
+
+  it("Pantalla 6 — sin batchUnit declarado, una entrada nueva por defecto queda en 'kg' (mismo default que el catálogo reactor-batch-size-kg y que setBatchField en Guided Setup NOVICE)", () => {
+    const result = mergeBatchInfoMention([], { process: "Elaboración", batchAmount: 300, batchUnit: null, hoursPerBatch: null });
+    expect(result[0].batchUnit).toBe("kg");
+  });
 });
 
 describe("parseWorkingDaysText / scheduleMentionToProposal — nunca asume un horario que el usuario no dijo", () => {

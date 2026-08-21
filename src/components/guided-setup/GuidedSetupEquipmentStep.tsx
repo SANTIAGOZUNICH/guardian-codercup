@@ -42,7 +42,7 @@ import type { EquipmentEntryV2 } from "@/lib/model/guided-setup-v2";
  * brief del checkpoint). Devuelve el elemento directamente en vez de una
  * referencia de componente para no violar react-hooks/static-components.
  */
-function ProcessIcon({ label, size }: { label: string; size: number }) {
+export function ProcessIcon({ label, size }: { label: string; size: number }) {
   if (/elaborac|mezcla|homogeneiz/i.test(label)) return <FlaskConical size={size} />;
   if (/calidad|control/i.test(label)) return <ShieldCheck size={size} />;
   if (/envas|llenad/i.test(label)) return <Package size={size} />;

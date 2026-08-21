@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { ProductsStepScreen } from "@/components/guided-setup/GuidedSetupProductsStep";
 import { ProcessesStepScreen } from "@/components/guided-setup/GuidedSetupProcessesStep";
 import { EquipmentStepScreen } from "@/components/guided-setup/GuidedSetupEquipmentStep";
+import { CapacitiesStepScreen } from "@/components/guided-setup/GuidedSetupCapacitiesStep";
 import {
   addEquipmentToProcess,
   emptyGuidedSetupV2Answers,
@@ -47,11 +48,11 @@ import type { ReferenceCatalogEntry, ResourceProcess, TwinCompleteness } from "@
  * cero rediseño visual en este checkpoint.
  */
 
-function useAutofillSafeName(): string {
+export function useAutofillSafeName(): string {
   return `gsv2-${useId().replace(/[:]/g, "")}`;
 }
 
-const BATCH_PROCESS: ResourceProcess = "Elaboración"; // única etapa por lote soportada en este vertical slice
+export const BATCH_PROCESS: ResourceProcess = "Elaboración"; // única etapa por lote soportada en este vertical slice
 
 type StepV2 = "products" | "processes" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
 const STEPS_V2: StepV2[] = ["products", "processes", "equipment", "capacities", "batchTimes", "staffing", "schedule", "materials", "review"];
@@ -89,7 +90,7 @@ export function ResolvedBadge() {
 // ---------------------------------------------------------------------------
 // Reference offer — "No lo sé" -> catálogo, aceptación explícita.
 // ---------------------------------------------------------------------------
-function ReferenceOffer({ candidate, onAccept }: { candidate: ReferenceCatalogEntry; onAccept: (value: number) => void }) {
+export function ReferenceOffer({ candidate, onAccept }: { candidate: ReferenceCatalogEntry; onAccept: (value: number) => void }) {
   const value = resolveReferenceValue(candidate, "midpoint");
   return (
     <div className="mt-2 flex flex-col gap-2 rounded-[var(--radius-sm)] border border-accent/25 bg-accent-soft/40 p-3">
@@ -116,7 +117,7 @@ function ReferenceOffer({ candidate, onAccept }: { candidate: ReferenceCatalogEn
  * específicos, nunca de entrada (progressive disclosure). "No" o no
  * responder nunca bloquea nada: la velocidad general ya es un dato válido.
  */
-function CapacityVariantsBlock({
+export function CapacityVariantsBlock({
   equipment,
   productsRaw,
   onSetVariant,
@@ -136,7 +137,7 @@ function CapacityVariantsBlock({
 
   if (!asked && equipment.capacityVariants.length === 0) {
     return (
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
         <p className="text-xs text-text-tertiary">¿Esa velocidad cambia mucho según el producto o la presentación?</p>
         <Button variant="ghost" type="button" onClick={() => setAsked(true)}>
           Sí, agregar valores específicos
@@ -147,7 +148,7 @@ function CapacityVariantsBlock({
   }
 
   return (
-    <div className="mt-2 flex flex-col gap-2 rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] p-2">
+    <div className="mt-1.5 flex flex-col gap-2 rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] p-2">
       <div className="flex flex-wrap gap-2">
         {equipment.capacityVariants.map((v) => (
           <EntryChip
@@ -195,83 +196,11 @@ function CapacityVariantsBlock({
   );
 }
 
-function CapacitiesStep({
-  equipment,
-  productsRaw,
-  onSetCapacity,
-  onSetCapacityVariant,
-  onRemoveCapacityVariant,
-}: {
-  equipment: EquipmentEntryV2[];
-  productsRaw: string[];
-  onSetCapacity: (id: string, value: number, unit: string, source: "company_data" | "reference_estimate") => void;
-  onSetCapacityVariant: (equipmentId: string, productName: string, value: number) => void;
-  onRemoveCapacityVariant: (equipmentId: string, productName: string) => void;
-}) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [declined, setDeclined] = useState<Record<string, boolean>>({});
-
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-text-secondary">¿Sabés aproximadamente cuánto produce cada equipo?</p>
-      {equipment.length === 0 && <p className="text-xs text-text-disabled">No hay equipos cargados todavía.</p>}
-      {equipment.map((e) => {
-        const candidates = findReferenceCandidates(REFERENCE_CATALOG, { category: e.category, process: normalizeProcessName(e.processRaw) ?? undefined, parameter: "ratePerHour" });
-        return (
-          <div key={e.id} className="rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] p-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-text-primary">{e.name}</span>
-              {e.capacity ? (
-                <span className="text-xs text-text-tertiary">
-                  {e.capacity.value} {e.capacityUnit} · <span className={e.capacity.source === "company_data" ? "text-text-secondary" : "text-accent-bright"}>{e.capacity.source === "company_data" ? "tu dato" : "referencia"}</span>
-                </span>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    value={drafts[e.id] ?? ""}
-                    onChange={(ev) => setDrafts((d) => ({ ...d, [e.id]: ev.target.value }))}
-                    placeholder="u/h"
-                    autoComplete="off"
-                    className="h-9 w-24 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled"
-                  />
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={() => {
-                      const v = Number(drafts[e.id]);
-                      if (!Number.isFinite(v) || v <= 0) return;
-                      onSetCapacity(e.id, v, "u/h", "company_data");
-                    }}
-                  >
-                    Ingresar
-                  </Button>
-                  <Button variant="ghost" type="button" onClick={() => setDeclined((d) => ({ ...d, [e.id]: true }))}>
-                    No lo sé
-                  </Button>
-                </div>
-              )}
-            </div>
-            {!e.capacity && declined[e.id] && candidates.length > 0 && (
-              <ReferenceOffer candidate={candidates[0]} onAccept={(v) => onSetCapacity(e.id, v, candidates[0].unit, "reference_estimate")} />
-            )}
-            {!e.capacity && declined[e.id] && candidates.length === 0 && (
-              <p className="mt-2 text-xs text-text-disabled">Todavía no hay una referencia para &quot;{e.category}&quot; — queda marcado como faltante, nunca en cero.</p>
-            )}
-            {(e.capacity || e.capacityVariants.length > 0 || declined[e.id]) && (
-              <CapacityVariantsBlock
-                equipment={e}
-                productsRaw={productsRaw}
-                onSetVariant={onSetCapacityVariant}
-                onRemoveVariant={onRemoveCapacityVariant}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
+// ---------------------------------------------------------------------------
+// Nota: el step "Capacidades" (Pantalla 6) es un componente dedicado —
+// `GuidedSetupCapacitiesStep.tsx`, mismo patrón que Productos/Procesos/Equipos.
+// Adapta la unidad al tipo de proceso (kg/lote para Elaboración, u/h para
+// procesos continuos) en vez de asumir u/h para todo — ver ese archivo.
 // ---------------------------------------------------------------------------
 // Nota: el step dedicado "Presentaciones" (gramos por unidad durante el
 // setup) se eliminó del flujo — gramsPerUnit pertenece al pedido/escenario,
@@ -312,14 +241,14 @@ function BatchTimesStep({
       <p className="text-sm text-text-secondary">¿Sabés cuánto elaboran aproximadamente por tanda? ¿Y cuánto tarda una tanda?</p>
 
       <div className="rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">Cantidad por tanda (en unidades de producto)</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">Cantidad por tanda (en kg)</p>
         {batchSize ? (
           <p className="mt-1 text-sm text-text-primary">
-            {batchSize.value} unidades <span className="text-xs text-text-tertiary">({batchSize.source === "company_data" ? "tu dato" : "referencia"})</span>
+            {batchSize.value} kg <span className="text-xs text-text-tertiary">({batchSize.source === "company_data" ? "tu dato" : "referencia"})</span>
           </p>
         ) : (
           <div className="mt-2 flex items-center gap-2">
-            <input value={amountDraft} onChange={(e) => setAmountDraft(e.target.value)} placeholder="unidades" autoComplete="off" className="h-9 w-28 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
+            <input value={amountDraft} onChange={(e) => setAmountDraft(e.target.value)} placeholder="kg" autoComplete="off" className="h-9 w-28 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
             <Button
               variant="ghost"
               type="button"
@@ -486,7 +415,7 @@ export function GuidedSetupScreen({
   function setBatchField(field: "batchSize" | "hoursPerBatch", value: number, source: "company_data" | "reference_estimate") {
     setAnswers((prev) => {
       const current = prev.batchInfo.find((b) => b.process === BATCH_PROCESS);
-      const next = { process: BATCH_PROCESS, batchSize: current?.batchSize ?? null, batchUnit: current?.batchUnit ?? ("units" as const), hoursPerBatch: current?.hoursPerBatch ?? null, [field]: { value, source } };
+      const next = { process: BATCH_PROCESS, batchSize: current?.batchSize ?? null, batchUnit: current?.batchUnit ?? ("kg" as const), hoursPerBatch: current?.hoursPerBatch ?? null, [field]: { value, source } };
       const idx = prev.batchInfo.findIndex((b) => b.process === BATCH_PROCESS);
       const batchInfo = idx === -1 ? [...prev.batchInfo, next] : prev.batchInfo.map((b, i) => (i === idx ? next : b));
       return { ...prev, batchInfo, resolvedBlocks: { ...prev.resolvedBlocks, batchTimes: true } };
@@ -515,7 +444,6 @@ export function GuidedSetupScreen({
 
   const questionLabel: Partial<Record<StepV2, string>> = {
     products: "Qué fabricás",
-    capacities: "Capacidades",
     batchTimes: "Tiempos de tanda",
     staffing: "Personal",
     schedule: "Horario",
@@ -585,6 +513,30 @@ export function GuidedSetupScreen({
     );
   }
 
+  if (step === "capacities") {
+    return (
+      <div className="flex flex-1 items-start justify-center px-2 py-8 lg:items-center">
+        <CapacitiesStepScreen
+          currentStep={stepIndex + 1 + INTAKE_STEP_NUMBER}
+          totalSteps={TOTAL_ONBOARDING_STEPS}
+          processesRaw={answers.processesRaw}
+          equipment={answers.equipment}
+          productsRaw={answers.productsRaw}
+          batchEntry={batchEntry}
+          onSetCapacity={setCapacity}
+          onSetCapacityVariant={setCapacityVariant}
+          onRemoveCapacityVariant={removeCapacityVariantEntry}
+          onSetBatchField={setBatchField}
+          isResolvedFromFreeform={isResolvedFromFreeform ?? false}
+          canSkip={Boolean(block && !answers.resolvedBlocks[block])}
+          onSkip={() => block && markResolved(block)}
+          goBack={goBack}
+          goNext={goNext}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
@@ -602,18 +554,6 @@ export function GuidedSetupScreen({
         transition={{ duration: 0.35 }}
         className="glass-panel w-full max-w-xl rounded-[var(--radius-lg)] p-6"
       >
-        {step === "capacities" && (
-          <div className="flex flex-col gap-2">
-            <CapacitiesStep
-              equipment={answers.equipment}
-              productsRaw={answers.productsRaw}
-              onSetCapacity={setCapacity}
-              onSetCapacityVariant={setCapacityVariant}
-              onRemoveCapacityVariant={removeCapacityVariantEntry}
-            />
-          </div>
-        )}
-
         {step === "batchTimes" && (
           <BatchTimesStep hasBatchProcess={batchProcessPresent} batchSize={batchEntry?.batchSize ?? null} hoursPerBatch={batchEntry?.hoursPerBatch ?? null} onSet={setBatchField} />
         )}
