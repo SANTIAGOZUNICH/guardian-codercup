@@ -241,6 +241,10 @@ export function suggestedSchedule(): Omit<ScheduleAnswerV2, "confirmed"> {
   return { ...DEFAULT_SCHEDULE };
 }
 
+export function scheduleToOperationsCalendar(schedule: ScheduleAnswerV2, timezone: string): import("@/lib/types").OperationsCalendar {
+  return { timezone, workdayStart: schedule.workdayStart, workdayHours: schedule.workdayHours, workingDays: [...schedule.workingDays] };
+}
+
 // ---------------------------------------------------------------------------
 // Equipment merge — add-or-update por nombre normalizado (Checkpoint 9B.3,
 // casos 10/12: typos y correcciones nunca duplican un equipo).

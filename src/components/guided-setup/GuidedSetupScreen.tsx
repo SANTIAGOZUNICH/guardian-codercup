@@ -10,17 +10,16 @@ import { ProcessesStepScreen } from "@/components/guided-setup/GuidedSetupProces
 import { EquipmentStepScreen } from "@/components/guided-setup/GuidedSetupEquipmentStep";
 import { CapacitiesStepScreen } from "@/components/guided-setup/GuidedSetupCapacitiesStep";
 import { StaffingStepScreen } from "@/components/guided-setup/GuidedSetupStaffingStep";
+import { ScheduleStepScreen } from "@/components/guided-setup/GuidedSetupScheduleStep";
 import {
   addEquipmentToProcess,
   emptyGuidedSetupV2Answers,
-  formatScheduleProposal,
   remapEquipmentProcess,
   remapStaffingBreakdownProcess,
   removeCapacityVariant as removeCapacityVariantV2,
   removeEquipment,
   removeStaffingBreakdown,
   renameEquipmentEntry,
-  scheduleMentionToProposal,
   setCapacityVariant as setCapacityVariantV2,
   setEquipmentCapacity,
   setStaffingBreakdown,
@@ -30,6 +29,7 @@ import {
   type EquipmentEntryV2,
   type GuidedSetupBlock,
   type GuidedSetupV2Answers,
+  type ScheduleAnswerV2,
 } from "@/lib/model/guided-setup-v2";
 import { INTAKE_STEP_NUMBER, TOTAL_ONBOARDING_STEPS } from "@/lib/model/guided-setup-progress";
 import { buildModelInputsFromGuidedSetupV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
@@ -223,13 +223,12 @@ export function GuidedSetupScreen({
   /** Respuestas ya extraídas en Pantalla 2 (Intake) por texto libre — Guided Setup arranca desde ahí, nunca pide de nuevo lo que Guardian ya entendió. */
   initialAnswers?: GuidedSetupV2Answers;
   onBack: () => void;
-  onComplete: (input: RawModelInput, completeness: TwinCompleteness) => void;
+  onComplete: (input: RawModelInput, completeness: TwinCompleteness, schedule: ScheduleAnswerV2) => void;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
   const step = STEPS_V2[stepIndex];
   const [answers, setAnswers] = useState<GuidedSetupV2Answers>(initialAnswers ?? emptyGuidedSetupV2Answers());
   const [productDraft, setProductDraft] = useState("");
-  const [scheduleOverride, setScheduleOverride] = useState<{ days: string; start: string; end: string } | null>(null);
 
   const block = BLOCK_BY_STEP[step];
   const isResolvedFromFreeform = block ? answers.resolvedBlocks[block] : false;
@@ -329,15 +328,6 @@ export function GuidedSetupScreen({
     });
   }
 
-  /** Confirma EXACTAMENTE lo que está propuesto ahora mismo — si vino de una extracción, confirma esa; si no, confirma el default sugerido. Nunca reemplaza en silencio una propuesta ya extraída por el default genérico. */
-  function confirmSuggestedSchedule() {
-    setAnswers((prev) => ({
-      ...prev,
-      schedule: { ...(prev.schedule ?? suggestedSchedule()), confirmed: true },
-      resolvedBlocks: { ...prev.resolvedBlocks, schedule: true },
-    }));
-  }
-
   const { input, completeness, summary } = useMemo(() => {
     if (step !== "review") return { input: null, completeness: null, summary: null };
     return buildModelInputsFromGuidedSetupV2(answers, { name: companyName, industry });
@@ -346,7 +336,7 @@ export function GuidedSetupScreen({
 
   function handleBuildTwin() {
     const result = buildModelInputsFromGuidedSetupV2(answers, { name: companyName, industry });
-    onComplete(result.input, result.completeness);
+    onComplete(result.input, result.completeness, answers.schedule ?? { ...suggestedSchedule(), confirmed: true });
   }
 
   const questionLabel: Partial<Record<StepV2, string>> = {
@@ -463,6 +453,27 @@ export function GuidedSetupScreen({
     );
   }
 
+  if (step === "schedule") {
+    const schedule = answers.schedule ?? { ...suggestedSchedule(), confirmed: false };
+    return (
+      <main className="min-h-screen bg-bg-primary">
+        <div className="flex min-h-screen justify-center">
+          <ScheduleStepScreen
+            currentStep={stepIndex + 1 + INTAKE_STEP_NUMBER}
+            totalSteps={TOTAL_ONBOARDING_STEPS}
+            schedule={schedule}
+            onChange={(value) => setAnswers((prev) => ({ ...prev, schedule: value, resolvedBlocks: { ...prev.resolvedBlocks, schedule: true } }))}
+            goBack={goBack}
+            goNext={() => {
+              setAnswers((prev) => ({ ...prev, schedule: { ...(prev.schedule ?? schedule), confirmed: true }, resolvedBlocks: { ...prev.resolvedBlocks, schedule: true } }));
+              goNext();
+            }}
+          />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
@@ -480,52 +491,6 @@ export function GuidedSetupScreen({
         transition={{ duration: 0.35 }}
         className="glass-panel w-full max-w-xl rounded-[var(--radius-lg)] p-6"
       >
-        {step === "schedule" && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-text-secondary">¿Qué días y horarios produce normalmente el laboratorio?</p>
-            {answers.schedule?.confirmed ? (
-              <p className="text-sm text-text-primary">
-                {answers.schedule.workdayStart} · {answers.schedule.workdayHours}h · {answers.schedule.workingDays.length} días/semana
-              </p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <div className="rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] p-3">
-                  <p className="text-xs text-text-tertiary">
-                    {answers.schedule ? "Esto entendí — confirmalo o cambialo (nunca se aplica solo):" : "Sugerencia por defecto (confirmá o cambiala — nunca se aplica sola):"}
-                  </p>
-                  <p className="mt-1 text-sm text-text-primary">{formatScheduleProposal(answers.schedule ?? { ...suggestedSchedule(), confirmed: false })}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" onClick={confirmSuggestedSchedule}>
-                    {answers.schedule ? "Confirmar este horario" : "Confirmar horario sugerido"}
-                  </Button>
-                  <Button variant="ghost" type="button" onClick={() => setScheduleOverride({ days: "lunes a viernes", start: "08:00", end: "17:00" })}>
-                    Cambiar
-                  </Button>
-                </div>
-                {scheduleOverride && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input value={scheduleOverride.days} onChange={(e) => setScheduleOverride((s) => (s ? { ...s, days: e.target.value } : s))} placeholder="lunes a viernes" className="h-10 w-40 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none" />
-                    <input value={scheduleOverride.start} onChange={(e) => setScheduleOverride((s) => (s ? { ...s, start: e.target.value } : s))} placeholder="08:00" className="h-10 w-20 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none" />
-                    <input value={scheduleOverride.end} onChange={(e) => setScheduleOverride((s) => (s ? { ...s, end: e.target.value } : s))} placeholder="17:00" className="h-10 w-20 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none" />
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        const proposal = scheduleMentionToProposal({ workingDaysText: scheduleOverride.days, startTime: scheduleOverride.start, endTime: scheduleOverride.end });
-                        if (!proposal) return;
-                        setAnswers((prev) => ({ ...prev, schedule: { ...proposal, confirmed: true }, resolvedBlocks: { ...prev.resolvedBlocks, schedule: true } }));
-                        setScheduleOverride(null);
-                      }}
-                    >
-                      Confirmar
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         {step === "materials" && (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-text-secondary">¿Querés agregar fórmulas e inventario para que GUARDIAN también detecte faltantes de materias primas?</p>

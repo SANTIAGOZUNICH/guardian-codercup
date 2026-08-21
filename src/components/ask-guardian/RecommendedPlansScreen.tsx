@@ -16,8 +16,7 @@ import {
   resolveGoalDeadlineLabel,
 } from "@/lib/view/simulation-view-model";
 import { buildOperationalImpactView } from "@/lib/view/disruption-view-model";
-import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
-import type { EvaluatedScenario, GoalSimulationResult, MachineUnavailableDisruption, OperationalModel } from "@/lib/types";
+import type { EvaluatedScenario, GoalSimulationResult, MachineUnavailableDisruption, OperationalModel, OperationsCalendar } from "@/lib/types";
 
 /** Todo lo que RecommendedPlansScreen necesita para mostrar el bloque Before/After — agrupado en un solo prop opcional. */
 export interface RecommendedPlansDisruptionContext {
@@ -30,11 +29,13 @@ export interface RecommendedPlansDisruptionContext {
 
 export function RecommendedPlansScreen({
   result,
+  calendar,
   disruptionContext = null,
   onChoosePlan,
   onBack,
 }: {
   result: GoalSimulationResult;
+  calendar: OperationsCalendar;
   /** Presente solo cuando este resultado viene de una Re-Simulation (Checkpoint 6) — null en la simulación normal. */
   disruptionContext?: RecommendedPlansDisruptionContext | null;
   onChoosePlan: (scenario: EvaluatedScenario) => void;
@@ -42,10 +43,10 @@ export function RecommendedPlansScreen({
 }) {
   const [showWhy, setShowWhy] = useState(false);
   const { kind, candidates } = result.outcome;
-  const deadlineLabel = resolveGoalDeadlineLabel(result.goal, DEFAULT_OPERATIONS_CALENDAR);
+  const deadlineLabel = resolveGoalDeadlineLabel(result.goal, calendar);
   const topCandidates = candidates.slice(0, 3);
   const disruptionLabel = disruptionContext ? `${disruptionContext.resourceName} no disponible` : null;
-  const whyView = buildWhyThisPlanView(result, DEFAULT_OPERATIONS_CALENDAR, disruptionLabel);
+  const whyView = buildWhyThisPlanView(result, calendar, disruptionLabel);
   const baselineView = buildBaselineView(result.baseline);
   const contextNote = buildContextNote(result.scenarios);
   const impactView = disruptionContext

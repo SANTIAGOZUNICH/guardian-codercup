@@ -6,8 +6,7 @@ import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import { buildSimulatingSummary } from "@/lib/view/simulation-view-model";
-import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
-import type { Goal, GoalSimulationResult, OperationalModel } from "@/lib/types";
+import type { Goal, GoalSimulationResult, OperationalModel, OperationsCalendar } from "@/lib/types";
 
 const STEPS = [
   "Evaluando el objetivo operacional...",
@@ -28,6 +27,7 @@ export function SimulatingScreen({
   model,
   goal,
   snapshotAt,
+  calendar,
   mode = "simulation",
   disruptionLabel,
   onDone,
@@ -35,14 +35,15 @@ export function SimulatingScreen({
   model: OperationalModel;
   goal: Goal;
   snapshotAt: string;
+  calendar: OperationsCalendar;
   /** "resimulation" reutiliza esta misma pantalla tras una Operational Disruption — nunca una animación distinta. */
   mode?: "simulation" | "resimulation";
   disruptionLabel?: string;
   onDone: (result: GoalSimulationResult) => void;
 }) {
   const result = useMemo(
-    () => simulateGoal(model, goal, DEFAULT_OPERATIONS_CALENDAR, snapshotAt),
-    [model, goal, snapshotAt],
+    () => simulateGoal(model, goal, calendar, snapshotAt),
+    [model, goal, calendar, snapshotAt],
   );
   const summary = useMemo(() => buildSimulatingSummary(result), [result]);
 

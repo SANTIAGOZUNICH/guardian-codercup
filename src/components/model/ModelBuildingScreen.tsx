@@ -6,9 +6,8 @@ import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { NodeGraphV2 } from "./NodeGraphV2";
 import { MissingDataModal } from "@/components/guided-setup/TwinCompletenessSummary";
-import type { MachineUnavailableDisruption, OperationalModel, TwinCompleteness } from "@/lib/types";
+import type { MachineUnavailableDisruption, OperationalModel, OperationsCalendar, TwinCompleteness } from "@/lib/types";
 import { detectConstraints } from "@/lib/engine/constraint-detection";
-import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { buildTwinGraph } from "@/lib/view/twin-graph-view-model";
 import { buildMissingDataLabel, totalMissingCount } from "@/lib/view/guided-setup-view-model";
 import {
@@ -23,6 +22,7 @@ const PHASE_DELAYS = [400, 650, 700, 700, 900, 700];
 export function ModelBuildingScreen({
   model,
   snapshotAt,
+  calendar,
   onViewConstraints,
   onGoToCommandCenter,
   /** Si viene true, arranca ya revelado (usado por "Explore Twin" desde Command Center) — no repite la animación. */
@@ -37,6 +37,7 @@ export function ModelBuildingScreen({
 }: {
   model: OperationalModel;
   snapshotAt: string;
+  calendar: OperationsCalendar;
   onViewConstraints: () => void;
   onGoToCommandCenter: () => void;
   skipAnimation?: boolean;
@@ -46,8 +47,8 @@ export function ModelBuildingScreen({
   const [showMissingData, setShowMissingData] = useState(false);
   const missingCount = twinCompleteness ? totalMissingCount(twinCompleteness) : 0;
   const orderConstraints = useMemo(
-    () => detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt),
-    [model, snapshotAt],
+    () => detectConstraints(model, calendar, snapshotAt),
+    [model, calendar, snapshotAt],
   );
   const graph = useMemo(
     () => buildTwinGraph(model, orderConstraints, activeDisruption),

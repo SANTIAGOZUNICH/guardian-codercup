@@ -4,7 +4,7 @@ import { useState } from "react";
 import { LoginScreen, type LoginPayload } from "@/components/login/LoginScreen";
 import { IntakeScreen } from "@/components/intake/IntakeScreen";
 import { GuidedSetupScreen } from "@/components/guided-setup/GuidedSetupScreen";
-import { emptyGuidedSetupV2Answers, type GuidedSetupV2Answers } from "@/lib/model/guided-setup-v2";
+import { emptyGuidedSetupV2Answers, scheduleToOperationsCalendar, type GuidedSetupV2Answers, type ScheduleAnswerV2 } from "@/lib/model/guided-setup-v2";
 import { CompanyNameProvider } from "@/lib/context/CompanyNameContext";
 import { ModelBuildingScreen } from "@/components/model/ModelBuildingScreen";
 import { ConstraintScreen } from "@/components/constraint/ConstraintScreen";
@@ -55,6 +55,7 @@ export function GuardianApp() {
   const [phase, setPhase] = useState<Phase>("login");
   const [model, setModel] = useState<OperationalModel | null>(null);
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
+  const [operationsCalendar, setOperationsCalendar] = useState(DEFAULT_OPERATIONS_CALENDAR);
   /** Solo presente cuando el Twin vino de Guided Setup (Checkpoint 7) — null en el path de Excel. */
   const [twinCompleteness, setTwinCompleteness] = useState<TwinCompleteness | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
@@ -103,11 +104,12 @@ export function GuardianApp() {
         industry={session.industry}
         initialAnswers={guidedSetupInitialAnswers}
         onBack={() => setPhase("intake")}
-        onComplete={(input: RawModelInput, completeness: TwinCompleteness) => {
+        onComplete={(input: RawModelInput, completeness: TwinCompleteness, schedule: ScheduleAnswerV2) => {
           const m = buildOperationalModel(input);
           setModel(m);
           setSnapshotAt(formatNaive(new Date()));
           setTwinCompleteness(completeness);
+          setOperationsCalendar(scheduleToOperationsCalendar(schedule, DEFAULT_OPERATIONS_CALENDAR.timezone));
           setPhase("building");
         }}
       />
@@ -116,13 +118,14 @@ export function GuardianApp() {
 
   if (!model || !snapshotAt) return null;
 
-  const orderConstraints = detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt);
+  const orderConstraints = detectConstraints(model, operationsCalendar, snapshotAt);
 
   if (phase === "building" || phase === "explore-twin") {
     return (
       <ModelBuildingScreen
         model={model}
         snapshotAt={snapshotAt}
+        calendar={operationsCalendar}
         skipAnimation={phase === "explore-twin"}
         activeDisruption={disruption}
         twinCompleteness={twinCompleteness}
@@ -177,6 +180,7 @@ export function GuardianApp() {
         model={model}
         companyName={session.companyName}
         snapshotAt={snapshotAt}
+        calendar={operationsCalendar}
         activeGoal={goal}
         onGoalReady={(g, newPresentation) => {
           if (newPresentation) {
@@ -209,7 +213,7 @@ export function GuardianApp() {
         disruption={disruption}
         resourceName={disruptionResourceName ?? disruption.resourceId}
         goal={goal}
-        calendar={DEFAULT_OPERATIONS_CALENDAR}
+        calendar={operationsCalendar}
         snapshotAt={snapshotAt}
         onReSimulate={() => setPhase("simulating")}
         onBack={() => setPhase("command-center")}
@@ -225,6 +229,7 @@ export function GuardianApp() {
         model={activeModel}
         goal={goal}
         snapshotAt={snapshotAt}
+        calendar={operationsCalendar}
         mode={disruption ? "resimulation" : "simulation"}
         disruptionLabel={disruption && disruptionResourceName ? `${disruptionResourceName} no disponible` : undefined}
         onDone={() => setPhase("plans")}
@@ -236,7 +241,7 @@ export function GuardianApp() {
     // Recalcula (síncrono, barato) en vez de guardar el resultado completo en estado —
     // mismo patrón que orderConstraints arriba.
     const activeModel = disruption ? applyDisruption(model, disruption) : model;
-    const result: GoalSimulationResult = simulateGoal(activeModel, goal, DEFAULT_OPERATIONS_CALENDAR, snapshotAt);
+    const result: GoalSimulationResult = simulateGoal(activeModel, goal, operationsCalendar, snapshotAt);
     const disruptionContext =
       disruption && disruptionResourceName
         ? {
@@ -244,12 +249,13 @@ export function GuardianApp() {
             disruptedModel: activeModel,
             disruption,
             resourceName: disruptionResourceName,
-            beforeResult: simulateGoal(model, goal, DEFAULT_OPERATIONS_CALENDAR, snapshotAt),
+            beforeResult: simulateGoal(model, goal, operationsCalendar, snapshotAt),
           }
         : null;
     return (
       <RecommendedPlansScreen
         result={result}
+        calendar={operationsCalendar}
         disruptionContext={disruptionContext}
         onChoosePlan={(scenario: EvaluatedScenario) => {
           // Índice dentro de outcome.candidates — el mismo conjunto y orden que ve el usuario en pantalla,

@@ -16,8 +16,7 @@ import { classifyOperationalQuery, answerOperationalQuery } from "@/lib/engine/o
 import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { resolveOrderPresentation } from "@/lib/model/presentation";
 import { extractGramsPerUnit, isUnsureAboutGrams } from "@/lib/engine/presentation-parser";
-import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
-import type { DataOrigin, Goal, MachineUnavailableDisruption, OperationalModel, Presentation } from "@/lib/types";
+import type { DataOrigin, Goal, MachineUnavailableDisruption, OperationalModel, OperationsCalendar, Presentation } from "@/lib/types";
 
 const CHIPS = ["¿Llegamos antes?", "Simular un objetivo de producción", "Ver capacidad disponible"];
 
@@ -53,6 +52,7 @@ export function AskGuardianScreen({
   model,
   companyName,
   snapshotAt,
+  calendar,
   activeGoal,
   onGoalReady,
   onDisruptionReady,
@@ -61,6 +61,7 @@ export function AskGuardianScreen({
   model: OperationalModel;
   companyName: string;
   snapshotAt: string;
+  calendar: OperationsCalendar;
   /** Goal ya simulado en esta sesión, si lo hay — habilita interpretar preguntas de disrupción sobre ese objetivo. */
   activeGoal: Goal | null;
   onGoalReady: (goal: Goal, newPresentation?: Presentation) => void;
@@ -159,7 +160,7 @@ export function AskGuardianScreen({
       return;
     }
 
-    const result = parseGoalText(resolvedText, { model, snapshotAt, calendar: DEFAULT_OPERATIONS_CALENDAR });
+    const result = parseGoalText(resolvedText, { model, snapshotAt, calendar });
     if (!result.ok) {
       setError(errorMessage(result.error.kind, companyName));
       return;
@@ -264,7 +265,7 @@ export function AskGuardianScreen({
       return;
     }
 
-    const result = parseGoalText(text, { model, snapshotAt, calendar: DEFAULT_OPERATIONS_CALENDAR });
+    const result = parseGoalText(text, { model, snapshotAt, calendar });
     if (result.ok) {
       setError(null);
       setSelection(null);
@@ -277,7 +278,7 @@ export function AskGuardianScreen({
     // del Twin, nunca por el LLM de conocimiento ni por el parser de goals.
     const queryKind = classifyOperationalQuery(text);
     if (queryKind) {
-      const orderConstraints = detectConstraints(model, DEFAULT_OPERATIONS_CALENDAR, snapshotAt);
+      const orderConstraints = detectConstraints(model, calendar, snapshotAt);
       setKnowledgeAnswer(answerOperationalQuery(queryKind, text, model, orderConstraints, null));
       return;
     }
