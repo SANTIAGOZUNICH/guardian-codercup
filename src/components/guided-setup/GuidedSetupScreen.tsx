@@ -9,17 +9,21 @@ import { ProductsStepScreen } from "@/components/guided-setup/GuidedSetupProduct
 import { ProcessesStepScreen } from "@/components/guided-setup/GuidedSetupProcessesStep";
 import { EquipmentStepScreen } from "@/components/guided-setup/GuidedSetupEquipmentStep";
 import { CapacitiesStepScreen } from "@/components/guided-setup/GuidedSetupCapacitiesStep";
+import { StaffingStepScreen } from "@/components/guided-setup/GuidedSetupStaffingStep";
 import {
   addEquipmentToProcess,
   emptyGuidedSetupV2Answers,
   formatScheduleProposal,
   remapEquipmentProcess,
+  remapStaffingBreakdownProcess,
   removeCapacityVariant as removeCapacityVariantV2,
   removeEquipment,
+  removeStaffingBreakdown,
   renameEquipmentEntry,
   scheduleMentionToProposal,
   setCapacityVariant as setCapacityVariantV2,
   setEquipmentCapacity,
+  setStaffingBreakdown,
   suggestedSchedule,
   totalResolvedCount,
   GUIDED_SETUP_BLOCKS,
@@ -29,9 +33,7 @@ import {
 } from "@/lib/model/guided-setup-v2";
 import { INTAKE_STEP_NUMBER, TOTAL_ONBOARDING_STEPS } from "@/lib/model/guided-setup-progress";
 import { buildModelInputsFromGuidedSetupV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
-import { normalizeProcessName } from "@/lib/model/buildModelInputsFromGuidedSetup";
-import { findReferenceCandidates, resolveReferenceValue } from "@/lib/engine/reference-catalog";
-import { REFERENCE_CATALOG } from "@/data/reference-catalog";
+import { resolveReferenceValue } from "@/lib/engine/reference-catalog";
 import type { RawModelInput } from "@/lib/model/buildOperationalModel";
 import type { ReferenceCatalogEntry, ResourceProcess, TwinCompleteness } from "@/lib/types";
 
@@ -54,14 +56,13 @@ export function useAutofillSafeName(): string {
 
 export const BATCH_PROCESS: ResourceProcess = "Elaboración"; // única etapa por lote soportada en este vertical slice
 
-type StepV2 = "products" | "processes" | "equipment" | "capacities" | "batchTimes" | "staffing" | "schedule" | "materials" | "review";
-const STEPS_V2: StepV2[] = ["products", "processes", "equipment", "capacities", "batchTimes", "staffing", "schedule", "materials", "review"];
+type StepV2 = "products" | "processes" | "equipment" | "capacities" | "staffing" | "schedule" | "materials" | "review";
+const STEPS_V2: StepV2[] = ["products", "processes", "equipment", "capacities", "staffing", "schedule", "materials", "review"];
 const BLOCK_BY_STEP: Partial<Record<StepV2, GuidedSetupBlock>> = {
   products: "products",
   processes: "flow",
   equipment: "equipment",
   capacities: "capacities",
-  batchTimes: "batchTimes",
   staffing: "staffing",
   schedule: "schedule",
 };
@@ -210,99 +211,6 @@ export function CapacityVariantsBlock({
 // libre) y Ask Guardian lo sigue pidiendo antes de simular si hace falta.
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Batch times — solo para el proceso de tipo lote (Elaboración).
-// ---------------------------------------------------------------------------
-function BatchTimesStep({
-  hasBatchProcess,
-  batchSize,
-  hoursPerBatch,
-  onSet,
-}: {
-  hasBatchProcess: boolean;
-  batchSize: { value: number; source: string } | null;
-  hoursPerBatch: { value: number; source: string } | null;
-  onSet: (field: "batchSize" | "hoursPerBatch", value: number, source: "company_data" | "reference_estimate") => void;
-}) {
-  const [amountDraft, setAmountDraft] = useState("");
-  const [hoursDraft, setHoursDraft] = useState("");
-  const [declinedAmount, setDeclinedAmount] = useState(false);
-  const [declinedHours, setDeclinedHours] = useState(false);
-
-  if (!hasBatchProcess) {
-    return <p className="text-sm text-text-secondary">Tu operación no tiene procesos por tanda declarados todavía — podés continuar.</p>;
-  }
-
-  const amountCandidates = findReferenceCandidates(REFERENCE_CATALOG, { category: "reactor", process: BATCH_PROCESS, parameter: "batchSize" });
-  const hoursCandidates = findReferenceCandidates(REFERENCE_CATALOG, { category: "reactor", process: BATCH_PROCESS, parameter: "hoursPerBatch" });
-
-  return (
-    <div className="flex flex-col gap-5">
-      <p className="text-sm text-text-secondary">¿Sabés cuánto elaboran aproximadamente por tanda? ¿Y cuánto tarda una tanda?</p>
-
-      <div className="rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">Cantidad por tanda (en kg)</p>
-        {batchSize ? (
-          <p className="mt-1 text-sm text-text-primary">
-            {batchSize.value} kg <span className="text-xs text-text-tertiary">({batchSize.source === "company_data" ? "tu dato" : "referencia"})</span>
-          </p>
-        ) : (
-          <div className="mt-2 flex items-center gap-2">
-            <input value={amountDraft} onChange={(e) => setAmountDraft(e.target.value)} placeholder="kg" autoComplete="off" className="h-9 w-28 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={() => {
-                const v = Number(amountDraft);
-                if (!Number.isFinite(v) || v <= 0) return;
-                onSet("batchSize", v, "company_data");
-              }}
-            >
-              Ingresar
-            </Button>
-            <Button variant="ghost" type="button" onClick={() => setDeclinedAmount(true)}>
-              No lo sé
-            </Button>
-          </div>
-        )}
-        {!batchSize && declinedAmount && amountCandidates.length > 0 && (
-          <ReferenceOffer candidate={amountCandidates[0]} onAccept={(v) => onSet("batchSize", v, "reference_estimate")} />
-        )}
-      </div>
-
-      <div className="rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">Duración de una tanda</p>
-        {hoursPerBatch ? (
-          <p className="mt-1 text-sm text-text-primary">
-            {hoursPerBatch.value} h <span className="text-xs text-text-tertiary">({hoursPerBatch.source === "company_data" ? "tu dato" : "referencia"})</span>
-          </p>
-        ) : (
-          <div className="mt-2 flex items-center gap-2">
-            <input value={hoursDraft} onChange={(e) => setHoursDraft(e.target.value)} placeholder="horas" autoComplete="off" className="h-9 w-28 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={() => {
-                const v = Number(hoursDraft);
-                if (!Number.isFinite(v) || v <= 0) return;
-                onSet("hoursPerBatch", v, "company_data");
-              }}
-            >
-              Ingresar
-            </Button>
-            <Button variant="ghost" type="button" onClick={() => setDeclinedHours(true)}>
-              No lo sé
-            </Button>
-          </div>
-        )}
-        {!hoursPerBatch && declinedHours && hoursCandidates.length > 0 && (
-          <ReferenceOffer candidate={hoursCandidates[0]} onAccept={(v) => onSet("hoursPerBatch", v, "reference_estimate")} />
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function GuidedSetupScreen({
   companyName,
   industry,
@@ -320,7 +228,6 @@ export function GuidedSetupScreen({
   const [stepIndex, setStepIndex] = useState(0);
   const step = STEPS_V2[stepIndex];
   const [answers, setAnswers] = useState<GuidedSetupV2Answers>(initialAnswers ?? emptyGuidedSetupV2Answers());
-  const staffingFieldName = useAutofillSafeName();
   const [productDraft, setProductDraft] = useState("");
   const [scheduleOverride, setScheduleOverride] = useState<{ days: string; start: string; end: string } | null>(null);
 
@@ -379,6 +286,7 @@ export function GuidedSetupScreen({
         processesRaw: prev.processesRaw.map((p, idx) => (idx === i ? v : p)),
         // El equipo ya agrupado bajo el nombre viejo (Pantalla 5) se reasigna al nuevo — nunca queda huérfano.
         equipment: oldRaw !== undefined ? remapEquipmentProcess(prev.equipment, oldRaw, v) : prev.equipment,
+        staffingBreakdown: oldRaw !== undefined ? remapStaffingBreakdownProcess(prev.staffingBreakdown, oldRaw, v) : prev.staffingBreakdown,
       };
     });
   }
@@ -409,7 +317,6 @@ export function GuidedSetupScreen({
     setAnswers((prev) => ({ ...prev, equipment: removeCapacityVariantV2(prev.equipment, equipmentId, productName) }));
   }
 
-  const batchProcessPresent = answers.equipment.some((e) => normalizeProcessName(e.processRaw) === BATCH_PROCESS);
   const batchEntry = answers.batchInfo.find((b) => b.process === BATCH_PROCESS) ?? null;
 
   function setBatchField(field: "batchSize" | "hoursPerBatch", value: number, source: "company_data" | "reference_estimate") {
@@ -444,7 +351,6 @@ export function GuidedSetupScreen({
 
   const questionLabel: Partial<Record<StepV2, string>> = {
     products: "Qué fabricás",
-    batchTimes: "Tiempos de tanda",
     staffing: "Personal",
     schedule: "Horario",
     materials: "Materias primas (opcional)",
@@ -537,6 +443,26 @@ export function GuidedSetupScreen({
     );
   }
 
+  if (step === "staffing") {
+    return (
+      <div className="flex flex-1 items-start justify-center px-2 py-8 lg:items-center">
+        <StaffingStepScreen
+          currentStep={stepIndex + 1 + INTAKE_STEP_NUMBER}
+          totalSteps={TOTAL_ONBOARDING_STEPS}
+          total={answers.staffingCount}
+          processesRaw={answers.processesRaw}
+          breakdown={answers.staffingBreakdown}
+          isResolvedFromFreeform={isResolvedFromFreeform ?? false}
+          onSetTotal={(value) => setAnswers((prev) => ({ ...prev, staffingCount: value, resolvedBlocks: { ...prev.resolvedBlocks, staffing: value !== null || prev.resolvedBlocks.staffing } }))}
+          onSetBreakdown={(processRaw, value) => setAnswers((prev) => ({ ...prev, staffingBreakdown: setStaffingBreakdown(prev.staffingBreakdown, processRaw, value), resolvedBlocks: { ...prev.resolvedBlocks, staffing: true } }))}
+          onRemoveBreakdown={(processRaw) => setAnswers((prev) => ({ ...prev, staffingBreakdown: removeStaffingBreakdown(prev.staffingBreakdown, processRaw) }))}
+          goBack={goBack}
+          goNext={goNext}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
@@ -554,31 +480,6 @@ export function GuidedSetupScreen({
         transition={{ duration: 0.35 }}
         className="glass-panel w-full max-w-xl rounded-[var(--radius-lg)] p-6"
       >
-        {step === "batchTimes" && (
-          <BatchTimesStep hasBatchProcess={batchProcessPresent} batchSize={batchEntry?.batchSize ?? null} hoursPerBatch={batchEntry?.hoursPerBatch ?? null} onSet={setBatchField} />
-        )}
-
-        {step === "staffing" && (
-          <div className="flex flex-col gap-4">
-            {isResolvedFromFreeform && answers.staffingCount !== null && <ResolvedBadge />}
-            <p className="text-sm text-text-secondary">¿Cuántas personas trabajan normalmente en producción?</p>
-            <input
-              type="number"
-              name={staffingFieldName}
-              min={0}
-              value={answers.staffingCount ?? ""}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setAnswers((prev) => ({ ...prev, staffingCount: Number.isFinite(v) && e.target.value !== "" ? v : null, resolvedBlocks: { ...prev.resolvedBlocks, staffing: true } }));
-              }}
-              placeholder="Ej: 10"
-              autoComplete="off"
-              className="h-11 w-32 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-3 text-sm text-text-primary outline-none placeholder:text-text-disabled"
-            />
-            <p className="text-xs text-text-disabled">Un número total alcanza — no hace falta detalle por área.</p>
-          </div>
-        )}
-
         {step === "schedule" && (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-text-secondary">¿Qué días y horarios produce normalmente el laboratorio?</p>

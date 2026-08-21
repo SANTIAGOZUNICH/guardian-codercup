@@ -65,6 +65,25 @@ export interface BatchInfoV2 {
   hoursPerBatch: SourcedValue<number> | null;
 }
 
+/**
+ * Distribución OPCIONAL de personal por área (Pantalla 7). `processRaw` es
+ * texto libre — la misma etapa exacta de `processesRaw` cuando el usuario
+ * distribuye por proceso declarado, o un nombre custom (ej. "Depósito")
+ * cuando agrega un área que no es un proceso — mismo principio que
+ * `EquipmentEntryV2.processRaw`: la traducción a `ResourceProcess` real
+ * ocurre recién al construir el Twin, nunca acá; un área que no normaliza
+ * simplemente no genera un `Resource` de personal (no un error).
+ *
+ * `count` es la dotación de ESA área — nunca se sube a `staffingCount`
+ * (total) ni se resta de él: total y breakdown son dos representaciones del
+ * mismo personal, jamás se suman entre sí (ver Master Context, Personal ↔
+ * Capacidad).
+ */
+export interface StaffingBreakdownEntryV2 {
+  processRaw: string;
+  count: number;
+}
+
 export interface ScheduleAnswerV2 {
   workingDays: number[];
   workdayStart: string;
@@ -101,6 +120,7 @@ export interface GuidedSetupV2Answers {
   equipment: EquipmentEntryV2[];
   batchInfo: BatchInfoV2[];
   staffingCount: number | null;
+  staffingBreakdown: StaffingBreakdownEntryV2[];
   schedule: ScheduleAnswerV2 | null;
   materialsIncluded: boolean;
   materials: GuidedSetupMaterialInputV2[];
@@ -115,6 +135,7 @@ export function emptyGuidedSetupV2Answers(): GuidedSetupV2Answers {
     equipment: [],
     batchInfo: [],
     staffingCount: null,
+    staffingBreakdown: [],
     schedule: null,
     materialsIncluded: false,
     materials: [],
@@ -404,6 +425,31 @@ export function setCapacityVariant(existing: EquipmentEntryV2[], equipmentId: st
 
 export function removeCapacityVariant(existing: EquipmentEntryV2[], equipmentId: string, productName: string): EquipmentEntryV2[] {
   return existing.map((e) => (e.id === equipmentId ? { ...e, capacityVariants: e.capacityVariants.filter((v) => v.productName !== productName) } : e));
+}
+
+/**
+ * ============================================================================
+ * Staffing breakdown — distribución opcional de personal por área (Pantalla 7)
+ * ============================================================================
+ * Add-or-update por `processRaw` exacto — nunca duplica una fila para la
+ * misma área (mismo principio que `setEquipmentCapacity`/`setCapacityVariant`).
+ * `count` real (incluido 0, un área declarada sin gente) se distingue de
+ * "todavía no se declaró esta área" simplemente por la AUSENCIA de la
+ * entrada — nunca 0 como placeholder de desconocido.
+ */
+export function setStaffingBreakdown(existing: StaffingBreakdownEntryV2[], processRaw: string, count: number): StaffingBreakdownEntryV2[] {
+  const idx = existing.findIndex((e) => e.processRaw === processRaw);
+  const next: StaffingBreakdownEntryV2 = { processRaw, count };
+  if (idx === -1) return [...existing, next];
+  return existing.map((e, i) => (i === idx ? next : e));
+}
+
+export function removeStaffingBreakdown(existing: StaffingBreakdownEntryV2[], processRaw: string): StaffingBreakdownEntryV2[] {
+  return existing.filter((e) => e.processRaw !== processRaw);
+}
+
+export function remapStaffingBreakdownProcess(existing: StaffingBreakdownEntryV2[], oldProcessRaw: string, newProcessRaw: string): StaffingBreakdownEntryV2[] {
+  return existing.map((entry) => (entry.processRaw === oldProcessRaw ? { ...entry, processRaw: newProcessRaw } : entry));
 }
 
 // ---------------------------------------------------------------------------

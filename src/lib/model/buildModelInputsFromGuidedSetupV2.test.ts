@@ -55,6 +55,46 @@ describe("buildModelInputsFromGuidedSetupV2 — cualquier producto, nunca limita
   });
 });
 
+describe("Pantalla 7 — Personal: total y breakdown representan la misma dotación", () => {
+  it("el total global queda en el resumen y nunca se convierte en un Resource adicional", () => {
+    const answers = { ...novaAnswers(), staffingCount: 12, staffingBreakdown: [] };
+    const { input, summary } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    expect(summary.staffCount).toBe(12);
+    expect(input.resources.filter((resource) => resource.type === "Personal")).toEqual([]);
+  });
+
+  it("el breakdown usa procesos reales, acepta parcial y nunca suma el total", () => {
+    const answers = {
+      ...novaAnswers(),
+      staffingCount: 12,
+      staffingBreakdown: [
+        { processRaw: "Elaboración", count: 3 },
+        { processRaw: "Envasado", count: 5 },
+      ],
+    };
+    const { input } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    const personnel = input.resources.filter((resource) => resource.type === "Personal");
+    expect(personnel.map((resource) => resource.quantityAvailable)).toEqual([3, 5]);
+    expect(personnel.reduce((sum, resource) => sum + resource.quantityAvailable, 0)).toBe(8);
+  });
+
+  it("un área custom no soportada persiste en respuestas pero no inventa un proceso del motor", () => {
+    const answers = { ...novaAnswers(), staffingBreakdown: [{ processRaw: "Depósito", count: 2 }] };
+    const { input } = buildModelInputsFromGuidedSetupV2(answers, COMPANY);
+    expect(input.resources.some((resource) => resource.type === "Personal")).toBe(false);
+  });
+
+  it("agregar personal no cambia horas ni throughput de la simulación", () => {
+    const withoutStaff = buildOperationalModel(buildModelInputsFromGuidedSetupV2({ ...novaAnswers(), staffingBreakdown: [] }, COMPANY).input);
+    const withStaff = buildOperationalModel(buildModelInputsFromGuidedSetupV2({ ...novaAnswers(), staffingBreakdown: [{ processRaw: "Envasado", count: 5 }] }, COMPANY).input);
+    const order = { id: "order-staff", client: "Cliente", productId: withoutStaff.products[0].id, quantity: 1000, deliveryDate: "2026-08-20", priority: "normal" as const };
+    const a = evaluateScenario(withoutStaff, order, baselineResourceConfig(withoutStaff, order), CALENDAR, START);
+    const b = evaluateScenario(withStaff, order, baselineResourceConfig(withStaff, order), CALENDAR, START);
+    expect(b.totalHoursNeeded).toBe(a.totalHoursNeeded);
+    expect(b.steps.map((step) => step.hours)).toEqual(a.steps.map((step) => step.hours));
+  });
+});
+
 describe("buildModelInputsFromGuidedSetupV2 — Production Reference real por producto", () => {
   it("cada producto declarado recibe la Production Reference compartida (equipos + tandas)", () => {
     const { input } = buildModelInputsFromGuidedSetupV2(novaAnswers(), COMPANY);

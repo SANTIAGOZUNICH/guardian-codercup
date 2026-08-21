@@ -18,11 +18,14 @@ import {
   removeCapacityVariant,
   removeEquipment,
   remapEquipmentProcess,
+  remapStaffingBreakdownProcess,
   renameEquipmentEntry,
   scheduleMentionToProposal,
   setCapacityVariant,
   setEquipmentCapacity,
   setPresentationGrams,
+  setStaffingBreakdown,
+  removeStaffingBreakdown,
   totalResolvedCount,
   type EquipmentEntryV2,
 } from "./guided-setup-v2";
@@ -165,6 +168,37 @@ describe("removeEquipment / setEquipmentCapacity", () => {
 
     const withReference = setEquipmentCapacity(equipment, "llenadora-1", 1500, "u/h", "reference_estimate");
     expect(withReference[0].capacity).toEqual({ value: 1500, source: "reference_estimate" });
+  });
+});
+
+describe("Pantalla 7 — Personal: breakdown opcional y persistente", () => {
+  it("agrega y actualiza una misma área sin duplicarla", () => {
+    const first = setStaffingBreakdown([], "Elaboración", 3);
+    const second = setStaffingBreakdown(first, "Elaboración", 4);
+    expect(second).toEqual([{ processRaw: "Elaboración", count: 4 }]);
+  });
+
+  it("permite un breakdown parcial y conserva el resto como no declarado", () => {
+    let breakdown = setStaffingBreakdown([], "Elaboración", 3);
+    breakdown = setStaffingBreakdown(breakdown, "Envasado", 5);
+    expect(breakdown.reduce((sum, entry) => sum + entry.count, 0)).toBe(8);
+    expect(breakdown).toHaveLength(2);
+  });
+
+  it("permite una suma mayor al total sin corregir datos automáticamente", () => {
+    let breakdown = setStaffingBreakdown([], "Elaboración", 6);
+    breakdown = setStaffingBreakdown(breakdown, "Envasado", 7);
+    expect(breakdown.reduce((sum, entry) => sum + entry.count, 0)).toBe(13);
+  });
+
+  it("quitar una distribución vuelve el área a UNKNOWN, no a cero", () => {
+    const result = removeStaffingBreakdown([{ processRaw: "Elaboración", count: 0 }], "Elaboración");
+    expect(result).toEqual([]);
+  });
+
+  it("renombrar un proceso conserva su dotación", () => {
+    const result = remapStaffingBreakdownProcess([{ processRaw: "Envasado", count: 5 }], "Envasado", "Envasado final");
+    expect(result).toEqual([{ processRaw: "Envasado final", count: 5 }]);
   });
 });
 

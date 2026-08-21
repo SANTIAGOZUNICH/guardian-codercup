@@ -51,6 +51,38 @@ function buildResources(answers: GuidedSetupV2Answers): Resource[] {
       capacityUnit: e.capacity ? e.capacityUnit || CAPACITY_UNIT_FALLBACK : "",
     });
   }
+  resources.push(...buildPersonnelResources(answers));
+  return resources;
+}
+
+/**
+ * Distribución de personal por área (Pantalla 7) → `Resource[]` reales de
+ * `type: "Personal"` — mismo mecanismo YA soportado por el motor
+ * (`evaluate-scenario.ts` computeStep, `simulation-engine.ts`
+ * personnelAllocation()): solo una restricción de disponibilidad por
+ * proceso, nunca modifica horas/throughput (ver Master Context, Personal ↔
+ * Capacidad). Un área que no normaliza a un `ResourceProcess` real (ej. un
+ * área custom tipo "Depósito") no genera Resource — mismo principio que
+ * equipo bajo un proceso no soportado. El total global (`staffingCount`)
+ * NUNCA se convierte en Resource — es metadata de referencia únicamente
+ * (`OperationSummaryV2.staffCount`); solo el breakdown por área, cuando
+ * existe, alimenta al motor. Total y breakdown nunca se suman entre sí.
+ */
+function buildPersonnelResources(answers: GuidedSetupV2Answers): Resource[] {
+  const resources: Resource[] = [];
+  for (const s of answers.staffingBreakdown) {
+    const process = normalizeProcessName(s.processRaw);
+    if (!process) continue;
+    resources.push({
+      id: `personal-${slugify(s.processRaw)}`,
+      name: `Personal de ${s.processRaw}`,
+      type: "Personal",
+      process,
+      quantityAvailable: s.count,
+      capacity: 1,
+      capacityUnit: "persona",
+    });
+  }
   return resources;
 }
 
