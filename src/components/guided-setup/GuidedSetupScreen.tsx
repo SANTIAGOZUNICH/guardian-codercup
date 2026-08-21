@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, X } from "lucide-react";
 import { Guardian } from "@/components/guardian/Guardian";
 import { Button } from "@/components/ui/Button";
 import { ProductsStepScreen } from "@/components/guided-setup/GuidedSetupProductsStep";
@@ -11,6 +11,7 @@ import { EquipmentStepScreen } from "@/components/guided-setup/GuidedSetupEquipm
 import { CapacitiesStepScreen } from "@/components/guided-setup/GuidedSetupCapacitiesStep";
 import { StaffingStepScreen } from "@/components/guided-setup/GuidedSetupStaffingStep";
 import { ScheduleStepScreen } from "@/components/guided-setup/GuidedSetupScheduleStep";
+import { MaterialsStepScreen } from "@/components/guided-setup/GuidedSetupMaterialsStep";
 import {
   addEquipmentToProcess,
   emptyGuidedSetupV2Answers,
@@ -474,6 +475,26 @@ export function GuidedSetupScreen({
     );
   }
 
+  if (step === "materials") {
+    return (
+      <main className="min-h-screen bg-bg-primary">
+        <div className="flex min-h-screen justify-center">
+          <MaterialsStepScreen
+            currentStep={stepIndex + 1 + INTAKE_STEP_NUMBER}
+            totalSteps={TOTAL_ONBOARDING_STEPS}
+            included={answers.materialsIncluded}
+            materials={answers.materials}
+            onSetIncluded={(included) => setAnswers((prev) => ({ ...prev, materialsIncluded: included }))}
+            onAdd={(material) => setAnswers((prev) => ({ ...prev, materials: [...prev.materials.filter((item) => item.code !== material.code), material] }))}
+            onRemove={(code) => setAnswers((prev) => ({ ...prev, materials: prev.materials.filter((material) => material.code !== code) }))}
+            goBack={goBack}
+            goNext={goNext}
+          />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
@@ -491,24 +512,6 @@ export function GuidedSetupScreen({
         transition={{ duration: 0.35 }}
         className="glass-panel w-full max-w-xl rounded-[var(--radius-lg)] p-6"
       >
-        {step === "materials" && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-text-secondary">¿Querés agregar fórmulas e inventario para que GUARDIAN también detecte faltantes de materias primas?</p>
-            <div className="flex gap-2">
-              <Button variant={answers.materialsIncluded ? "primary" : "ghost"} type="button" onClick={() => setAnswers((prev) => ({ ...prev, materialsIncluded: true }))}>
-                Agregar ahora
-              </Button>
-              <Button variant={!answers.materialsIncluded ? "primary" : "ghost"} type="button" onClick={() => setAnswers((prev) => ({ ...prev, materialsIncluded: false }))}>
-                Más adelante
-              </Button>
-            </div>
-            {answers.materialsIncluded && (
-              <MaterialsInlineEditor materials={answers.materials} onAdd={(m) => setAnswers((prev) => ({ ...prev, materials: [...prev.materials, m] }))} onRemove={(code) => setAnswers((prev) => ({ ...prev, materials: prev.materials.filter((m) => m.code !== code) }))} />
-            )}
-            {!answers.materialsIncluded && <p className="text-xs text-text-disabled">Sin problema — el Twin queda válido igual, con materiales marcados como no evaluados.</p>}
-          </div>
-        )}
-
         {step === "review" && input && completeness && summary && (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-text-secondary">Esto es lo que entendí de {companyName}:</p>
@@ -571,48 +574,6 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     <div className="rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] px-3 py-2">
       <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">{label}</p>
       <p className="mt-0.5 text-sm text-text-primary">{value}</p>
-    </div>
-  );
-}
-
-function MaterialsInlineEditor({
-  materials,
-  onAdd,
-  onRemove,
-}: {
-  materials: { code: string; name: string; quantity: number; unit: string }[];
-  onAdd: (m: { code: string; name: string; quantity: number; unit: string }) => void;
-  onRemove: (code: string) => void;
-}) {
-  const [draft, setDraft] = useState({ code: "", name: "", quantity: "", unit: "" });
-  const codeField = useAutofillSafeName();
-  const nameField = useAutofillSafeName();
-  const qtyField = useAutofillSafeName();
-  const unitField = useAutofillSafeName();
-
-  function submit() {
-    const qty = Number(draft.quantity);
-    if (!draft.code.trim() || !draft.name.trim() || !Number.isFinite(qty) || qty < 0 || !draft.unit.trim()) return;
-    onAdd({ code: draft.code.trim(), name: draft.name.trim(), quantity: qty, unit: draft.unit.trim() });
-    setDraft({ code: "", name: "", quantity: "", unit: "" });
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        {materials.map((m) => (
-          <EntryChip key={m.code} label={`${m.code} · ${m.name}`} sublabel={`${m.quantity} ${m.unit}`} onRemove={() => onRemove(m.code)} />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <input name={codeField} value={draft.code} onChange={(e) => setDraft((d) => ({ ...d, code: e.target.value }))} placeholder="Código" autoComplete="off" className="h-10 w-24 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
-        <input name={nameField} value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Nombre" autoComplete="off" className="h-10 w-36 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
-        <input type="number" name={qtyField} value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))} placeholder="Cant." autoComplete="off" className="h-10 w-20 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
-        <input name={unitField} value={draft.unit} onChange={(e) => setDraft((d) => ({ ...d, unit: e.target.value }))} placeholder="Unidad" autoComplete="off" className="h-10 w-20 rounded-[var(--radius-sm)] border border-border-default bg-white/[0.02] px-2 text-sm text-text-primary outline-none placeholder:text-text-disabled" />
-        <Button variant="ghost" type="button" onClick={submit} className="px-3">
-          <Plus size={16} />
-        </Button>
-      </div>
     </div>
   );
 }

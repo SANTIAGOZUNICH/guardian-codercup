@@ -210,6 +210,24 @@ describe("Test 13 — materiales omitidos: Twin válido, materials NOT_EVALUATED
     expect(result.materialsFeasible).toBe("not_evaluated");
     expect(result.operationalFeasibility).toBe("evaluated"); // el resto del Twin sigue funcionando
   });
+
+  it("conectar inventario no modifica rates, recursos, staffing ni calendario declarado", () => {
+    const withoutMaterials = novaAnswers();
+    const withInventory: GuidedSetupV2Answers = {
+      ...novaAnswers(),
+      materialsIncluded: true,
+      materials: [{ code: "MP-1", name: "Materia prima 1", quantity: 10, unit: "kg" }],
+    };
+    const before = buildModelInputsFromGuidedSetupV2(withoutMaterials, COMPANY);
+    const after = buildModelInputsFromGuidedSetupV2(withInventory, COMPANY);
+
+    expect(after.input.resources).toEqual(before.input.resources);
+    expect(after.input.profiles).toEqual(before.input.profiles);
+    expect(after.summary.staffCount).toBe(before.summary.staffCount);
+    expect(withInventory.staffingCount).toBe(withoutMaterials.staffingCount);
+    expect(withInventory.schedule).toEqual(withoutMaterials.schedule);
+    expect(after.input.inventory).toHaveLength(1);
+  });
 });
 
 describe("Test 14 — materiales conectados mantiene PASS/FAIL de 9B.1 (mecanismo, no la UI de la entrevista)", () => {
