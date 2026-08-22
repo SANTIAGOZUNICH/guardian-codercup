@@ -34,7 +34,7 @@ import {
   type ScheduleAnswerV2,
 } from "@/lib/model/guided-setup-v2";
 import { INTAKE_STEP_NUMBER, TOTAL_ONBOARDING_STEPS } from "@/lib/model/guided-setup-progress";
-import { buildModelInputsFromGuidedSetupV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
+import { buildModelInputsFromGuidedSetupV2, type OperationSummaryV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
 import { resolveReferenceValue } from "@/lib/engine/reference-catalog";
 import type { RawModelInput } from "@/lib/model/buildOperationalModel";
 import type { ReferenceCatalogEntry, ResourceProcess, TwinCompleteness } from "@/lib/types";
@@ -225,7 +225,7 @@ export function GuidedSetupScreen({
   /** Respuestas ya extraídas en Pantalla 2 (Intake) por texto libre — Guided Setup arranca desde ahí, nunca pide de nuevo lo que Guardian ya entendió. */
   initialAnswers?: GuidedSetupV2Answers;
   onBack: () => void;
-  onComplete: (input: RawModelInput, completeness: TwinCompleteness, schedule: ScheduleAnswerV2) => void;
+  onComplete: (input: RawModelInput, completeness: TwinCompleteness, schedule: ScheduleAnswerV2, summary: OperationSummaryV2) => void;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
   const step = STEPS_V2[stepIndex];
@@ -332,7 +332,7 @@ export function GuidedSetupScreen({
 
   function handleBuildTwin() {
     const result = buildModelInputsFromGuidedSetupV2(answers, { name: companyName, industry });
-    onComplete(result.input, result.completeness, answers.schedule ?? { ...suggestedSchedule(), confirmed: true });
+    onComplete(result.input, result.completeness, answers.schedule ?? { ...suggestedSchedule(), confirmed: true }, result.summary);
   }
 
   const questionLabel: Partial<Record<StepV2, string>> = {

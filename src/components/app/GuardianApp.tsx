@@ -18,6 +18,7 @@ import { detectConstraints } from "@/lib/engine/constraint-detection";
 import { simulateGoal } from "@/lib/engine/simulation-engine";
 import { applyDisruption } from "@/lib/engine/disruption";
 import { buildOperationalModel, type RawModelInput } from "@/lib/model/buildOperationalModel";
+import type { OperationSummaryV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
 import { formatNaive } from "@/lib/engine/evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { formatDisplayDate } from "@/lib/view/constraint-view-model";
@@ -58,6 +59,7 @@ export function GuardianApp() {
   const [operationsCalendar, setOperationsCalendar] = useState(DEFAULT_OPERATIONS_CALENDAR);
   /** Solo presente cuando el Twin vino de Guided Setup (Checkpoint 7) — null en el path de Excel. */
   const [twinCompleteness, setTwinCompleteness] = useState<TwinCompleteness | null>(null);
+  const [operationSummary, setOperationSummary] = useState<OperationSummaryV2 | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   /** Disrupción activa (Checkpoint 6) — un único machine_unavailable a la vez, aplicada sobre `goal`. */
   const [disruption, setDisruption] = useState<MachineUnavailableDisruption | null>(null);
@@ -87,6 +89,7 @@ export function GuardianApp() {
           setModel(m);
           setSnapshotAt(snapshot);
           setTwinCompleteness(null);
+          setOperationSummary(null);
           setPhase("building");
         }}
         onStartGuidedSetup={(initialAnswers) => {
@@ -104,11 +107,12 @@ export function GuardianApp() {
         industry={session.industry}
         initialAnswers={guidedSetupInitialAnswers}
         onBack={() => setPhase("intake")}
-        onComplete={(input: RawModelInput, completeness: TwinCompleteness, schedule: ScheduleAnswerV2) => {
+        onComplete={(input: RawModelInput, completeness: TwinCompleteness, schedule: ScheduleAnswerV2, summary: OperationSummaryV2) => {
           const m = buildOperationalModel(input);
           setModel(m);
           setSnapshotAt(formatNaive(new Date()));
           setTwinCompleteness(completeness);
+          setOperationSummary(summary);
           setOperationsCalendar(scheduleToOperationsCalendar(schedule, DEFAULT_OPERATIONS_CALENDAR.timezone));
           setPhase("building");
         }}
@@ -129,6 +133,7 @@ export function GuardianApp() {
         skipAnimation={phase === "explore-twin"}
         activeDisruption={disruption}
         twinCompleteness={twinCompleteness}
+        operationSummary={operationSummary}
         onViewConstraints={() => setPhase("constraints")}
         onGoToCommandCenter={() => setPhase("command-center")}
       />

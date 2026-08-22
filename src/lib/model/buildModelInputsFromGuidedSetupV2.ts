@@ -245,13 +245,11 @@ export function computeOperationSummary(answers: GuidedSetupV2Answers): Operatio
     else referenceEstimateCount++;
   }
 
-  const recognizedProcesses = new Set(
-    answers.equipment.map((e) => normalizeProcessName(e.processRaw)).filter((p): p is ResourceProcess => p !== null),
-  );
-
   return {
     productsCount: answers.productsRaw.length,
-    processesCount: recognizedProcesses.size,
+    // Metadata visual: cuenta exactamente las etapas declaradas, incluidas
+    // las custom. Que el motor no soporte una etapa no hace que deje de existir.
+    processesCount: answers.processesRaw.filter((process) => process.trim().length > 0).length,
     resourcesCount: answers.equipment.reduce((sum, e) => sum + e.quantity, 0),
     staffCount: answers.staffingCount,
     companyDataCount,
