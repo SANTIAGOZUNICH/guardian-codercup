@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
 import { Guardian } from "@/components/guardian/Guardian";
@@ -12,6 +12,7 @@ import { CapacitiesStepScreen } from "@/components/guided-setup/GuidedSetupCapac
 import { StaffingStepScreen } from "@/components/guided-setup/GuidedSetupStaffingStep";
 import { ScheduleStepScreen } from "@/components/guided-setup/GuidedSetupScheduleStep";
 import { MaterialsStepScreen } from "@/components/guided-setup/GuidedSetupMaterialsStep";
+import { ReviewStepScreen } from "@/components/guided-setup/GuidedSetupReviewStep";
 import {
   addEquipmentToProcess,
   emptyGuidedSetupV2Answers,
@@ -329,12 +330,6 @@ export function GuidedSetupScreen({
     });
   }
 
-  const { input, completeness, summary } = useMemo(() => {
-    if (step !== "review") return { input: null, completeness: null, summary: null };
-    return buildModelInputsFromGuidedSetupV2(answers, { name: companyName, industry });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
   function handleBuildTwin() {
     const result = buildModelInputsFromGuidedSetupV2(answers, { name: companyName, industry });
     onComplete(result.input, result.completeness, answers.schedule ?? { ...suggestedSchedule(), confirmed: true });
@@ -495,6 +490,10 @@ export function GuidedSetupScreen({
     );
   }
 
+  if (step === "review") {
+    return <ReviewStepScreen companyName={companyName} answers={answers} goBack={goBack} onBuild={handleBuildTwin} />;
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12">
       <div className="text-center">
@@ -512,31 +511,6 @@ export function GuidedSetupScreen({
         transition={{ duration: 0.35 }}
         className="glass-panel w-full max-w-xl rounded-[var(--radius-lg)] p-6"
       >
-        {step === "review" && input && completeness && summary && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-text-secondary">Esto es lo que entendí de {companyName}:</p>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <Stat label="Productos" value={summary.productsCount} />
-              <Stat label="Procesos" value={summary.processesCount} />
-              <Stat label="Recursos" value={summary.resourcesCount} />
-              <Stat label="Personal de producción" value={summary.staffCount ?? "—"} />
-              <Stat label="Datos de tu empresa" value={`${summary.companyDataCount}`} />
-              <Stat label="Valores de referencia" value={`${summary.referenceEstimateCount}`} />
-            </div>
-            <p className="text-xs text-text-tertiary">Materiales: {summary.materialsConnected ? "conectados" : "no conectados"}</p>
-            {summary.referenceEstimateCount > 0 && (
-              <div className="rounded-[var(--radius-sm)] border border-accent/25 bg-accent-soft/40 p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-accent-bright">
-                  Guardian está usando {summary.referenceEstimateCount} valor{summary.referenceEstimateCount !== 1 ? "es" : ""} de referencia
-                </p>
-                <p className="mt-1 text-xs text-text-secondary">Van a quedar identificados como estimaciones — reemplazalos cuando tengas el dato real.</p>
-              </div>
-            )}
-            <Button onClick={handleBuildTwin} className="mt-2">
-              Construir mi Modelo Operacional
-            </Button>
-          </div>
-        )}
       </motion.div>
 
       {step !== "review" && (
@@ -556,24 +530,9 @@ export function GuidedSetupScreen({
           )}
         </div>
       )}
-      {step === "review" && (
-        <Button variant="ghost" onClick={goBack} className="gap-2">
-          <ArrowLeft size={15} />
-          Atrás
-        </Button>
-      )}
       <p className="text-[10px] text-text-disabled">
         {totalResolvedCount(answers.resolvedBlocks)} / {GUIDED_SETUP_BLOCKS.length} bloques resueltos
       </p>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-[var(--radius-sm)] border border-border-subtle bg-white/[0.015] px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">{label}</p>
-      <p className="mt-0.5 text-sm text-text-primary">{value}</p>
     </div>
   );
 }
