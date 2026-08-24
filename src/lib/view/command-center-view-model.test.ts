@@ -14,8 +14,10 @@ import {
   selectAskGuardianPrompts,
   buildMaterialIntelligence,
   buildSimulationBasisSummary,
+  buildCommandCenterFacts,
+  selectScenarioSummary,
 } from "./command-center-view-model";
-import type { OperationalModel } from "@/lib/types";
+import type { LastSimulation, OperationalModel } from "@/lib/types";
 
 function loadDemoFile(name: string): ArrayBuffer {
   const filePath = path.resolve(process.cwd(), "public/demo", name);
@@ -81,6 +83,34 @@ describe("Command Center view model — dataset demo real (DEMO_SNAPSHOT_AT)", (
     const understanding = preview.find((l) => l.label === "Comprensión")!;
     expect(understanding.status).toBe("danger"); // Materials queda danger -> peor status de la capa
     expect(preview.map((l) => l.count)).toEqual([3, 5, 3]); // Source Data, Understanding, Production Flow
+  });
+});
+
+describe("Command Center — Visual Checkpoint 12", () => {
+  const empty: OperationalModel = { company: { name: "NOVARA", industry: "cosmeticos" }, orders: [], products: [], presentations: [], materials: [], inventory: [], resources: [], profiles: [] };
+
+  it("new user: no inventa KPIs, constraints ni última simulación", () => {
+    expect(selectHeroMetrics(empty, [])).toEqual([]);
+    expect(selectScenarioSummary(null)).toBeNull();
+  });
+
+  it("staff desconocido y materials skip tienen estados honestos", () => {
+    const facts = buildCommandCenterFacts(empty, null, null);
+    expect(facts.find((fact) => fact.key === "staff")?.value).toBe("No especificado");
+    expect(facts.find((fact) => fact.key === "materials")?.value).toBe("No evaluados (opcional)");
+  });
+
+  it("muestra únicamente una simulación real y conserva el tri-state de materiales", () => {
+    const last: LastSimulation = { goalSummary: "1.000 Shampoo", chosenPlanLabel: "Plan A", completionLabel: "viernes", disruptionLabel: null, capacityFeasible: true, deadlineMet: true, materialsFeasible: "not_evaluated" };
+    expect(selectScenarioSummary(last)).toMatchObject({ goalSummary: "1.000 Shampoo", materialsFeasible: "not_evaluated" });
+  });
+
+  it("construir el home no muta el OperationalModel", () => {
+    const before = JSON.stringify(empty);
+    buildCommandCenterFacts(empty, null, "5 días");
+    buildProcessFlowPreview(empty, []);
+    selectAskGuardianPrompts(empty);
+    expect(JSON.stringify(empty)).toBe(before);
   });
 });
 

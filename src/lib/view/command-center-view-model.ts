@@ -1,4 +1,5 @@
-import type { OperationalModel, OrderConstraints, ResourceProcess } from "@/lib/types";
+import type { LastSimulation, OperationalModel, OrderConstraints, ResourceProcess } from "@/lib/types";
+import type { OperationSummaryV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
 import type { TwinGraph, GraphNodeStatus } from "./twin-graph-view-model";
 import { buildTwinCapabilities } from "@/lib/model/twin-capabilities";
 import { computeModelSimulationBasis, type SimulationBasis } from "@/lib/engine/simulation-basis";
@@ -150,6 +151,49 @@ export function selectAskGuardianPrompts(model: OperationalModel): string[] {
   if (caps.resourceCapacity) prompts.push("¿Qué pasa si una máquina falla?");
   if (caps.materials && caps.inventory) prompts.push("¿Me alcanza la materia prima?");
   return prompts.slice(0, 3);
+}
+
+export interface CommandCenterFact {
+  key: "products" | "processes" | "resources" | "staff" | "schedule" | "materials";
+  label: string;
+  value: string;
+  tone: "normal" | "neutral";
+}
+
+/** Hechos declarados, sin convertirlos en KPIs ni completar ausencias con ceros. */
+export function buildCommandCenterFacts(
+  model: OperationalModel,
+  summary: OperationSummaryV2 | null,
+  scheduleLabel: string | null,
+): CommandCenterFact[] {
+  const facts: CommandCenterFact[] = [
+    { key: "products", label: "Productos", value: String(model.products.length), tone: "normal" },
+    { key: "processes", label: "Procesos", value: String(summary?.processesCount ?? new Set(model.resources.map((r) => r.process)).size), tone: "normal" },
+    { key: "resources", label: "Equipos", value: String(model.resources.length), tone: "normal" },
+    { key: "staff", label: "Personal", value: summary?.staffCount == null ? "No especificado" : `${summary.staffCount} personas`, tone: summary?.staffCount == null ? "neutral" : "normal" },
+  ];
+  if (scheduleLabel) facts.push({ key: "schedule", label: "Días y horarios", value: scheduleLabel, tone: "normal" });
+  facts.push({
+    key: "materials",
+    label: "Materiales",
+    value: summary?.materialsConnected || (model.materials.length > 0 && model.inventory.length > 0) ? "Conectados" : "No evaluados (opcional)",
+    tone: summary?.materialsConnected || (model.materials.length > 0 && model.inventory.length > 0) ? "normal" : "neutral",
+  });
+  return facts;
+}
+
+/** Constraints y resultados sólo existen en el home si provienen de una simulación real. */
+export function selectScenarioSummary(lastSimulation: LastSimulation | null) {
+  if (!lastSimulation) return null;
+  return {
+    goalSummary: lastSimulation.goalSummary,
+    chosenPlanLabel: lastSimulation.chosenPlanLabel,
+    completionLabel: lastSimulation.completionLabel,
+    capacityFeasible: lastSimulation.capacityFeasible,
+    deadlineMet: lastSimulation.deadlineMet,
+    materialsFeasible: lastSimulation.materialsFeasible,
+    disruptionLabel: lastSimulation.disruptionLabel,
+  };
 }
 
 /**

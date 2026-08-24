@@ -46,8 +46,8 @@ export function AppShell({
   ];
 
   return (
-    <div className="flex min-h-screen w-full">
-      <aside className="flex w-60 shrink-0 flex-col gap-8 border-r border-border-subtle bg-bg-sidebar px-5 py-7 backdrop-blur-xl">
+    <div className="flex min-h-screen w-full flex-col lg:flex-row">
+      <aside className="flex shrink-0 items-center justify-between gap-4 border-b border-border-subtle bg-bg-sidebar px-4 py-3 backdrop-blur-xl lg:w-60 lg:flex-col lg:items-stretch lg:justify-start lg:gap-8 lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
         <button
           type="button"
           onClick={() => onNavigate("command-center")}
@@ -58,7 +58,7 @@ export function AppShell({
           <span className="text-sm font-semibold tracking-[0.08em] text-text-primary">GUARDIAN</span>
         </button>
 
-        <nav className="flex flex-col gap-1">
+        <nav className="flex gap-1 overflow-x-auto lg:flex-col">
           {navItems
             .filter((item) => item.visible)
             .map((item) => {
@@ -70,7 +70,7 @@ export function AppShell({
                   onClick={() => onNavigate(item.key)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-[var(--radius-sm)] border-l-2 px-3 py-2.5 text-sm font-medium transition-all duration-[var(--duration-fast)]",
+                    "flex shrink-0 items-center gap-2 rounded-[var(--radius-sm)] border-b-2 px-3 py-2 text-xs font-medium transition-all duration-[var(--duration-fast)] lg:border-b-0 lg:border-l-2 lg:py-2.5 lg:text-sm",
                     active
                       ? "border-accent bg-bg-sidebar-active text-accent-bright"
                       : "border-transparent text-text-secondary hover:bg-white/[0.03] hover:text-text-primary",
@@ -84,8 +84,8 @@ export function AppShell({
         </nav>
       </aside>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-border-subtle bg-bg-base/80 px-8 py-3.5 backdrop-blur-xl">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex items-center justify-between border-b border-border-subtle bg-bg-base/80 px-4 py-3.5 backdrop-blur-xl sm:px-6 lg:px-8">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-text-primary">{companyName}</h1>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-text-tertiary">
@@ -96,7 +96,7 @@ export function AppShell({
           <Guardian state="idle" size={44} className="gap-0" />
         </header>
 
-        <main className="flex-1 overflow-y-auto px-8 py-5">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>
   );

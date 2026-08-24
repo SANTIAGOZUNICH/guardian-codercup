@@ -65,6 +65,7 @@ export function GuardianApp() {
   const [disruption, setDisruption] = useState<MachineUnavailableDisruption | null>(null);
   const [disruptionResourceName, setDisruptionResourceName] = useState<string | null>(null);
   const [lastSimulation, setLastSimulation] = useState<LastSimulation | null>(null);
+  const [askGuardianInitialText, setAskGuardianInitialText] = useState("");
   /** Lo que Guardian ya entendió por texto libre en Pantalla 2 (Intake) — Guided Setup arranca desde ahí, nunca pide de nuevo lo ya contado. */
   const [guidedSetupInitialAnswers, setGuidedSetupInitialAnswers] = useState<GuidedSetupV2Answers>(emptyGuidedSetupV2Answers());
 
@@ -151,10 +152,13 @@ export function GuardianApp() {
   }
 
   if (phase === "command-center") {
-    const totalConstraints = orderConstraints.reduce((sum, oc) => sum + oc.constraints.length, 0);
+    const openAskGuardian = (text = "") => {
+      setAskGuardianInitialText(text);
+      setPhase("ask-guardian");
+    };
     function handleNavigate(item: AppShellNavItem) {
       if (item === "command-center") return;
-      if (item === "ask-guardian") return setPhase("ask-guardian");
+      if (item === "ask-guardian") return openAskGuardian();
       if (item === "operational-twin") return setPhase("explore-twin");
       if (item === "constraints") return setPhase("constraints");
       if (item === "simulations") return setPhase("plans");
@@ -163,7 +167,7 @@ export function GuardianApp() {
       <AppShell
         companyName={session.companyName}
         activeItem="command-center"
-        showConstraints={totalConstraints > 0}
+        showConstraints={lastSimulation?.disruptionLabel != null}
         showSimulations={lastSimulation !== null}
         onNavigate={handleNavigate}
       >
@@ -171,9 +175,12 @@ export function GuardianApp() {
           model={model}
           orderConstraints={orderConstraints}
           lastSimulation={lastSimulation}
+          operationSummary={operationSummary}
+          twinCompleteness={twinCompleteness}
+          calendar={operationsCalendar}
           onViewConstraints={() => setPhase("constraints")}
           onExploreTwin={() => setPhase("explore-twin")}
-          onAskGuardian={() => setPhase("ask-guardian")}
+          onAskGuardian={openAskGuardian}
         />
       </AppShell>
     );
@@ -187,6 +194,7 @@ export function GuardianApp() {
         snapshotAt={snapshotAt}
         calendar={operationsCalendar}
         activeGoal={goal}
+        initialText={askGuardianInitialText}
         onGoalReady={(g, newPresentation) => {
           if (newPresentation) {
             // El usuario declaró (o aceptó de referencia) un gramaje nuevo durante la conversación —

@@ -54,6 +54,7 @@ export function AskGuardianScreen({
   snapshotAt,
   calendar,
   activeGoal,
+  initialText = "",
   onGoalReady,
   onDisruptionReady,
   onBack,
@@ -64,11 +65,12 @@ export function AskGuardianScreen({
   calendar: OperationsCalendar;
   /** Goal ya simulado en esta sesión, si lo hay — habilita interpretar preguntas de disrupción sobre ese objetivo. */
   activeGoal: Goal | null;
+  initialText?: string;
   onGoalReady: (goal: Goal, newPresentation?: Presentation) => void;
   onDisruptionReady: (disruption: MachineUnavailableDisruption, resourceName: string) => void;
   onBack: () => void;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [selection, setSelection] = useState<{ candidates: DisruptionCandidate[]; unitsUnavailable: number } | null>(null);
