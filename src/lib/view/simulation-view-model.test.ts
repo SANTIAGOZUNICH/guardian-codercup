@@ -18,6 +18,7 @@ import {
   resolveChosenPlanPrefix,
 } from "./simulation-view-model";
 import { buildSimulationCardView, buildSimulationGoalView, selectSimulationCards, SIMULATION_PHASES } from "./simulating-view-model";
+import { buildRecommendedPlansView, explainPlanRanking, isSameConfiguration, selectRecommendedScenario } from "./recommended-plans-view-model";
 
 function loadDemoFile(name: string): ArrayBuffer {
   const filePath = path.resolve(process.cwd(), "public/demo", name);
@@ -143,6 +144,64 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para B
     expect(view.headline).toBe("¿Por qué esta configuración?");
     expect(view.evaluatedCount).toBe(6);
     expect(view.materialBlockerLabel).not.toBeNull();
+  });
+
+  it("Recommended Plans toma el primer candidato del outcome y limita alternativas reales", () => {
+    const before = structuredClone(result);
+    const view = buildRecommendedPlansView(result, model, DEFAULT_OPERATIONS_CALENDAR);
+    expect(view.primary).toBe(result.outcome.candidates[0]);
+    expect(selectRecommendedScenario(result)).toBe(result.outcome.candidates[0]);
+    expect(view.alternatives.length).toBeLessThanOrEqual(2);
+    expect(view.evaluatedCount).toBe(result.scenarios.length);
+    expect(result).toEqual(before);
+  });
+
+  it("one candidate y baseline-only nunca fabrican Plan B/C", () => {
+    const onlyCandidate = { ...result, outcome: { ...result.outcome, candidates: result.outcome.candidates.slice(0, 1) } };
+    expect(buildRecommendedPlansView(onlyCandidate, model, DEFAULT_OPERATIONS_CALENDAR).alternatives).toHaveLength(0);
+    const onlyBaseline = { ...result, scenarios: [], ranked: [], outcome: { kind: "infeasible" as const, candidates: [] } };
+    const view = buildRecommendedPlansView(onlyBaseline, model, DEFAULT_OPERATIONS_CALENDAR);
+    expect(view.primary).toBe(result.baseline);
+    expect(view.primaryIsBaseline).toBe(true);
+    expect(view.alternatives).toHaveLength(0);
+  });
+
+  it("baseline equivalente se reconoce sin rerankear", () => {
+    const equivalent = { ...result.outcome.candidates[0], config: { ...result.outcome.candidates[0].config, resourceConfig: result.baseline.config.resourceConfig } };
+    expect(isSameConfiguration(equivalent, result.baseline)).toBe(true);
+  });
+
+  it("deadline false activa no-solution y nunca usa verde favorable", () => {
+    const missed = { ...result.outcome.candidates[0], status: "deadline_missed" as const, result: { ...result.outcome.candidates[0].result, deadlineMet: false } };
+    const noSolution = { ...result, outcome: { kind: "deadline_missed" as const, candidates: [missed] } };
+    const view = buildRecommendedPlansView(noSolution, model, DEFAULT_OPERATIONS_CALENDAR);
+    expect(view.noSolution).toBe(true);
+    expect(view.favorable).toBe(false);
+    expect(view.title).toMatch(/No encontré/);
+  });
+
+  it("Materials SKIP es neutral y faltante real permanece constraint", () => {
+    const skip = { ...result.outcome.candidates[0], status: "operationally_viable" as const, result: { ...result.outcome.candidates[0].result, materialsFeasible: "not_evaluated" as const, materialShortages: [] } };
+    const skipResult = { ...result, outcome: { kind: "operationally_viable" as const, candidates: [skip] } };
+    expect(buildRecommendedPlansView(skipResult, model, DEFAULT_OPERATIONS_CALENDAR).materialsLabel).toBe("No evaluado");
+    expect(buildRecommendedPlansView(result, model, DEFAULT_OPERATIONS_CALENDAR).materialsLabel).toBe("Faltante confirmado");
+  });
+
+  it("explicación respeta recursos extra aunque la alternativa tenga distinta contención", () => {
+    const winner = { ...result.outcome.candidates[0], extraResourcesUsed: 0 };
+    const runner = { ...winner, config: { ...winner.config, id: "runner" }, extraResourcesUsed: 1, contention: { ...winner.contention, orderIds: ["A"] } };
+    const ranked = { ...result, baseline: { ...result.baseline, config: { ...result.baseline.config, resourceConfig: [] } }, outcome: { ...result.outcome, candidates: [winner, runner] } };
+    const reasons = explainPlanRanking(ranked).join(" ");
+    expect(reasons).toMatch(/menos recursos adicionales/);
+    expect(reasons).not.toMatch(/contenci|confianza|riesgo/i);
+  });
+
+  it("view model no expone confidence, risk ni cambios subjetivos", () => {
+    const view = buildRecommendedPlansView(result, model, DEFAULT_OPERATIONS_CALENDAR);
+    expect(view).not.toHaveProperty("confidence");
+    expect(view).not.toHaveProperty("risk");
+    expect(view).not.toHaveProperty("changeLevel");
+    expect(view.goal.client).toBe(result.goal.client);
   });
 });
 

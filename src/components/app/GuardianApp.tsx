@@ -270,6 +270,7 @@ export function GuardianApp() {
     return (
       <RecommendedPlansScreen
         result={result}
+        model={activeModel}
         calendar={operationsCalendar}
         disruptionContext={disruptionContext}
         onChoosePlan={(scenario: EvaluatedScenario) => {
