@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
-import type { InventoryItem, Material, Order, Resource, ResourceProcess } from "@/lib/types";
-import { normalizeDate, normalizeNumber, normalizePriority, slugify } from "./normalize";
+import type { InventoryItem, Material, Order, OrderPlanning, ProcessResourceAssignment, Resource, ResourceProcess } from "@/lib/types";
+import { normalizeDate, normalizeDateTime, normalizeNumber, normalizePriority, slugify } from "./normalize";
 
 export class ExcelParseError extends Error {
   constructor(
@@ -38,6 +38,51 @@ export function productIdFromName(name: string): string {
   return slugify(name);
 }
 
+const PLANNING_STATUS_COLUMN = "Estado planificación";
+const PLANNED_START_COLUMN = "Inicio planificado";
+const ASSIGNMENTS_COLUMN = "Asignaciones por proceso";
+
+/** Formato: `Elaboración=res-1:1|res-2:1;Envasado=res-3:1`. */
+function parseProcessAssignments(value: unknown): ProcessResourceAssignment[] {
+  const raw = String(value ?? "").trim();
+  if (!raw) return [];
+  return raw.split(";").map((segment) => {
+    const [processRaw, resourcesRaw, ...extra] = segment.split("=");
+    const process = processRaw?.trim() as ResourceProcess;
+    if (!process || resourcesRaw === undefined || extra.length > 0) {
+      throw new ExcelParseError(`Pedidos.xlsx: formato inválido en ${ASSIGNMENTS_COLUMN}.`);
+    }
+    const resources = resourcesRaw.split("|").map((entry) => {
+      const separator = entry.lastIndexOf(":");
+      const resourceId = entry.slice(0, separator).trim();
+      const unitsUsed = Number(entry.slice(separator + 1).trim());
+      if (separator <= 0 || !resourceId || !Number.isInteger(unitsUsed) || unitsUsed <= 0) {
+        throw new ExcelParseError(`Pedidos.xlsx: cada recurso debe usar el formato resourceId:unidades.`);
+      }
+      return { resourceId, unitsUsed };
+    });
+    return { process, resources };
+  });
+}
+
+function parseOptionalPlanning(row: Record<string, unknown>): OrderPlanning | undefined {
+  const hasPlanningData = [PLANNING_STATUS_COLUMN, PLANNED_START_COLUMN, ASSIGNMENTS_COLUMN].some(
+    (column) => String(row[column] ?? "").trim() !== "",
+  );
+  if (!hasPlanningData) return undefined;
+  const status = String(row[PLANNING_STATUS_COLUMN] ?? "").trim().toLowerCase();
+  if (status !== "planned" && status !== "planificado") {
+    throw new ExcelParseError(`Pedidos.xlsx: ${PLANNING_STATUS_COLUMN} debe ser PLANNED/PLANIFICADO cuando se informa planificación.`);
+  }
+  const plannedStartAt = normalizeDateTime(row[PLANNED_START_COLUMN]);
+  const processAssignments = parseProcessAssignments(row[ASSIGNMENTS_COLUMN]);
+  return {
+    status: "planned",
+    ...(plannedStartAt ? { plannedStartAt } : {}),
+    ...(processAssignments.length > 0 ? { processAssignments } : {}),
+  };
+}
+
 /** Junto a cada Order normalizado, conserva el nombre de producto tal como fue cargado. */
 export function parsePedidosWithProductNames(
   buffer: ArrayBuffer,
@@ -53,6 +98,7 @@ export function parsePedidosWithProductNames(
     const productName = String(row["Producto"]).trim();
     const productId = productIdFromName(productName);
     productNames.set(productId, productName);
+    const planning = parseOptionalPlanning(row);
     return {
       id: String(row["ID pedido"]).trim(),
       client: String(row["Cliente"]).trim(),
@@ -60,6 +106,7 @@ export function parsePedidosWithProductNames(
       quantity: normalizeNumber(row["Cantidad"]),
       deliveryDate: normalizeDate(row["Fecha entrega"]),
       priority: normalizePriority(row["Prioridad"]),
+      ...(planning ? { planning } : {}),
     };
   });
   return { orders, productNames };

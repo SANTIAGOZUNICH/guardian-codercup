@@ -8,6 +8,23 @@ export interface Company {
   industry: string;
 }
 
+/** Asignación declarada para un proceso; no duplica el routing del producto. */
+export interface ProcessResourceAssignment {
+  process: ResourceProcess;
+  resources: ResourceAllocation[];
+}
+
+/**
+ * Metadata opcional de planificación futura. Los campos internos permanecen
+ * opcionales para conservar ingestas parciales como UNKNOWN; sólo el helper
+ * de schedulability decide cuándo el contrato está completo.
+ */
+export interface OrderPlanning {
+  status: "planned";
+  plannedStartAt?: string;
+  processAssignments?: ProcessResourceAssignment[];
+}
+
 export interface Order {
   id: string;
   client: string;
@@ -23,6 +40,8 @@ export interface Order {
    * `lib/model/presentation.ts`). Nunca se "adivina" cuando hay más de una.
    */
   presentationId?: string;
+  /** Trabajo futuro planificado. Ausente/incompleto => scheduling temporal SKIP. */
+  planning?: OrderPlanning;
 }
 
 export interface Product {

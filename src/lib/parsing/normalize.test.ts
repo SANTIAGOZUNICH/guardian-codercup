@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeDate, normalizeNumber, normalizePriority, slugify } from "./normalize";
+import { normalizeDate, normalizeDateTime, normalizeNumber, normalizePriority, slugify } from "./normalize";
 
 describe("slugify", () => {
   it("normaliza nombres de producto a un id estable", () => {
@@ -20,6 +20,16 @@ describe("normalizeDate", () => {
   it("convierte un serial de fecha de Excel", () => {
     // 46000 => 2025-12-25 (según epoch 1899-12-30 de Excel)
     expect(normalizeDate(46000)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("normalizeDateTime", () => {
+  it("conserva un instante ISO explícito", () => {
+    expect(normalizeDateTime("2026-08-24T08:30:00")).toBe("2026-08-24T08:30:00");
+  });
+
+  it("no inventa hora para una fecha sin hora", () => {
+    expect(normalizeDateTime("2026-08-24")).toBe("2026-08-24");
   });
 });
 

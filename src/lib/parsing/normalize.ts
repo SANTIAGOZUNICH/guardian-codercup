@@ -33,6 +33,19 @@ export function normalizeDate(value: unknown): string {
   return String(value ?? "");
 }
 
+/** Normaliza un instante explícito sin inferir una hora cuando sólo hay fecha. */
+export function normalizeDateTime(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number") {
+    const epoch = Date.UTC(1899, 11, 30);
+    return new Date(epoch + value * 86400000).toISOString();
+  }
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed || /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
+  return Number.isNaN(new Date(normalized).getTime()) ? trimmed : normalized;
+}
+
 export function normalizeNumber(value: unknown): number {
   if (typeof value === "number") return value;
   if (typeof value === "string") {
