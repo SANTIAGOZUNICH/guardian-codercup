@@ -23,6 +23,7 @@ import { formatNaive } from "@/lib/engine/evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
 import { formatDisplayDate } from "@/lib/view/constraint-view-model";
 import { resolveChosenPlanPrefix } from "@/lib/view/simulation-view-model";
+import { withScenarioPresentation } from "@/lib/view/ask-guardian-view-model";
 import type {
   EvaluatedScenario,
   Goal,
@@ -30,6 +31,7 @@ import type {
   LastSimulation,
   MachineUnavailableDisruption,
   OperationalModel,
+  Presentation,
   TwinCompleteness,
 } from "@/lib/types";
 
@@ -61,6 +63,7 @@ export function GuardianApp() {
   const [twinCompleteness, setTwinCompleteness] = useState<TwinCompleteness | null>(null);
   const [operationSummary, setOperationSummary] = useState<OperationSummaryV2 | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [scenarioPresentation, setScenarioPresentation] = useState<Presentation | null>(null);
   /** Disrupción activa (Checkpoint 6) — un único machine_unavailable a la vez, aplicada sobre `goal`. */
   const [disruption, setDisruption] = useState<MachineUnavailableDisruption | null>(null);
   const [disruptionResourceName, setDisruptionResourceName] = useState<string | null>(null);
@@ -124,6 +127,7 @@ export function GuardianApp() {
   if (!model || !snapshotAt) return null;
 
   const orderConstraints = detectConstraints(model, operationsCalendar, snapshotAt);
+  const scenarioModel = withScenarioPresentation(model, scenarioPresentation);
 
   if (phase === "building" || phase === "explore-twin") {
     return (
@@ -195,12 +199,10 @@ export function GuardianApp() {
         calendar={operationsCalendar}
         activeGoal={goal}
         initialText={askGuardianInitialText}
+        operationSummary={operationSummary}
+        twinCompleteness={twinCompleteness}
         onGoalReady={(g, newPresentation) => {
-          if (newPresentation) {
-            // El usuario declaró (o aceptó de referencia) un gramaje nuevo durante la conversación —
-            // se suma al Twin de la sesión, nunca se pierde ni se pide de nuevo (Product Contract V1).
-            setModel((prev) => (prev ? { ...prev, presentations: [...prev.presentations, newPresentation] } : prev));
-          }
+          setScenarioPresentation(newPresentation ?? null);
           setGoal(g);
           // Un Goal nuevo arranca de un Twin limpio — cualquier disrupción anterior queda atrás.
           setDisruption(null);
@@ -218,10 +220,10 @@ export function GuardianApp() {
   }
 
   if (phase === "disruption" && goal && disruption) {
-    const disruptedModel = applyDisruption(model, disruption);
+    const disruptedModel = applyDisruption(scenarioModel, disruption);
     return (
       <DisruptionScreen
-        model={model}
+        model={scenarioModel}
         disruptedModel={disruptedModel}
         disruption={disruption}
         resourceName={disruptionResourceName ?? disruption.resourceId}
@@ -236,7 +238,7 @@ export function GuardianApp() {
 
   if (phase === "simulating" && goal) {
     // Misma pantalla para simulation y resimulation — el único cambio es qué Twin evalúa.
-    const activeModel = disruption ? applyDisruption(model, disruption) : model;
+    const activeModel = disruption ? applyDisruption(scenarioModel, disruption) : scenarioModel;
     return (
       <SimulatingScreen
         model={activeModel}
@@ -253,16 +255,16 @@ export function GuardianApp() {
   if (phase === "plans" && goal) {
     // Recalcula (síncrono, barato) en vez de guardar el resultado completo en estado —
     // mismo patrón que orderConstraints arriba.
-    const activeModel = disruption ? applyDisruption(model, disruption) : model;
+    const activeModel = disruption ? applyDisruption(scenarioModel, disruption) : scenarioModel;
     const result: GoalSimulationResult = simulateGoal(activeModel, goal, operationsCalendar, snapshotAt);
     const disruptionContext =
       disruption && disruptionResourceName
         ? {
-            model,
+            model: scenarioModel,
             disruptedModel: activeModel,
             disruption,
             resourceName: disruptionResourceName,
-            beforeResult: simulateGoal(model, goal, operationsCalendar, snapshotAt),
+            beforeResult: simulateGoal(scenarioModel, goal, operationsCalendar, snapshotAt),
           }
         : null;
     return (

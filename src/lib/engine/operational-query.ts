@@ -50,6 +50,10 @@ function answerBottleneck(model: OperationalModel, orderConstraints: OrderConstr
 
 function answerResourceCount(text: string, model: OperationalModel): string {
   const normalized = stripAccents(text);
+  if (/cuant[oa]s?\s+(recursos|equipos)\b/.test(normalized)) {
+    const totalUnits = model.resources.reduce((sum, resource) => sum + resource.quantityAvailable, 0);
+    return `Tenés ${model.resources.length} recursos declarados, con ${totalUnits} equipos disponibles en total.`;
+  }
   const matches = model.resources.filter((r) => normalized.includes(stripAccents(r.name).split(" ")[0]));
   if (matches.length === 0) {
     return "No identifiqué a qué recurso te referís. Probá nombrándolo, por ejemplo: \"¿cuántas llenadoras tengo?\".";

@@ -47,6 +47,12 @@ describe("answerOperationalQuery", () => {
     expect(answer).toContain("2");
   });
 
+  it("resource_count: responde el total ante una consulta genérica", () => {
+    const answer = answerOperationalQuery("resource_count", "¿Cuántos recursos tengo?", baseModel(), [], null);
+    expect(answer).toContain("2 recursos declarados");
+    expect(answer).toContain("2 equipos disponibles");
+  });
+
   it("bottleneck: sin pedidos evaluados, nunca inventa un proceso", () => {
     const model = baseModel();
     const answer = answerOperationalQuery("bottleneck", "cuello de botella", model, [], null);

@@ -45,3 +45,16 @@ export function extractGramsPerUnit(text: string): number | null {
   const n = Number(match[1].replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : null;
 }
+
+/**
+ * Extrae gramaje sólo cuando el texto completo lo declara con unidad.
+ * A diferencia de `extractGramsPerUnit`, no acepta un número suelto: en una
+ * consulta de producción ese número suele ser la cantidad de unidades.
+ */
+export function extractExplicitGramsPerUnit(text: string): number | null {
+  const normalized = stripAccents(text.toLowerCase());
+  const match = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:g|gr|grs|gramos)\b/);
+  if (!match) return null;
+  const value = Number(match[1].replace(",", "."));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
