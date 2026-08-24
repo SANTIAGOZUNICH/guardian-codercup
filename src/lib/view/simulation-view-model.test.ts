@@ -17,6 +17,7 @@ import {
   resolveGoalDeadlineLabel,
   resolveChosenPlanPrefix,
 } from "./simulation-view-model";
+import { buildSimulationCardView, buildSimulationGoalView, selectSimulationCards, SIMULATION_PHASES } from "./simulating-view-model";
 
 function loadDemoFile(name: string): ArrayBuffer {
   const filePath = path.resolve(process.cwd(), "public/demo", name);
@@ -43,6 +44,34 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para B
   });
   if (!parsed.ok) throw new Error("goal debería parsear ok");
   const result = simulateGoal(model, parsed.goal, DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT);
+
+  it("Simulating usa el goal, baseline y conteo reales", () => {
+    const goalView = buildSimulationGoalView(result, model, DEFAULT_OPERATIONS_CALENDAR);
+    const cards = selectSimulationCards(result);
+    expect(goalView.quantity).toBe(`${result.goal.quantity.toLocaleString("es-AR")} unidades`);
+    expect(cards[0].scenario).toBe(result.baseline);
+    expect(cards.length).toBe(Math.min(3, result.ranked.length + 1));
+    expect(SIMULATION_PHASES.join(" ")).not.toMatch(/%/);
+  });
+
+  it("cards exponen sólo métricas reales y deadline true/false", () => {
+    for (const entry of selectSimulationCards(result)) {
+      const card = buildSimulationCardView(entry);
+      expect(card.deadlineLabel).toBe(entry.scenario.result.deadlineMet ? "Cumple fecha objetivo" : "No cumple fecha objetivo");
+      expect(card).not.toHaveProperty("utilization");
+      expect(card).not.toHaveProperty("risk");
+    }
+  });
+
+  it("Materials SKIP se omite y construir la vista no muta el modelo", () => {
+    const skipModel = { ...model, materials: [], inventory: [] };
+    const before = structuredClone(skipModel);
+    const skipResult = simulateGoal(skipModel, parsed.goal, DEFAULT_OPERATIONS_CALENDAR, DEMO_SNAPSHOT_AT);
+    expect(skipResult.materialsFeasible).toBe("not_evaluated");
+    expect(buildSimulationCardView(selectSimulationCards(skipResult)[0]).materialsLabel).toBeNull();
+    buildSimulationGoalView(skipResult, skipModel, DEFAULT_OPERATIONS_CALENDAR);
+    expect(skipModel).toEqual(before);
+  });
 
   it("buildSimulatingSummary: números reales, nunca hardcodeados (6 escenarios sin priorityStrategy)", () => {
     const summary = buildSimulatingSummary(result);

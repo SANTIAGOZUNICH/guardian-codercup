@@ -63,6 +63,7 @@ export function GuardianApp() {
   const [twinCompleteness, setTwinCompleteness] = useState<TwinCompleteness | null>(null);
   const [operationSummary, setOperationSummary] = useState<OperationSummaryV2 | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [simulationResult, setSimulationResult] = useState<GoalSimulationResult | null>(null);
   const [scenarioPresentation, setScenarioPresentation] = useState<Presentation | null>(null);
   /** Disrupción activa (Checkpoint 6) — un único machine_unavailable a la vez, aplicada sobre `goal`. */
   const [disruption, setDisruption] = useState<MachineUnavailableDisruption | null>(null);
@@ -204,6 +205,7 @@ export function GuardianApp() {
         onGoalReady={(g, newPresentation) => {
           setScenarioPresentation(newPresentation ?? null);
           setGoal(g);
+          setSimulationResult(null);
           // Un Goal nuevo arranca de un Twin limpio — cualquier disrupción anterior queda atrás.
           setDisruption(null);
           setDisruptionResourceName(null);
@@ -230,7 +232,7 @@ export function GuardianApp() {
         goal={goal}
         calendar={operationsCalendar}
         snapshotAt={snapshotAt}
-        onReSimulate={() => setPhase("simulating")}
+        onReSimulate={() => { setSimulationResult(null); setPhase("simulating"); }}
         onBack={() => setPhase("command-center")}
       />
     );
@@ -247,16 +249,14 @@ export function GuardianApp() {
         calendar={operationsCalendar}
         mode={disruption ? "resimulation" : "simulation"}
         disruptionLabel={disruption && disruptionResourceName ? `${disruptionResourceName} no disponible` : undefined}
-        onDone={() => setPhase("plans")}
+        onDone={(result) => { setSimulationResult(result); setPhase("plans"); }}
       />
     );
   }
 
-  if (phase === "plans" && goal) {
-    // Recalcula (síncrono, barato) en vez de guardar el resultado completo en estado —
-    // mismo patrón que orderConstraints arriba.
+  if (phase === "plans" && goal && simulationResult) {
     const activeModel = disruption ? applyDisruption(scenarioModel, disruption) : scenarioModel;
-    const result: GoalSimulationResult = simulateGoal(activeModel, goal, operationsCalendar, snapshotAt);
+    const result = simulationResult;
     const disruptionContext =
       disruption && disruptionResourceName
         ? {
