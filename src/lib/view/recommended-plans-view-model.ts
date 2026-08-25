@@ -118,6 +118,13 @@ export function buildRecommendedPlansView(
     favorable,
     noSolution,
     insufficientData,
+    comparisonStatus: insufficientData
+      ? "No evaluable"
+      : !primary.result.capacityFeasible
+        ? "No factible"
+        : primary.result.deadlineMet
+          ? "Factible"
+          : "No cumple fecha",
     selectable: !noSolution && !insufficientData && primary.result.completionAt !== null,
     title: insufficientData ? "Faltan datos para evaluar este escenario" : noSolution ? "Ningún plan cumple la fecha actual" : "Encontré las mejores alternativas",
     subtitle: insufficientData

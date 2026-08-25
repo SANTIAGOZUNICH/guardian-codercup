@@ -177,6 +177,7 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para B
     const view = buildRecommendedPlansView(noSolution, model, DEFAULT_OPERATIONS_CALENDAR);
     expect(view.noSolution).toBe(true);
     expect(view.favorable).toBe(false);
+    expect(view.comparisonStatus).toBe("No cumple fecha");
     expect(view.title).toMatch(/Ningún plan cumple/);
   });
 
