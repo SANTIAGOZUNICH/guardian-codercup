@@ -16,6 +16,8 @@ import type {
   ScenarioResult,
 } from "@/lib/types";
 import { baselineResourceConfig, evaluateScenario } from "./evaluate-scenario";
+import { scheduleWorkload } from "./workload-scheduler";
+import { assessOrderSchedulability } from "@/lib/model/order-planning";
 
 /**
  * ============================================================================
@@ -27,16 +29,10 @@ import { baselineResourceConfig, evaluateScenario } from "./evaluate-scenario";
  * - `people` NO es una dimensión combinatoria: no existe ningún dato que
  *   relacione personal con throughput (Checkpoint 1, Corrección 1). Fijo a
  *   disponibilidad completa en todas las configuraciones.
- * - `priorityStrategy` fue ELIMINADA de la combinatoria (revisión post-
- *   Checkpoint 5): la implementación anterior no modificaba ningún resultado
- *   físico de evaluateScenario — solo cambiaba qué pedidos existentes se
- *   contaban como "en conflicto", una precisión falsa (parecía que "priorizar
- *   el goal" reducía el impacto real, cuando en realidad no existe scheduling
- *   temporal detrás que lo demuestre). Sin scheduling real, esa estrategia no
- *   aporta una variable física — se retira en vez de simularla falsamente.
- *   Esto reduce el espacio de escenarios a la mitad (12 -> 6 con el dataset
- *   demo) — menos escenarios, todos físicamente reales, es preferible a más
- *   escenarios donde la mitad solo difiere por una etiqueta.
+ * - `priorityStrategy` sólo vuelve a ser dimensión cuando existe workload con
+ *   planning explícito y schedulable. En ese caso AS-IS y PRIORITIZE-GOAL
+ *   producen timelines físicos distintos; sin workload se conserva exactamente
+ *   el espacio legacy, sin duplicar escenarios por una etiqueta.
  * - `materialsFeasible` y `capacityFeasible` son constantes entre todos los
  *   escenarios de un mismo Goal (dependen del producto/cantidad y de que la
  *   asignación sea válida, nunca de qué máquina específica se elige) — por
@@ -131,8 +127,8 @@ function machineLabel(model: OperationalModel, combo: ResourceAllocation[]): str
 /**
  * Genera todas las configuraciones físicamente válidas para cumplir `goal`,
  * acotadas por topes duros (MAX_SCENARIOS) y de-duplicadas. Solo varía
- * máquinas — ver nota de arquitectura sobre por qué `priorityStrategy` no
- * es una dimensión de V1.
+ * máquinas; la estrategia temporal sólo se duplica cuando hay workload
+ * schedulable (ver nota de arquitectura).
  */
 export function generateScenarioConfigs(model: OperationalModel, goal: Goal): ScenarioConfig[] {
   const profile = model.profiles.find((p) => p.productId === goal.productId);
@@ -157,6 +153,7 @@ export function generateScenarioConfigs(model: OperationalModel, goal: Goal): Sc
   const personnel = personnelAllocation(model, processes);
   const seen = new Set<string>();
   const configs: ScenarioConfig[] = [];
+  const hasSchedulableWorkload = model.orders.some((order) => assessOrderSchedulability(model, order).schedulable);
 
   for (const machineCombo of combos) {
     const resourceConfig = [...machineCombo, ...personnel];
@@ -167,10 +164,13 @@ export function generateScenarioConfigs(model: OperationalModel, goal: Goal): Sc
     if (seen.has(signature)) continue;
     seen.add(signature);
 
-    configs.push({
-      id: `scenario-${configs.length + 1}`,
+    const baseId = seen.size;
+    const strategies = hasSchedulableWorkload ? (["as-is", "prioritize-goal"] as const) : (["as-is"] as const);
+    for (const priorityStrategy of strategies) configs.push({
+      id: `scenario-${baseId}-${priorityStrategy}`,
       label: machineLabel(model, machineCombo),
       resourceConfig,
+      priorityStrategy,
     });
     if (configs.length >= MAX_SCENARIOS) return configs;
   }
@@ -359,13 +359,16 @@ export function simulateGoal(
   const configs = generateScenarioConfigs(model, goal);
 
   const evaluate = (config: ScenarioConfig): EvaluatedScenario => {
-    const result = evaluateScenario(model, hypotheticalOrder, config.resourceConfig, calendar, snapshotAt);
+    const isolated = evaluateScenario(model, hypotheticalOrder, config.resourceConfig, calendar, snapshotAt);
+    const scheduled = scheduleWorkload(model, hypotheticalOrder, config.resourceConfig, isolated, calendar, snapshotAt, config.priorityStrategy ?? "as-is");
+    const result = scheduled ? { ...isolated, completionAt: scheduled.completionAt, deadlineMet: scheduled.deadlineMet } : isolated;
     return {
       config,
       result,
       contention: computeContention(model, config),
       extraResourcesUsed: computeExtraResourcesUsed(model, config),
       status: classifyPlan(result),
+      ...(scheduled ? { scheduleTrace: scheduled.trace, goalScheduledStartAt: scheduled.goalScheduledStartAt } : {}),
     };
   };
 
@@ -375,6 +378,7 @@ export function simulateGoal(
     id: "baseline",
     label: "Configuración actual",
     resourceConfig: baselineResourceConfig(model, hypotheticalOrder),
+    priorityStrategy: "as-is",
   };
   const baseline = evaluate(baselineConfig);
 

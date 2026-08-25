@@ -334,6 +334,18 @@ function snapToNextWorkStart(date: Date, calendar: OperationsCalendar): Date {
   return workStartOfDay(day, calendar);
 }
 
+/** Primer instante productivo válido en o después de `at`. */
+export function nextWorkingInstant(at: string, calendar: OperationsCalendar): string {
+  const date = new Date(at);
+  const dayEnd = workEndOfDay(date, calendar);
+  const dayStart = workStartOfDay(date, calendar);
+  if (isWorkingDay(date, calendar) && date.getTime() >= dayStart.getTime() && date.getTime() < dayEnd.getTime()) {
+    return formatNaive(date);
+  }
+  const base = date.getTime() >= dayEnd.getTime() ? new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1) : date;
+  return formatNaive(snapToNextWorkStart(base, calendar));
+}
+
 /** Formato naive "YYYY-MM-DDTHH:mm:ss.000" a partir de los campos locales de `date` — nunca convierte a UTC. */
 export function formatNaive(date: Date): string {
   const pad = (n: number, len = 2) => String(n).padStart(len, "0");

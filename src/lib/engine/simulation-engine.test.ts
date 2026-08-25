@@ -67,7 +67,7 @@ function buildGoal(overrides: Partial<Goal> = {}): Goal {
   };
 }
 
-describe("generateScenarioConfigs — sin priorityStrategy", () => {
+describe("generateScenarioConfigs — backward compatible sin workload schedulable", () => {
   const model = buildFixtureModel();
   const goal = buildGoal();
   const configs = generateScenarioConfigs(model, goal);
@@ -79,7 +79,7 @@ describe("generateScenarioConfigs — sin priorityStrategy", () => {
     }
   });
 
-  it("2. reproducible: 2 (Elaboración) × 3 (Envasado: L1/L2/ambas) = 6 — la mitad de antes, sin la dimensión de prioridad", () => {
+  it("2. reproducible: 2 (Elaboración) × 3 (Envasado) = 6; no duplica estrategias sin workload", () => {
     expect(configs).toHaveLength(6);
     expect(generateScenarioConfigs(model, goal)).toEqual(configs);
   });
@@ -101,7 +101,7 @@ describe("generateScenarioConfigs — sin priorityStrategy", () => {
 
   it("5. configuraciones duplicadas eliminadas", () => {
     const signatures = configs.map((c) =>
-      [...c.resourceConfig].sort((a, b) => a.resourceId.localeCompare(b.resourceId)).map((a) => `${a.resourceId}:${a.unitsUsed}`).join(","),
+      `${c.priorityStrategy}:` + [...c.resourceConfig].sort((a, b) => a.resourceId.localeCompare(b.resourceId)).map((a) => `${a.resourceId}:${a.unitsUsed}`).join(","),
     );
     expect(new Set(signatures).size).toBe(signatures.length);
   });
@@ -119,7 +119,7 @@ describe("generateScenarioConfigs — respeta un Twin disrupted (items 11/19)", 
     }
   });
 
-  it("2. scenario count cambia correctamente: 6 -> 2 (2 Elaboración × 1 Envasado, ya no 3)", () => {
+  it("2. scenario count cambia correctamente: 6 -> 2", () => {
     expect(generateScenarioConfigs(model, goal)).toHaveLength(6);
     expect(generateScenarioConfigs(disruptedModel, goal)).toHaveLength(2);
   });
@@ -396,7 +396,7 @@ describe("simulateGoal — integración con el dataset demo real", () => {
     resources,
   });
 
-  it('"Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes." -> 6 escenarios, conditionally_viable (bloqueado por MP-003)', () => {
+  it('"Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes." -> 6 escenarios legacy, conditionally_viable (bloqueado por MP-003)', () => {
     const parsed = parseGoalText("Necesito producir 30.000 shampoos para Belleza Norte SA antes del viernes.", {
       model,
       snapshotAt: DEMO_SNAPSHOT_AT,
@@ -406,7 +406,6 @@ describe("simulateGoal — integración con el dataset demo real", () => {
     if (!parsed.ok) return;
 
     const result = simulateGoal(model, parsed.goal, CALENDAR, DEMO_SNAPSHOT_AT);
-    // Elaboración (2 opciones) × Envasado L1/L2/ambas (3 opciones) — sin la dimensión de prioridad ya retirada.
     expect(result.scenarios).toHaveLength(6);
     expect(result.materialsFeasible).toBe("fail"); // 30.000 excede el stock de MP-003
     expect(result.outcome.kind).toBe("conditionally_viable"); // ninguno fully viable, pero algunos llegan a tiempo

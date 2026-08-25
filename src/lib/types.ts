@@ -582,6 +582,19 @@ export interface ScenarioResult {
   capacityIssues: CapacityIssue[];
 }
 
+export type PriorityStrategy = "as-is" | "prioritize-goal";
+
+/** Intervalo derivado de simulación; nunca se persiste en OperationalModel. */
+export interface ScheduleTraceEntry {
+  workId: string;
+  workType: "existing" | "goal";
+  process: ResourceProcess;
+  resources: ResourceAllocation[];
+  startAt: string;
+  endAt: string;
+  processingHours: number;
+}
+
 /**
  * ============================================================================
  * CONSTRAINT DETECTION — deriva de ScenarioResult, nunca lo recalcula
@@ -686,6 +699,8 @@ export interface ScenarioConfig {
   id: string;
   label: string;
   resourceConfig: ResourceAllocation[];
+  /** Ausente en consumidores legacy equivale a `as-is`. */
+  priorityStrategy?: PriorityStrategy;
 }
 
 /**
@@ -728,6 +743,9 @@ export interface EvaluatedScenario {
   /** Suma de unitsUsed de máquina por encima de 1 por proceso — un proxy honesto de "más recursos adicionales". */
   extraResourcesUsed: number;
   status: PlanStatus;
+  /** Timeline temporal derivado. Ausente cuando no hay workload schedulable. */
+  scheduleTrace?: ScheduleTraceEntry[];
+  goalScheduledStartAt?: string;
 }
 
 /**
