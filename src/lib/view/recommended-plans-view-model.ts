@@ -16,7 +16,26 @@ function formatHours(hours: number | null): string | null {
 }
 
 export function isSameConfiguration(a: EvaluatedScenario, b: EvaluatedScenario): boolean {
+  return allocationKey(a) === allocationKey(b) && (a.config.priorityStrategy ?? "as-is") === (b.config.priorityStrategy ?? "as-is");
+}
+
+function isSameResourceAllocation(a: EvaluatedScenario, b: EvaluatedScenario): boolean {
   return allocationKey(a) === allocationKey(b);
+}
+
+function workloadPriorityFacts(winner: EvaluatedScenario, baseline: EvaluatedScenario): string[] {
+  if (winner.config.priorityStrategy !== "prioritize-goal" || !winner.result.deadlineMet || baseline.result.deadlineMet) return [];
+  const winnerTrace = winner.scheduleTrace ?? [];
+  const baselineTrace = baseline.scheduleTrace ?? [];
+  const winnerGoal = winnerTrace.find((entry) => entry.workType === "goal");
+  const baselineGoal = baselineTrace.find((entry) => entry.workType === "goal");
+  const sharedExisting = baselineTrace.some((entry) => entry.workType === "existing" && baselineGoal?.resources.some((resource) => entry.resources.some((candidate) => candidate.resourceId === resource.resourceId)));
+  if (!winnerGoal || !baselineGoal || !sharedExisting || new Date(winnerGoal.startAt).getTime() >= new Date(baselineGoal.startAt).getTime()) return [];
+  return [
+    "Con la planificación actual, este objetivo espera por recursos ya comprometidos.",
+    "Al priorizar este objetivo, puede usar esos recursos antes del trabajo planificado.",
+    ...(isSameResourceAllocation(winner, baseline) ? ["No requiere agregar equipamiento."] : []),
+  ];
 }
 
 export function selectRecommendedScenario(result: GoalSimulationResult): EvaluatedScenario {
@@ -33,6 +52,7 @@ export function explainPlanRanking(result: GoalSimulationResult): string[] {
   if (winner.result.deadlineMet) reasons.push("Cumple la fecha objetivo.");
   if (winner.result.materialsFeasible === "pass") reasons.push("Los materiales evaluados son suficientes.");
   if (winner.result.materialsFeasible === "fail") reasons.push("Requiere resolver un faltante de materiales confirmado.");
+  reasons.push(...workloadPriorityFacts(winner, result.baseline));
   reasons.push(
     winnerIsBaseline
       ? "Mantiene la asignación de recursos de tu configuración actual."
@@ -66,7 +86,7 @@ export function buildRecommendedPlansView(
     subtitle: noSolution
       ? "Evalué las configuraciones disponibles y te muestro la alternativa más cercana."
       : "Comparé los escenarios posibles y seleccioné la opción más conveniente para tu objetivo.",
-    primaryLabel: primaryIsBaseline ? "Configuración actual" : "Plan A",
+    primaryLabel: primaryIsBaseline ? "Configuración actual" : primary.config.priorityStrategy === "prioritize-goal" ? "Priorizar este objetivo" : "Plan A",
     primaryBadge: noSolution ? "Alternativa más cercana" : primaryIsBaseline ? "Configuración recomendada" : "Recomendado",
     deadlineLabel: primary.result.deadlineMet ? "Cumple la fecha objetivo" : "No cumple la fecha objetivo",
     completionLabel: primary.result.completionAt ? formatDisplayDate(primary.result.completionAt) : "No se puede estimar",
@@ -85,6 +105,8 @@ export function buildRecommendedPlansView(
           : "No evaluado",
     how: primaryIsBaseline
       ? ["Usa tu configuración actual", "No requiere cambiar la asignación actual"]
+      : primary.config.priorityStrategy === "prioritize-goal"
+        ? ["Se ejecuta antes del trabajo futuro que comparte recursos", ...(isSameResourceAllocation(primary, result.baseline) ? ["No agrega equipamiento"] : [primary.config.label])]
       : [
           primary.config.label,
           primary.extraResourcesUsed === 0

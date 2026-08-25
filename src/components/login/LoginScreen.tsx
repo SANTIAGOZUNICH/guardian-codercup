@@ -23,10 +23,7 @@ const BENEFITS = [
   { icon: ShieldCheck, label: "Tomá decisiones con confianza" },
 ];
 
-/** GUARDIAN no tiene demo/session local real — solo completa el mismo formulario con valores de ejemplo y lo envía por el mismo camino, nunca un atajo que salte pantallas. */
-const DEMO_VALUES = { email: "demo@laboratorio.com", password: "demo1234", companyName: "Laboratorio Guardian" };
-
-export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) => void }) {
+export function LoginScreen({ onSubmit, onUseDemo }: { onSubmit: (payload: LoginPayload) => void; onUseDemo: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -40,10 +37,7 @@ export function LoginScreen({ onSubmit }: { onSubmit: (payload: LoginPayload) =>
   }
 
   function handleUseDemo() {
-    setEmail(DEMO_VALUES.email);
-    setPassword(DEMO_VALUES.password);
-    setCompanyName(DEMO_VALUES.companyName);
-    submit(DEMO_VALUES);
+    onUseDemo();
   }
 
   const rise = (delay = 0) =>

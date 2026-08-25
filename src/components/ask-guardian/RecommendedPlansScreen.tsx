@@ -15,10 +15,10 @@ export interface RecommendedPlansDisruptionContext {
   resourceName: string; beforeResult: GoalSimulationResult;
 }
 
-export function RecommendedPlansScreen({ result, model, calendar, disruptionContext = null, onChoosePlan, onBack }: {
+export function RecommendedPlansScreen({ result, model, calendar, disruptionContext = null, onChoosePlan, onBack, onNewSimulation }: {
   result: GoalSimulationResult; model: OperationalModel; calendar: OperationsCalendar;
   disruptionContext?: RecommendedPlansDisruptionContext | null;
-  onChoosePlan: (scenario: EvaluatedScenario) => void; onBack: () => void;
+  onChoosePlan: (scenario: EvaluatedScenario) => void; onBack: () => void; onNewSimulation: () => void;
 }) {
   const [showWhy, setShowWhy] = useState(false);
   const view = useMemo(() => buildRecommendedPlansView(result, model, calendar), [result, model, calendar]);
@@ -34,7 +34,7 @@ export function RecommendedPlansScreen({ result, model, calendar, disruptionCont
       </section>
       <aside className="space-y-4"><QuickComparison view={view}/><div className="rounded-2xl border border-border-subtle bg-white/[0.02] p-5"><h2 className="font-semibold text-accent-violet">Información del análisis</h2><dl className="mt-4 space-y-3 text-sm"><Row label="Escenarios evaluados" value={String(view.evaluatedCount)}/><Row label="Procesos involucrados" value={String(view.processesCount)}/><Row label="Materials" value={view.materialsLabel}/></dl></div>{view.baseline ? <BaselineSummary scenario={view.baseline}/> : null}</aside>
     </div>
-    <footer className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-border-subtle bg-white/[0.015] p-4 sm:flex-row"><p className="text-sm text-text-secondary">La recomendación usa exclusivamente el ranking determinístico del motor.</p><Button variant="ghost" onClick={onBack}><ArrowLeft size={16}/> Volver al Centro de Operaciones</Button></footer>
+    <footer className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-border-subtle bg-white/[0.015] p-4 sm:flex-row"><p className="text-sm text-text-secondary">La recomendación usa exclusivamente el ranking determinístico del motor.</p><div className="flex flex-wrap gap-2"><Button variant="primary" onClick={onNewSimulation}>Nueva simulación</Button><Button variant="ghost" onClick={onBack}><ArrowLeft size={16}/> Volver al Centro de Operaciones</Button></div></footer>
   </div>{showWhy ? <WhyThisPlanModal view={view} onClose={()=>setShowWhy(false)}/> : null}</main>;
 }
 

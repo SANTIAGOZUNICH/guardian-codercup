@@ -21,6 +21,7 @@ import { buildOperationalModel, type RawModelInput } from "@/lib/model/buildOper
 import type { OperationSummaryV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
 import { formatNaive } from "@/lib/engine/evaluate-scenario";
 import { DEFAULT_OPERATIONS_CALENDAR } from "@/data/operations-reference";
+import { buildGoldenDemoBootstrap, GOLDEN_Q1_PROMPT } from "@/data/golden-demo";
 import { formatDisplayDate } from "@/lib/view/constraint-view-model";
 import { resolveChosenPlanPrefix } from "@/lib/view/simulation-view-model";
 import { withScenarioPresentation } from "@/lib/view/ask-guardian-view-model";
@@ -72,17 +73,39 @@ export function GuardianApp() {
   const [askGuardianInitialText, setAskGuardianInitialText] = useState("");
   /** Lo que Guardian ya entendió por texto libre en Pantalla 2 (Intake) — Guided Setup arranca desde ahí, nunca pide de nuevo lo ya contado. */
   const [guidedSetupInitialAnswers, setGuidedSetupInitialAnswers] = useState<GuidedSetupV2Answers>(emptyGuidedSetupV2Answers());
+  const [isDemo, setIsDemo] = useState(false);
 
   function handleLogin(payload: LoginPayload) {
+    setIsDemo(false);
     setSession({ companyName: payload.companyName, industry: payload.industry });
     setPhase("intake");
+  }
+
+  function handleUseDemo() {
+    const demo = buildGoldenDemoBootstrap();
+    setIsDemo(true);
+    setSession(demo.session);
+    setModel(demo.model);
+    setSnapshotAt(demo.snapshotAt);
+    setOperationsCalendar(demo.calendar);
+    setTwinCompleteness(null);
+    setOperationSummary(demo.summary);
+    setGoal(null);
+    setSimulationResult(null);
+    setScenarioPresentation(null);
+    setDisruption(null);
+    setDisruptionResourceName(null);
+    setLastSimulation(null);
+    setAskGuardianInitialText("");
+    setGuidedSetupInitialAnswers(emptyGuidedSetupV2Answers());
+    setPhase(demo.phase);
   }
 
   // Envuelto en una función (no un componente nuevo) para poder wrappear el resultado una sola vez con
   // CompanyNameProvider más abajo, sin tocar cada `return` individual del if-chain existente.
   function renderPhase(): React.ReactNode {
   if (phase === "login" || !session) {
-    return <LoginScreen onSubmit={handleLogin} />;
+    return <LoginScreen onSubmit={handleLogin} onUseDemo={handleUseDemo} />;
   }
 
   if (phase === "intake") {
@@ -200,6 +223,7 @@ export function GuardianApp() {
         calendar={operationsCalendar}
         activeGoal={goal}
         initialText={askGuardianInitialText}
+        featuredExample={isDemo ? GOLDEN_Q1_PROMPT : undefined}
         operationSummary={operationSummary}
         twinCompleteness={twinCompleteness}
         onGoalReady={(g, newPresentation) => {
@@ -291,6 +315,15 @@ export function GuardianApp() {
           setPhase("command-center");
         }}
         onBack={() => setPhase("command-center")}
+        onNewSimulation={() => {
+          setAskGuardianInitialText("");
+          setGoal(null);
+          setSimulationResult(null);
+          setScenarioPresentation(null);
+          setDisruption(null);
+          setDisruptionResourceName(null);
+          setPhase("ask-guardian");
+        }}
       />
     );
   }

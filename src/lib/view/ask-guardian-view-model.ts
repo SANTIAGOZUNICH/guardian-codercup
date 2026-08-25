@@ -27,10 +27,11 @@ export function buildAskModelContext(
   ];
 }
 
-export function buildSupportedAskExamples(model: OperationalModel): string[] {
+export function buildSupportedAskExamples(model: OperationalModel, featuredExample?: string): string[] {
   const examples: string[] = [];
+  if (featuredExample) examples.push(featuredExample);
   const product = model.products[0];
-  if (product) examples.push(`Necesito producir 5.000 ${product.name} para el viernes.`);
+  if (product && !featuredExample) examples.push(`Necesito producir 5.000 ${product.name} para el viernes.`);
   const resource = model.resources[0];
   if (resource) examples.push(`¿Cuántos ${resource.name} tengo?`);
   examples.push("¿Qué información te falta de mi operación?");

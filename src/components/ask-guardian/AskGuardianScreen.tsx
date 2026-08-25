@@ -37,13 +37,14 @@ function createPresentation(goal: Goal, grams: number, source: DataOrigin): Pres
   return { id: `${goal.productId}-${grams}g`, productId: goal.productId, label: `${grams} g`, gramsPerUnit: { value: grams, source } };
 }
 
-export function AskGuardianScreen({ model, companyName, snapshotAt, calendar, activeGoal, initialText = "", operationSummary, twinCompleteness, onGoalReady, onDisruptionReady, onBack }: {
+export function AskGuardianScreen({ model, companyName, snapshotAt, calendar, activeGoal, initialText = "", featuredExample, operationSummary, twinCompleteness, onGoalReady, onDisruptionReady, onBack }: {
   model: OperationalModel;
   companyName: string;
   snapshotAt: string;
   calendar: OperationsCalendar;
   activeGoal: Goal | null;
   initialText?: string;
+  featuredExample?: string;
   operationSummary: OperationSummaryV2 | null;
   twinCompleteness: TwinCompleteness | null;
   onGoalReady: (goal: Goal, newPresentation?: Presentation) => void;
@@ -65,7 +66,7 @@ export function AskGuardianScreen({ model, companyName, snapshotAt, calendar, ac
   const [selection, setSelection] = useState<{ candidates: DisruptionCandidate[]; unitsUnavailable: number } | null>(null);
 
   const contextItems = buildAskModelContext(model, operationSummary, twinCompleteness, calendar);
-  const examples = buildSupportedAskExamples(model);
+  const examples = buildSupportedAskExamples(model, featuredExample);
 
   function resetResult() {
     setError(null); setAnswer(null); setAiConfirm(null); setPendingGrams(null); setPrepared(null); setSelection(null);
