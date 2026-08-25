@@ -160,6 +160,12 @@ export interface CommandCenterFact {
   tone: "normal" | "neutral";
 }
 
+export function buildDemoContext(isDemo: boolean): { badge: string; description: string } | null {
+  return isDemo
+    ? { badge: "Demo · datos de ejemplo", description: "Este entorno incluye productos, recursos y trabajo planificado para que pruebes Guardian y Ask Guardian." }
+    : null;
+}
+
 /** Hechos declarados, sin convertirlos en KPIs ni completar ausencias con ceros. */
 export function buildCommandCenterFacts(
   model: OperationalModel,

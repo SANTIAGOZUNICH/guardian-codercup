@@ -220,7 +220,7 @@ export function StaffingStepScreen({
 
         <div className="mt-3 flex items-start gap-3 rounded-[var(--radius-md)] border border-border-subtle bg-white/[0.015] p-3">
           <Info size={15} className="mt-0.5 shrink-0 text-accent-bright" />
-          <p className="text-xs leading-relaxed text-text-secondary">No hace falta ser exacto. Una buena estimación ya ayuda a simular tu operación.</p>
+          <p className="text-xs leading-relaxed text-text-secondary">Este dato representa cómo está compuesta tu operación. No determina por sí solo la capacidad temporal.</p>
         </div>
 
         <div className="mt-5 flex items-center gap-3">

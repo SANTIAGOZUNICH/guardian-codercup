@@ -34,6 +34,11 @@ function stripAccents(s: string): string {
 }
 
 function extractQuantity(text: string): number | null {
+  const scaled = text.match(/(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(mil|k)\b/i);
+  if (scaled) {
+    const base = Number(scaled[1].replace(/[.,]/g, ""));
+    return Number.isFinite(base) && base > 0 ? base * 1_000 : null;
+  }
   const match = text.match(/\d{1,3}(?:[.,]\d{3})+|\d+/);
   if (!match) return null;
   const digits = match[0].replace(/[.,]/g, "");

@@ -69,6 +69,9 @@ describe("Golden Demo productiva", () => {
     const view = buildRecommendedPlansView(result, buildGoldenDemoModel(), GOLDEN_DEMO_CALENDAR);
     expect(view.primaryLabel).toBe("Priorizar este objetivo");
     expect(view.primaryIsBaseline).toBe(false);
+    expect(view.planningImpact).toHaveLength(1);
+    expect(view.planningImpact[0]).toMatchObject({ quantity: "18.000 unidades", originalTiming: expect.any(String), newTiming: expect.any(String) });
+    expect(view.planningImpact[0].originalTiming).not.toBe(view.planningImpact[0].newTiming);
   });
 
   it("Q1 preserva existing work: assignment, duración y presencia", () => {
@@ -92,9 +95,18 @@ describe("Golden Demo productiva", () => {
     expect(result.scenarios.every((scenario) => !scenario.result.deadlineMet)).toBe(true);
     expect(result.ranked[0].result.completionAt).toBe("2026-08-24T14:00:00.000");
     const view = buildRecommendedPlansView(result, buildGoldenDemoModel(), GOLDEN_DEMO_CALENDAR);
-    expect(view.title).toBe("No encontré un plan que cumpla la fecha actual");
+    expect(view.title).toBe("Ningún plan cumple la fecha actual");
     expect(view.primaryBadge).toBe("Alternativa más cercana");
     expect(view.favorable).toBe(false);
+    expect(view.selectable).toBe(false);
+  });
+
+  it("25.000 y 35.000 recorren el motor y producen resultados distintos", () => {
+    const q25 = simulate("Necesito producir 25.000 shampoos para el viernes.");
+    const q35 = simulate("Necesito producir 35.000 shampoos para el viernes.");
+    expect(q25.goal.quantity).toBe(25_000);
+    expect(q35.goal.quantity).toBe(35_000);
+    expect(q25.ranked[0].result.completionAt).not.toBe(q35.ranked[0].result.completionAt);
   });
 
   it("Q1 y Q2 son deterministas durante 20 ejecuciones cada uno", () => {

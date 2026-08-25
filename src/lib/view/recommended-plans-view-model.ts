@@ -15,6 +15,39 @@ function formatHours(hours: number | null): string | null {
   return `${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 }).format(hours)} h`;
 }
 
+function timing(trace: NonNullable<EvaluatedScenario["scheduleTrace"]>, workId: string) {
+  const entries = trace.filter((entry) => entry.workType === "existing" && entry.workId === workId);
+  if (entries.length === 0) return null;
+  return {
+    startAt: entries.map((entry) => entry.startAt).toSorted()[0],
+    endAt: entries.map((entry) => entry.endAt).toSorted().at(-1)!,
+  };
+}
+
+export function buildPlanningImpact(winner: EvaluatedScenario, baseline: EvaluatedScenario, model: OperationalModel) {
+  const winnerTrace = winner.scheduleTrace ?? [];
+  const baselineTrace = baseline.scheduleTrace ?? [];
+  if (winner.config.priorityStrategy !== "prioritize-goal" || winnerTrace.length === 0 || baselineTrace.length === 0) return [];
+  const workIds = [...new Set(baselineTrace.filter((entry) => entry.workType === "existing").map((entry) => entry.workId))];
+  return workIds.flatMap((workId) => {
+    const before = timing(baselineTrace, workId);
+    const after = timing(winnerTrace, workId);
+    if (!before || !after || (before.startAt === after.startAt && before.endAt === after.endAt)) return [];
+    const order = model.orders.find((candidate) => candidate.id === workId);
+    const product = model.products.find((candidate) => candidate.id === order?.productId);
+    if (!order || !product) return [];
+    const displacementHours = (new Date(after.startAt).getTime() - new Date(before.startAt).getTime()) / 3_600_000;
+    return [{
+      workId,
+      product: product.name,
+      quantity: `${new Intl.NumberFormat("es-AR").format(order.quantity)} ${product.unit}`,
+      originalTiming: `${formatDisplayDate(before.startAt)} → ${formatDisplayDate(before.endAt)}`,
+      newTiming: `${formatDisplayDate(after.startAt)} → ${formatDisplayDate(after.endAt)}`,
+      displacement: displacementHours > 0 ? formatHours(displacementHours) : null,
+    }];
+  });
+}
+
 export function isSameConfiguration(a: EvaluatedScenario, b: EvaluatedScenario): boolean {
   return allocationKey(a) === allocationKey(b) && (a.config.priorityStrategy ?? "as-is") === (b.config.priorityStrategy ?? "as-is");
 }
@@ -75,6 +108,8 @@ export function buildRecommendedPlansView(
   const noSolution = !primary.result.capacityFeasible || !primary.result.deadlineMet;
   const alternatives = result.outcome.candidates.filter((item) => item !== primary).slice(0, 2);
   const issueCount = primary.result.capacityIssues.length + primary.result.materialShortages.length;
+  const insufficientData = primary.result.operationalFeasibility === "not_evaluated" && primary.result.completionAt === null;
+  const planningImpact = buildPlanningImpact(primary, result.baseline, model);
 
   return {
     goal: buildSimulationGoalView(result, model, calendar),
@@ -82,13 +117,17 @@ export function buildRecommendedPlansView(
     primaryIsBaseline,
     favorable,
     noSolution,
-    title: noSolution ? "No encontré un plan que cumpla la fecha actual" : "Encontré las mejores alternativas",
-    subtitle: noSolution
+    insufficientData,
+    selectable: !noSolution && !insufficientData && primary.result.completionAt !== null,
+    title: insufficientData ? "Faltan datos para evaluar este escenario" : noSolution ? "Ningún plan cumple la fecha actual" : "Encontré las mejores alternativas",
+    subtitle: insufficientData
+      ? `Guardian necesita datos productivos suficientes${primary.result.capacityIssues[0]?.process ? ` para ${primary.result.capacityIssues[0].process}` : ""} antes de estimar una fecha.`
+      : noSolution
       ? "Evalué las configuraciones disponibles y te muestro la alternativa más cercana."
       : "Comparé los escenarios posibles y seleccioné la opción más conveniente para tu objetivo.",
     primaryLabel: primaryIsBaseline ? "Configuración actual" : primary.config.priorityStrategy === "prioritize-goal" ? "Priorizar este objetivo" : "Plan A",
-    primaryBadge: noSolution ? "Alternativa más cercana" : primaryIsBaseline ? "Configuración recomendada" : "Recomendado",
-    deadlineLabel: primary.result.deadlineMet ? "Cumple la fecha objetivo" : "No cumple la fecha objetivo",
+    primaryBadge: insufficientData ? "No evaluable" : noSolution ? "Alternativa más cercana" : primaryIsBaseline ? "Configuración recomendada" : "Recomendado",
+    deadlineLabel: insufficientData ? "Capacidad no evaluable con los datos actuales" : primary.result.deadlineMet ? "Cumple la fecha objetivo" : "No cumple la fecha objetivo",
     completionLabel: primary.result.completionAt ? formatDisplayDate(primary.result.completionAt) : "No se puede estimar",
     durationLabel: formatHours(primary.result.totalHoursNeeded),
     resourcesLabel: primaryIsBaseline ? "Recursos de la configuración actual" : primary.config.label,
@@ -103,7 +142,9 @@ export function buildRecommendedPlansView(
         : primary.result.materialsFeasible === "fail"
           ? "Faltante confirmado"
           : "No evaluado",
-    how: primaryIsBaseline
+    how: insufficientData
+      ? [primary.result.capacityIssues[0]?.reason ?? "Faltan referencias o capacidades productivas compatibles", "No se estimó una fecha ni se asumió factibilidad"]
+      : primaryIsBaseline
       ? ["Usa tu configuración actual", "No requiere cambiar la asignación actual"]
       : primary.config.priorityStrategy === "prioritize-goal"
         ? ["Se ejecuta antes del trabajo futuro que comparte recursos", ...(isSameResourceAllocation(primary, result.baseline) ? ["No agrega equipamiento"] : [primary.config.label])]
@@ -117,7 +158,10 @@ export function buildRecommendedPlansView(
     baseline: primaryIsBaseline ? null : result.baseline,
     evaluatedCount: result.scenarios.length,
     processesCount: new Set(primary.result.steps.map((step) => step.process)).size,
-    reasons: explainPlanRanking(result),
+    reasons: insufficientData
+      ? ["El modelo no tiene datos suficientes para estimar la capacidad de este escenario.", "Guardian no asumió factibilidad ni creó una restricción ficticia."]
+      : explainPlanRanking(result),
+    planningImpact,
   };
 }
 

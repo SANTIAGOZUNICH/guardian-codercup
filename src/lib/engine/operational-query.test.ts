@@ -12,6 +12,14 @@ describe("classifyOperationalQuery", () => {
   it('"¿Cuántas llenadoras tengo?" -> resource_count', () => {
     expect(classifyOperationalQuery("¿Cuántas llenadoras tengo?")).toBe("resource_count");
   });
+  it("rutea personal y productos sin enviarlos al simulador", () => {
+    expect(classifyOperationalQuery("¿Cuántas personas tengo?")).toBe("staffing_count");
+    expect(classifyOperationalQuery("¿Cuánto personal tengo?")).toBe("staffing_count");
+    expect(classifyOperationalQuery("¿Cuántos empleados tengo?")).toBe("staffing_count");
+    expect(classifyOperationalQuery("¿Qué productos fabrico?")).toBe("product_list");
+    expect(classifyOperationalQuery("¿Qué productos tengo?")).toBe("product_list");
+    expect(classifyOperationalQuery("¿Cuáles son mis productos?")).toBe("product_list");
+  });
   it('"¿Qué información te falta de mi laboratorio?" -> missing_info', () => {
     expect(classifyOperationalQuery("¿Qué información te falta de mi laboratorio?")).toBe("missing_info");
   });
@@ -41,6 +49,16 @@ function baseModel(overrides: Partial<OperationalModel> = {}): OperationalModel 
 }
 
 describe("answerOperationalQuery", () => {
+  it("staffing_count usa personal real y unknown nunca se convierte en cero", () => {
+    const known = baseModel({ resources: [...baseModel().resources, { id: "staff", name: "Personal de envasado", type: "Personal", process: "Envasado", quantityAvailable: 18, capacity: 1, capacityUnit: "personas" }] });
+    expect(answerOperationalQuery("staffing_count", "¿Cuántas personas tengo?", known, [], null)).toContain("18 personas");
+    expect(answerOperationalQuery("staffing_count", "¿Cuántas personas tengo?", baseModel(), [], null)).toMatch(/no especificaste/i);
+  });
+
+  it("product_list enumera sólo productos del modelo", () => {
+    const model = baseModel({ products: [{ id: "s", name: "Shampoo", unit: "unidades" }, { id: "c", name: "Crema", unit: "unidades" }] });
+    expect(answerOperationalQuery("product_list", "¿Qué productos fabrico?", model, [], null)).toBe("Tu modelo tiene 2 productos: Shampoo, Crema.");
+  });
   it("resource_count: cuenta recursos que matchean por nombre", () => {
     const model = baseModel();
     const answer = answerOperationalQuery("resource_count", "¿Cuántas llenadoras tengo?", model, [], null);

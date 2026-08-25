@@ -15,8 +15,17 @@ import {
   buildMaterialIntelligence,
   buildSimulationBasisSummary,
   buildCommandCenterFacts,
+  buildDemoContext,
   selectScenarioSummary,
 } from "./command-center-view-model";
+
+describe("demo context", () => {
+  it("sólo aparece en demo y no hardcodea empresa", () => {
+    expect(buildDemoContext(false)).toBeNull();
+    expect(buildDemoContext(true)).toEqual(expect.objectContaining({ badge: expect.stringMatching(/Demo/i), description: expect.stringMatching(/Ask Guardian/) }));
+    expect(JSON.stringify(buildDemoContext(true))).not.toMatch(/NOVARA|Laboratorio Guardian/);
+  });
+});
 import type { LastSimulation, OperationalModel } from "@/lib/types";
 
 function loadDemoFile(name: string): ArrayBuffer {

@@ -75,6 +75,20 @@ describe("parseGoalText — caso 4: número con separador de miles", () => {
   });
 });
 
+describe("parseGoalText — normalización determinística de miles", () => {
+  for (const [raw, expected] of [["30 mil", 30000], ["40 MIL", 40000], ["5 mil", 5000], ["30k", 30000], ["30", 30], ["300", 300], ["30000", 30000], ["30.000", 30000]] as const) {
+    it(`${raw} → ${expected}`, () => {
+      const result = parseGoalText(`Necesito producir ${raw} shampoos para el viernes.`, ctx());
+      expect(result.ok && result.goal.quantity).toBe(expected);
+    });
+  }
+
+  it("el gramaje posterior no reemplaza la cantidad", () => {
+    const result = parseGoalText("Necesito producir 30 mil shampoos de 200 g para el viernes.", ctx());
+    expect(result.ok && result.goal.quantity).toBe(30000);
+  });
+});
+
 describe("parseGoalText — caso 5: producto inexistente", () => {
   it("no acepta silenciosamente un producto que no existe en el Twin", () => {
     const result = parseGoalText("Necesito producir 30.000 televisores para Belleza Norte SA antes del viernes.", ctx());

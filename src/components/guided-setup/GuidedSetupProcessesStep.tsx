@@ -292,7 +292,7 @@ export function ProcessesStepScreen({
             </div>
           </>
         ) : (
-          <p className="mt-4 text-xs text-text-disabled">Cualquier nombre de etapa sirve — nunca limitado a un catálogo cerrado.</p>
+          <p className="mt-4 text-xs text-text-disabled">Podés registrar etapas propias de tu operación. Guardian las conserva en el modelo; la simulación depende de que tengan una capacidad productiva compatible.</p>
         )}
 
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">

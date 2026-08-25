@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
 import type { OperationSummaryV2 } from "@/lib/model/buildModelInputsFromGuidedSetupV2";
 import type { LastSimulation, OperationalModel, OperationsCalendar, OrderConstraints, TwinCompleteness } from "@/lib/types";
-import { buildCommandCenterFacts, buildProcessFlowPreview, selectAskGuardianPrompts, selectScenarioSummary } from "@/lib/view/command-center-view-model";
+import { buildCommandCenterFacts, buildDemoContext, buildProcessFlowPreview, selectAskGuardianPrompts, selectScenarioSummary } from "@/lib/view/command-center-view-model";
 
 const FACT_ICON = { products: Package, processes: Workflow, resources: Boxes, staff: Users, schedule: CalendarDays, materials: FlaskConical };
 
@@ -16,13 +16,14 @@ function calendarLabel(calendar: OperationsCalendar) {
   return `${calendar.workingDays.length} días · desde ${calendar.workdayStart} · ${calendar.workdayHours} h`;
 }
 
-export function CommandCenter({ model, orderConstraints, lastSimulation, operationSummary, twinCompleteness, calendar, onExploreTwin, onAskGuardian }: {
+export function CommandCenter({ model, orderConstraints, lastSimulation, operationSummary, twinCompleteness, calendar, isDemo = false, onExploreTwin, onAskGuardian }: {
   model: OperationalModel;
   orderConstraints: OrderConstraints[];
   lastSimulation: LastSimulation | null;
   operationSummary: OperationSummaryV2 | null;
   twinCompleteness: TwinCompleteness | null;
   calendar: OperationsCalendar;
+  isDemo?: boolean;
   onViewConstraints: () => void;
   onExploreTwin: () => void;
   onAskGuardian: (text?: string) => void;
@@ -32,10 +33,11 @@ export function CommandCenter({ model, orderConstraints, lastSimulation, operati
   const stages = buildProcessFlowPreview(model, lastSimulation ? orderConstraints : []);
   const prompts = selectAskGuardianPrompts(model);
   const scenario = selectScenarioSummary(lastSimulation);
+  const demoContext = buildDemoContext(isDemo);
 
   return <div className="mx-auto w-full max-w-[1280px] space-y-4">
     <div className="flex items-end justify-between gap-5">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-bright">Resumen</p><h2 className="mt-1 text-3xl font-semibold tracking-tight text-text-primary">Centro de Operaciones</h2><p className="mt-1 text-sm text-text-secondary">Tu modelo operativo está listo para analizar escenarios.</p></div>
+      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-bright">Resumen</p><div className="mt-1 flex flex-wrap items-center gap-3"><h2 className="text-3xl font-semibold tracking-tight text-text-primary">Centro de Operaciones</h2>{demoContext?<span className="rounded-full border border-accent/40 bg-accent-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent-bright">{demoContext.badge}</span>:null}</div><p className="mt-1 text-sm text-text-secondary">Tu modelo operativo está listo para analizar escenarios.</p>{demoContext?<p className="mt-2 max-w-2xl text-xs text-text-tertiary">{demoContext.description}</p>:null}</div>
       <Guardian state="idle" size={72} className="hidden shrink-0 md:flex" />
     </div>
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

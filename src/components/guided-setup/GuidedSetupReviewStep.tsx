@@ -86,7 +86,7 @@ export function ReviewStepScreen({ companyName, answers, goBack, onBuild }: { co
         </section>
         <aside className="flex flex-col items-center gap-5 pt-3">
           <Guardian state="success" size={250} variant="asset" />
-          <div className="w-full rounded-[var(--radius-lg)] border border-border-default bg-bg-elevated p-5"><p className="font-semibold text-accent-bright">¿Qué sigue?</p><p className="mt-2 text-sm text-text-secondary">Con tu modelo operativo listo, podés:</p><ul className="mt-3 space-y-2 text-sm text-text-secondary"><li>✓ Simular objetivos de producción</li><li>✓ Ver tiempos y fechas estimadas</li><li>✓ Detectar restricciones y cuellos de botella</li><li>✓ Consultar tu operación con Guardian</li></ul></div>
+          <div className="w-full rounded-[var(--radius-lg)] border border-border-default bg-bg-elevated p-5"><p className="font-semibold text-accent-bright">¿Qué sigue?</p><p className="mt-2 text-sm text-text-secondary">Con tu modelo operativo listo, Guardian podrá evaluar los escenarios para los que tenga datos suficientes:</p><ul className="mt-3 space-y-2 text-sm text-text-secondary"><li>✓ Estimar tiempos y fechas</li><li>✓ Detectar restricciones y cuellos de botella</li><li>✓ Consultar tu operación con Guardian</li></ul></div>
           <p className="text-center text-xs text-text-tertiary">El siguiente paso construye el modelo real y muestra su estructura antes de entrar al Command Center.</p>
         </aside>
       </div>

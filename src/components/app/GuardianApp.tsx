@@ -206,6 +206,7 @@ export function GuardianApp() {
           operationSummary={operationSummary}
           twinCompleteness={twinCompleteness}
           calendar={operationsCalendar}
+          isDemo={isDemo}
           onViewConstraints={() => setPhase("constraints")}
           onExploreTwin={() => setPhase("explore-twin")}
           onAskGuardian={openAskGuardian}

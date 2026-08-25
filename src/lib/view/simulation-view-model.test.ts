@@ -177,7 +177,25 @@ describe("Simulation view model — goal real de la demo (30.000 shampoos para B
     const view = buildRecommendedPlansView(noSolution, model, DEFAULT_OPERATIONS_CALENDAR);
     expect(view.noSolution).toBe(true);
     expect(view.favorable).toBe(false);
-    expect(view.title).toMatch(/No encontré/);
+    expect(view.title).toMatch(/Ningún plan cumple/);
+  });
+
+  it("deriva impacto de workload exclusivamente de los traces y no muta el modelo", () => {
+    const before = structuredClone(model);
+    const view = buildRecommendedPlansView(result, model, DEFAULT_OPERATIONS_CALENDAR);
+    if (view.primary.config.priorityStrategy === "prioritize-goal") {
+      expect(view.planningImpact.length).toBeGreaterThan(0);
+      expect(view.planningImpact[0]).toMatchObject({ workId: expect.any(String), product: expect.any(String), quantity: expect.any(String), originalTiming: expect.any(String), newTiming: expect.any(String) });
+    }
+    expect(model).toEqual(before);
+  });
+
+  it("capacidad desconocida es no evaluable y no seleccionable, sin restricción ficticia", () => {
+    const unknown = { ...result.baseline, result: { ...result.baseline.result, operationalFeasibility: "not_evaluated" as const, capacityFeasible: false, deadlineMet: false, completionAt: null, totalHoursNeeded: null, capacityIssues: [], materialShortages: [] } };
+    const unknownResult = { ...result, outcome: { kind: "infeasible" as const, candidates: [unknown] } };
+    const view = buildRecommendedPlansView(unknownResult, model, DEFAULT_OPERATIONS_CALENDAR);
+    expect(view).toMatchObject({ insufficientData: true, selectable: false, issueCount: 0, primaryBadge: "No evaluable" });
+    expect(view.title).toMatch(/Faltan datos/);
   });
 
   it("Materials SKIP es neutral y faltante real permanece constraint", () => {

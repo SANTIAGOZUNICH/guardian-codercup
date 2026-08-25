@@ -16,15 +16,29 @@ function stripAccents(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-export type OperationalQueryKind = "bottleneck" | "resource_count" | "missing_info" | "data_provenance";
+export type OperationalQueryKind = "bottleneck" | "resource_count" | "staffing_count" | "product_list" | "missing_info" | "data_provenance";
 
 export function classifyOperationalQuery(text: string): OperationalQueryKind | null {
   const normalized = stripAccents(text);
   if (/cuello de botella|bottleneck|que (proceso|etapa).*(mas lento|menos capacidad|mas tarda)/.test(normalized)) return "bottleneck";
   if (/que (te )?falta|informacion.*falta|falta.*informacion|que no (se|sabes|sabemos)/.test(normalized)) return "missing_info";
   if (/aproximad|es referencia|dato real|es calculado|que parte.*(real|referencia)/.test(normalized)) return "data_provenance";
+  if (/cuant[oa]s?\s+(personas|empleados)\b|cuanto personal\b/.test(normalized)) return "staffing_count";
+  if (/(que productos (fabrico|tengo)|cuales son mis productos)/.test(normalized)) return "product_list";
   if (/cuant[oa]s?\s+\w/.test(normalized)) return "resource_count";
   return null;
+}
+
+function answerStaffingCount(model: OperationalModel): string {
+  const staffing = model.resources.filter((resource) => resource.type === "Personal");
+  if (staffing.length === 0) return "No especificaste la cantidad de personal en el modelo.";
+  const total = staffing.reduce((sum, resource) => sum + resource.quantityAvailable, 0);
+  return `Tenés ${total} persona${total === 1 ? "" : "s"} registrada${total === 1 ? "" : "s"} en el modelo.`;
+}
+
+function answerProductList(model: OperationalModel): string {
+  if (model.products.length === 0) return "No hay productos registrados en el modelo.";
+  return `Tu modelo tiene ${model.products.length} producto${model.products.length === 1 ? "" : "s"}: ${model.products.map((product) => product.name).join(", ")}.`;
 }
 
 function answerBottleneck(model: OperationalModel, orderConstraints: OrderConstraints[]): string {
@@ -105,6 +119,10 @@ export function answerOperationalQuery(
       return answerBottleneck(model, orderConstraints);
     case "resource_count":
       return answerResourceCount(text, model);
+    case "staffing_count":
+      return answerStaffingCount(model);
+    case "product_list":
+      return answerProductList(model);
     case "missing_info":
       return answerMissingInfo(model, completeness);
     case "data_provenance":
