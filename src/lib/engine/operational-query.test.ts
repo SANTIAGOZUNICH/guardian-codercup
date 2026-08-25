@@ -53,6 +53,7 @@ describe("answerOperationalQuery", () => {
     const known = baseModel({ resources: [...baseModel().resources, { id: "staff", name: "Personal de envasado", type: "Personal", process: "Envasado", quantityAvailable: 18, capacity: 1, capacityUnit: "personas" }] });
     expect(answerOperationalQuery("staffing_count", "¿Cuántas personas tengo?", known, [], null)).toContain("18 personas");
     expect(answerOperationalQuery("staffing_count", "¿Cuántas personas tengo?", baseModel(), [], null)).toMatch(/no especificaste/i);
+    expect(answerOperationalQuery("staffing_count", "¿Cuántas personas tengo?", baseModel(), [], null, 18)).toContain("18 personas");
   });
 
   it("product_list enumera sólo productos del modelo", () => {

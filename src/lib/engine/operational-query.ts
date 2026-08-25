@@ -29,7 +29,8 @@ export function classifyOperationalQuery(text: string): OperationalQueryKind | n
   return null;
 }
 
-function answerStaffingCount(model: OperationalModel): string {
+function answerStaffingCount(model: OperationalModel, staffingCount: number | null): string {
+  if (staffingCount !== null) return `Tenés ${staffingCount} persona${staffingCount === 1 ? "" : "s"} registrada${staffingCount === 1 ? "" : "s"} en el modelo.`;
   const staffing = model.resources.filter((resource) => resource.type === "Personal");
   if (staffing.length === 0) return "No especificaste la cantidad de personal en el modelo.";
   const total = staffing.reduce((sum, resource) => sum + resource.quantityAvailable, 0);
@@ -113,6 +114,7 @@ export function answerOperationalQuery(
   model: OperationalModel,
   orderConstraints: OrderConstraints[],
   completeness: TwinCompleteness | null,
+  staffingCount: number | null = null,
 ): string {
   switch (kind) {
     case "bottleneck":
@@ -120,7 +122,7 @@ export function answerOperationalQuery(
     case "resource_count":
       return answerResourceCount(text, model);
     case "staffing_count":
-      return answerStaffingCount(model);
+      return answerStaffingCount(model, staffingCount);
     case "product_list":
       return answerProductList(model);
     case "missing_info":

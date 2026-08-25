@@ -154,7 +154,7 @@ export function AskGuardianScreen({ model, companyName, snapshotAt, calendar, ac
     const goalResult = parseGoalText(raw, { model, snapshotAt, calendar });
     if (goalResult.ok) { proceedWithGoal(goalResult.goal); return; }
     const queryKind = classifyOperationalQuery(raw);
-    if (queryKind) { setAnswer(answerOperationalQuery(queryKind, raw, model, detectConstraints(model, calendar, snapshotAt), twinCompleteness)); return; }
+    if (queryKind) { setAnswer(answerOperationalQuery(queryKind, raw, model, detectConstraints(model, calendar, snapshotAt), twinCompleteness, operationSummary?.staffCount ?? null)); return; }
     await tryAi(raw, false);
   }
 
