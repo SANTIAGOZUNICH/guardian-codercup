@@ -153,6 +153,7 @@ export function AskGuardianScreen({ model, companyName, snapshotAt, calendar, ac
     }
     const goalResult = parseGoalText(raw, { model, snapshotAt, calendar });
     if (goalResult.ok) { proceedWithGoal(goalResult.goal); return; }
+    if (goalResult.error.kind === "missing_deadline") { setError(goalError("missing_deadline", companyName)); return; }
     const queryKind = classifyOperationalQuery(raw);
     if (queryKind) { setAnswer(answerOperationalQuery(queryKind, raw, model, detectConstraints(model, calendar, snapshotAt), twinCompleteness, operationSummary?.staffCount ?? null)); return; }
     await tryAi(raw, false);
